@@ -684,12 +684,26 @@ class App(tk.Tk):
         "Centro de Custo", "Cargo", "Revenda"
         )
 
-        self.tree_report    = ttk.Treeview(self.tab_report, columns=cols, show='headings')
+        self.tree_report = ttk.Treeview(self.tab_report, columns=cols, show='headings')
+        larguras = {
+        "ID": 60,
+        "Tipo": 100,
+        "Marca": 120,
+        "Modelo": 140,
+        "Identificador": 160,
+        "Usuário": 160,
+        "CPF": 120,
+        "Operação": 110,
+        "Data": 100,
+        "Centro de Custo": 160,
+        "Cargo": 140,
+        "Revenda": 140,
+        }
+
         for c in cols:
             self.tree_report.heading(c, text=c)
-            self.tree_report.column(c, anchor='w')
+            self.tree_report.column(c, width=larguras.get(c, 120), anchor='w', stretch=True)
         self.tree_report.pack(fill='both', expand=True, padx=5, pady=5)
-        
         
         
 
