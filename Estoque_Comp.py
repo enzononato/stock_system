@@ -678,7 +678,12 @@ class App(tk.Tk):
         ttk.Button(top_frm, text="Gerar Relatório", command=self.cmd_generate_report).grid(row=0, column=4, padx=10)
         ttk.Button(top_frm, text="Estornar Lançamento", command=self.cmd_delete_report_entry).grid(row=0, column=5, padx=10)
 
-        cols = ("ID Aparelho", "Operação", "Usuário", "Data", "Centro de Custo", "Cargo", "Revenda")
+        cols = (
+        "ID", "Tipo", "Marca", "Modelo", "Identificador", 
+        "Usuário", "CPF", "Operação", "Data", 
+        "Centro de Custo", "Cargo", "Revenda"
+        )
+
         self.tree_report    = ttk.Treeview(self.tab_report, columns=cols, show='headings')
         for c in cols:
             self.tree_report.heading(c, text=c)
@@ -1048,10 +1053,16 @@ class App(tk.Tk):
             return
         report_data = self.inv.generate_monthly_report(year, month)
         for log in report_data:
+            item = self.inv.find(log['item_id']) or {}
             row = (
                 log['item_id'],
+                item.get('tipo', '-'),
+                item.get('brand', '-'),
+                item.get('model', '-'),
+                item.get('identificador', '-'),
+                log.get('user', '-'),
+                log.get('cpf', item.get('cpf', '-')),
                 log['operation'],
-                log['user'],
                 log['date'],
                 log.get('center_cost', '-'),
                 log.get('cargo', '-'),
