@@ -59,6 +59,25 @@ TERMO_MODELOS = {
     "Revalle Serrinha": "modelos/termo_serrinha.docx",
 }
 
+
+#FORMATAR DATA E CPF
+    
+def format_cpf(cpf) -> str:
+    if not cpf:
+        return "-"  # ou "" se preferir vazio
+    cpf = str(cpf)  # garante que vira string
+    digits = "".join(filter(str.isdigit, cpf))
+    if len(digits) == 11:
+        return f"{digits[:3]}.{digits[3:6]}.{digits[6:9]}-{digits[9:]}"
+    return cpf
+
+
+def format_date(date_str: str) -> str:
+    try:
+        return datetime.strptime(date_str, "%Y-%m-%d").strftime("%d/%m/%Y")
+    except:
+        return date_str  # se falhar, retorna original
+
 class Inventory:
     def __init__(self, data_path=DATA_FILE, history_path=HISTORY_FILE):
         self.data_path = data_path
@@ -144,16 +163,19 @@ class Inventory:
             return False, "ID não encontrado."
         if p['status'] != 'Disponível':
             return False, "Aparelho já emprestado."
+
         try:
             dt_issue = datetime.strptime(date_emprestimo_str, "%d/%m/%Y")
         except:
             return False, "Data de empréstimo inválida. Use o formato dd/mm/aaaa."
+
         dt_cadastro = datetime.strptime(p['date_registered'], "%Y-%m-%d")
         if dt_issue < dt_cadastro:
             return False, "Data de empréstimo não pode ser anterior à data de cadastro."
         if p['date_returned'] and dt_issue < datetime.strptime(p['date_returned'], "%Y-%m-%d"):
             return False, "Data de empréstimo não pode ser anterior à data de devolução."
 
+        # Atualiza o item
         p['status'] = 'Indisponível'
         p['assigned_to'] = user
         p['cpf'] = cpf
@@ -163,20 +185,27 @@ class Inventory:
         p['cargo'] = cargo
         p['revenda'] = revenda
 
+        # Log completo
         log = {
-            'item_id': pid,
-            'operation': 'Empréstimo',
-            'user': user,
-            'cpf' : cpf,
-            'date': dt_issue.strftime("%Y-%m-%d"),
-            'center_cost': center_cost,
-            'cargo': cargo,
-            'revenda': revenda
+            "id": pid,
+            "tipo": p.get("tipo", ""),
+            "marca": p.get("brand", ""),
+            "modelo": p.get("model", ""),
+            "identificador": p.get("identificador", ""),
+            "usuario": user,
+            "cpf": cpf,
+            "cargo": cargo,
+            "center_cost": center_cost,
+            "revenda": revenda,
+            "data_emprestimo": dt_issue.strftime("%Y-%m-%d"),
+            "data_devolucao": ""
         }
         self.history.append(log)
+
         self.save()
         self.save_history()
         return True, f"Aparelho {pid} emprestado para {user}."
+
 
     def ret(self, pid, date_devolucao_str):
         p = self.find(pid)
@@ -184,31 +213,33 @@ class Inventory:
             return False, "ID não encontrado."
         if p['status'] != 'Indisponível':
             return False, "Aparelho não está emprestado."
+
         try:
             dt_return = datetime.strptime(date_devolucao_str, "%d/%m/%Y")
         except:
             return False, "Data de devolução inválida. Use o formato dd/mm/aaaa."
+
         dt_issue = datetime.strptime(p['date_issued'], "%Y-%m-%d")
         if dt_return < dt_issue:
             return False, "Data de devolução não pode ser anterior à data de empréstimo."
 
+        # Atualiza item
         p['date_returned'] = dt_return.strftime("%Y-%m-%d")
-        log = {
-            'item_id': pid,
-            'operation': 'Devolução',
-            'user': p['assigned_to'],
-            'cpf': p.get('cpf'),
-            'date': dt_return.strftime("%Y-%m-%d"),
-            'center_cost': p.get('center_cost'),
-            'cargo': p.get('cargo'),
-            'revenda': p.get('revenda')
-        }
         p['status'] = 'Disponível'
         p['assigned_to'] = None
-        self.history.append(log)
+        p['cpf'] = None
+
+        # Atualiza histórico (preenche devolução no último empréstimo aberto)
+        for h in reversed(self.history):
+            if h["id"] == pid and not h.get("data_devolucao"):
+                h["data_devolucao"] = dt_return.strftime("%Y-%m-%d")
+                break
+
         self.save()
         self.save_history()
         return True, f"Aparelho {pid} devolvido."
+
+
 
     def remove(self, pid, user):
         p = self.find(pid)
@@ -230,16 +261,40 @@ class Inventory:
         ]
 
     def generate_monthly_report(self, year, month):
-        report = []
-        for log in self.history:
+        rows = []
+        for h in self.history:
             try:
-                log_date = datetime.strptime(log['date'], '%Y-%m-%d')
+                if h.get("data_emprestimo"):
+                    d1 = datetime.strptime(h["data_emprestimo"], "%Y-%m-%d")
+                    if d1.year == year and d1.month == month:
+                        rows.append({
+                            "item_id": h["id"],
+                            "operation": "Empréstimo",
+                            "date": h["data_emprestimo"],
+                            "user": h.get("usuario", "-"),
+                            "cpf": h.get("cpf", "-"),
+                            "center_cost": h.get("center_cost", "-"),
+                            "cargo": h.get("cargo", "-"),
+                            "revenda": h.get("revenda", "-"),
+                        })
+                if h.get("data_devolucao"):
+                    d2 = datetime.strptime(h["data_devolucao"], "%Y-%m-%d")
+                    if d2.year == year and d2.month == month:
+                        rows.append({
+                            "item_id": h["id"],
+                            "operation": "Devolução",
+                            "date": h["data_devolucao"],
+                            "user": h.get("usuario", "-"),
+                            "cpf": h.get("cpf", "-"),
+                            "center_cost": h.get("center_cost", "-"),
+                            "cargo": h.get("cargo", "-"),
+                            "revenda": h.get("revenda", "-"),
+                        })
             except:
                 continue
-            if log_date.year == year and log_date.month == month:
-                report.append(log)
-        report.sort(key=lambda l: datetime.strptime(l['date'], '%Y-%m-%d'))
-        return report
+        rows.sort(key=lambda r: (r["date"], r["operation"]))
+        return rows
+
 
     def generate_term(self, item_id, user):
         item = self.find(item_id)
@@ -253,75 +308,94 @@ class Inventory:
         if not modelo_path or not os.path.exists(modelo_path):
             return False, f"Modelo de termo não encontrado para {revenda}."
 
-        # Definir nome do arquivo de saída
+        safe_user_name = user.replace(" ", "_")
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        saida_path = os.path.join(TERMS_DIR, f"termo_{item_id}_{revenda}_{timestamp}.docx")
+        saida_path = os.path.join(TERMS_DIR, f"termo_{item_id}_{safe_user_name}_{revenda}_{timestamp}.docx")
 
-        # Carregar modelo
         doc = Document(modelo_path)
 
         substituicoes = {
             "{{nome}}": user,
-            "{{cpf}}": item.get("cpf", "-"),
-            "{{tipo}}": item.get("tipo", "-"),
-            "{{marca}}": item.get("brand", "-"),
-            "{{modelo}}": item.get("model", "-"),
-            "{{identificador}}": item.get("identificador", "-"),
-            "{{data_cadastro}}": item.get("date_registered", "-"),
-            "{{data_emprestimo}}": item.get("date_issued", "-"),
-            "{{revenda}}": revenda or "-",
             "{{data_hoje}}": datetime.now().strftime("%d/%m/%Y"),
         }
 
-        # Substituir placeholders
+        for key, value in item.items():
+            placeholder = f"{{{{{key}}}}}"
+            str_value = str(value) if value not in [None, ''] else ""
+            substituicoes[placeholder] = str_value
+
+        substituicoes["{{cpf}}"] = format_cpf(item.get("cpf", ""))
+        substituicoes["{{data_cadastro}}"] = format_date(item.get("date_registered", ""))
+        substituicoes["{{data_emprestimo}}"] = format_date(item.get("date_issued", ""))
+        substituicoes["{{marca}}"] = item.get("brand", "")
+        substituicoes["{{modelo}}"] = item.get("model", "")
+        substituicoes["{{tipo}}"] = item.get("tipo", "")
+        substituicoes["{{identificador}}"] = item.get("identificador", "")
+        
+
         for p in doc.paragraphs:
             for chave, valor in substituicoes.items():
                 if chave in p.text:
-                    p.text = p.text.replace(chave, str(valor))
+                    inline = p.runs
+                    for i in range(len(inline)):
+                        if chave in inline[i].text:
+                            text = inline[i].text.replace(chave, str(valor))
+                            inline[i].text = text
 
         for tabela in doc.tables:
             for linha in tabela.rows:
                 for celula in linha.cells:
-                    for chave, valor in substituicoes.items():
-                        if chave in celula.text:
-                            celula.text = celula.text.replace(chave, str(valor))
-
+                    for p in celula.paragraphs:
+                        for chave, valor in substituicoes.items():
+                            if chave in p.text:
+                                inline = p.runs
+                                for i in range(len(inline)):
+                                    if chave in inline[i].text:
+                                        text = inline[i].text.replace(chave, str(valor))
+                                        inline[i].text = text
         doc.save(saida_path)
         return True, saida_path
 
-        def recalc_item_status(self, item_id):
-            """
-            Recalcula o status do aparelho com base nos lançamentos (issue e return) presentes no histórico.
-            """
-            item = self.find(item_id)
-            if not item:
-                return
-            relevant_logs = [log for log in self.history if log['item_id'] == item_id and log['operation'] in ('Empréstimo', 'Devolução')]
-            relevant_logs.sort(key=lambda log: datetime.strptime(log['date'], "%Y-%m-%d"))
-            if not relevant_logs:
-                item['status'] = 'Disponível'
-                item['assigned_to'] = None
-                item['date_issued'] = None
-                item['center_cost'] = None
-                item['cargo'] = None
-                item['revenda'] = None
-            else:
-                last = relevant_logs[-1]
-                if last['operation'] == 'Empréstimo':
-                    item['status'] = 'Indisponível'
-                    item['assigned_to'] = last['user']
-                    item['date_issued'] = last['date']
-                    item['center_cost'] = last.get('center_cost')
-                    item['cargo'] = last.get('cargo')
-                    item['revenda'] = last.get('revenda')
-                else:
-                    item['status'] = 'Disponível'
-                    item['assigned_to'] = None
-                    item['date_issued'] = None
-                    item['center_cost'] = None
-                    item['cargo'] = None
-                    item['revenda'] = None
+    def recalc_item_status(self, item_id):
+        """
+        Recalcula o status do aparelho com base nos lançamentos (issue e return) presentes no histórico.
+        """
+        item = self.find(item_id)
+        if not item:
+            return
+        registros = [h for h in self.history if h.get("id") == item_id]
+        if not registros:
+            item['status'] = 'Disponível'
+            item['assigned_to'] = None
+            item['cpf'] = None
+            item['date_issued'] = None
+            item['center_cost'] = None
+            item['cargo'] = None
+            item['revenda'] = None
             self.save()
+            return
+
+        # último empréstimo aberto (sem devolução). Se houver, o item está indisponível.
+        abertos = [h for h in registros if not h.get("data_devolucao")]
+        if abertos:
+            # pega o mais recente por data_emprestimo
+            h = max(abertos, key=lambda x: x.get("data_emprestimo") or "")
+            item['status'] = 'Indisponível'
+            item['assigned_to'] = h.get('usuario')
+            item['cpf'] = h.get('cpf')
+            item['date_issued'] = h.get('data_emprestimo')
+            item['center_cost'] = h.get('center_cost')
+            item['cargo'] = h.get('cargo')
+            item['revenda'] = h.get('revenda')
+        else:
+            item['status'] = 'Disponível'
+            item['assigned_to'] = None
+            item['cpf'] = None
+            item['date_issued'] = None
+            item['center_cost'] = None
+            item['cargo'] = None
+            item['revenda'] = None
+        self.save()
 
     def get_issue_return_counts(self):
         """
@@ -329,13 +403,13 @@ class Inventory:
         """
         issues = defaultdict(int)
         returns = defaultdict(int)
-        for log in self.history:
-            if log['operation'] in ('Empréstimo', 'Devolução'):
-                key = log['date'][:7]  # YYYY-MM
-                if log['operation'] == 'Empréstimo':
-                    issues[key] += 1
-                else:
-                    returns[key] += 1
+        for h in self.history:
+            if h.get("data_emprestimo"):
+                key = h["data_emprestimo"][:7]
+                issues[key] += 1
+            if h.get("data_devolucao"):
+                key = h["data_devolucao"][:7]
+                returns[key] += 1
         return issues, returns
 
     def get_registration_counts(self):
@@ -366,8 +440,8 @@ class App(tk.Tk):
         self.tab_issue   = ttk.Frame(notebook)
         self.tab_return  = ttk.Frame(notebook)
         self.tab_remove  = ttk.Frame(notebook)
-        self.tab_search  = ttk.Frame(notebook)
         self.tab_report  = ttk.Frame(notebook)
+        self.tab_history = ttk.Frame(notebook)
         self.tab_terms   = ttk.Frame(notebook)
         self.tab_graphs  = ttk.Frame(notebook)
 
@@ -376,8 +450,8 @@ class App(tk.Tk):
         notebook.add(self.tab_issue,  text="Emprestar")
         notebook.add(self.tab_return, text="Devolver")
         notebook.add(self.tab_remove, text="Remover")
-        notebook.add(self.tab_search, text="Buscar")
         notebook.add(self.tab_report, text="Relatório")
+        notebook.add(self.tab_history,text="Histórico")
         notebook.add(self.tab_terms,  text="Termos")
         notebook.add(self.tab_graphs, text="Gráficos")
 
@@ -386,8 +460,8 @@ class App(tk.Tk):
         self.build_issue_tab()
         self.build_return_tab()
         self.build_remove_tab()
-        self.build_search_tab()
         self.build_report_tab()
+        self.build_history_tab()
         self.build_terms_tab()
         self.build_graph_tab()
 
@@ -433,13 +507,14 @@ class App(tk.Tk):
 
         ttk.Button(frm_filters, text="Aplicar", command=self.update_stock).grid(row=0, column=8, padx=10, pady=2)
         ttk.Button(frm_filters, text="Limpar", command=self.clear_filters).grid(row=0, column=9, padx=5, pady=2)
-        ttk.Button(frm_filters, text="Exportar CSV", command=self.exportar_csv).grid(row=0, column=10, padx=5, pady=2)
+        ttk.Button(frm_filters, text="Exportar CSV", command=lambda: self.exportar_csv(self.tree_stock, "Exportar Estoque", "estoque")).grid(row=0, column=10, padx=5, pady=2)
+
 
         
         # --- Treeview ---
         cols = [
             "ID",
-            "Revenda", "Tipo", "Marca", "Modelo", "Status", "Usuário",
+            "Revenda", "Tipo", "Marca", "Modelo", "Status", "Usuário", "CPF",
             "Identificador", "Domínio", "Host", "Endereço Físico", "CPU",
             "RAM", "Storage", "Sistema", "Licença", "AnyDesk",
             "Setor", "IP", "MAC", "Data Cadastro"
@@ -451,7 +526,7 @@ class App(tk.Tk):
         col_widths = {
             "ID": 30,
             "Revenda": 120, "Tipo": 100, "Marca": 100, "Modelo": 120, "Status": 100,
-            "Usuário": 140, "Identificador": 140, "Domínio": 100, "Host": 140,
+            "Usuário": 140, "CPF" : 100, "Identificador": 140, "Domínio": 100, "Host": 140,
             "Endereço Físico": 160, "CPU": 120, "RAM": 100, "Storage": 100,
             "Sistema": 140, "Licença": 140, "AnyDesk": 120, "Setor": 100,
             "IP": 120, "MAC": 140, "Data Cadastro": 140,
@@ -459,7 +534,7 @@ class App(tk.Tk):
 
         for col in cols:
             self.tree_stock.heading(col, text=col, command=lambda c=col: self.treeview_sort_column(self.tree_stock, c, False))
-            self.tree_stock.column(col, width=col_widths.get(col, 100), anchor="w", stretch=True)
+            self.tree_stock.column(col, width=col_widths.get(col, 100), anchor="w", stretch=False)
 
         vsb = ttk.Scrollbar(tab, orient="vertical", command=self.tree_stock.yview)
         hsb = ttk.Scrollbar(tab, orient="horizontal", command=self.tree_stock.xview)
@@ -474,8 +549,9 @@ class App(tk.Tk):
         self.cb_status_filter.set("")
         self.cb_tipo_filter.set("")
         self.cb_revenda_filter.set("")
-        self.e_search.delete(0, "end")
+        self.e_search_stock.delete(0, "end")  # <- corrigido (era e_search.stock)
         self.update_stock()
+
 
 
     def build_add_tab(self):
@@ -624,19 +700,33 @@ class App(tk.Tk):
         
         ttk.Button(frm, text="Emprestar", command=self.cmd_issue).grid(row=8, column=0, columnspan=2, pady=5)
         self.update_issue_cb()
+        
+        self.e_issue_cpf.bind("<KeyRelease>", self.on_cpf_entry)
+        self.e_date_issue.bind("<KeyRelease>", lambda e: self.on_date_entry(e, self.e_date_issue))
+
 
     def build_return_tab(self):
         frm = ttk.Frame(self.tab_return, padding=10)
         frm.pack()
+
         ttk.Label(frm, text="Selecione aparelho:").grid(row=0, column=0, sticky='e')
-        self.cb_return      = ttk.Combobox(frm, state='readonly', width=30)
+        self.cb_return = ttk.Combobox(frm, state='readonly', width=30)
         self.cb_return.grid(row=0, column=1)
+
         ttk.Label(frm, text="Data Devolução (dd/mm/aaaa):").grid(row=1, column=0, sticky='e')
-        self.e_date_return  = ttk.Entry(frm); self.e_date_return.grid(row=1, column=1)
-        self.lbl_ret        = ttk.Label(frm, text="", foreground='red')
+        self.e_date_return = ttk.Entry(frm)
+        self.e_date_return.grid(row=1, column=1)
+
+        # 🔹 Aqui entra o bind da máscara de data
+        self.e_date_return.bind("<KeyRelease>", lambda e: self.on_date_entry(e, self.e_date_return))
+
+        self.lbl_ret = ttk.Label(frm, text="", foreground='red')
         self.lbl_ret.grid(row=2, column=0, columnspan=2)
+
         ttk.Button(frm, text="Devolver", command=self.cmd_return).grid(row=3, column=0, columnspan=2, pady=5)
+
         self.update_return_cb()
+
 
     def build_remove_tab(self):
         frm = ttk.Frame(self.tab_remove, padding=10)
@@ -649,19 +739,6 @@ class App(tk.Tk):
         ttk.Button(frm, text="Remover", command=self.cmd_remove).grid(row=2, column=0, columnspan=2, pady=5)
         self.update_remove_cb()
 
-    def build_search_tab(self):
-        frm = ttk.Frame(self.tab_search, padding=10)
-        frm.pack(fill='x')
-        ttk.Label(frm, text="Termo:").grid(row=0, column=0, sticky='e')
-        self.e_search       = ttk.Entry(frm); self.e_search.grid(row=0, column=1, padx=5)
-        ttk.Button(frm, text="Buscar", command=self.cmd_search).grid(row=0, column=2)
-        cols = ("ID", "Marca", "Modelo", "identificador", "Status",
-                "Usuário", "Data Cadastro", "Data Empréstimo", "Data Devolução")
-        self.tree_search    = ttk.Treeview(self.tab_search, columns=cols, show='headings')
-        for c in cols:
-            self.tree_search.heading(c, text=c)
-            self.tree_search.column(c, anchor='w')
-        self.tree_search.pack(fill='both', expand=True, padx=5, pady=5)
 
     def build_report_tab(self):
         frm = ttk.Frame(self.tab_report, padding=10)
@@ -677,7 +754,9 @@ class App(tk.Tk):
         self.cb_report_month.grid(row=0, column=3)
         ttk.Button(top_frm, text="Gerar Relatório", command=self.cmd_generate_report).grid(row=0, column=4, padx=10)
         ttk.Button(top_frm, text="Estornar Lançamento", command=self.cmd_delete_report_entry).grid(row=0, column=5, padx=10)
+        ttk.Button(top_frm, text="Exportar CSV", command=lambda: self.exportar_csv(self.tree_report, "Exportar Relatório", "relatório")).grid(row=0, column=6, padx=5, pady=2)
 
+        
         cols = (
         "ID", "Tipo", "Marca", "Modelo", "Identificador", 
         "Usuário", "CPF", "Operação", "Data", 
@@ -691,7 +770,7 @@ class App(tk.Tk):
         "Marca": 120,
         "Modelo": 140,
         "Identificador": 160,
-        "Usuário": 160,
+        "Usuário": 200,
         "CPF": 120,
         "Operação": 110,
         "Data": 100,
@@ -702,23 +781,30 @@ class App(tk.Tk):
 
         for c in cols:
             self.tree_report.heading(c, text=c)
-            self.tree_report.column(c, width=larguras.get(c, 120), anchor='w', stretch=True)
+            self.tree_report.column(c, width=larguras.get(c, 120), anchor='w', stretch=False)
         self.tree_report.pack(fill='both', expand=True, padx=5, pady=5)
         
         
 
-    def exportar_csv(self):
-        file_path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV Files", "*.csv")])
+    def exportar_csv(self, tree, titulo="Exportar", nome="dados"):
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv")]
+        )
         if not file_path:
             return
-        cols = [self.tree_stock.heading(c)["text"] for c in self.tree_stock["columns"]]
+
         with open(file_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow(cols)
-            for row_id in self.tree_stock.get_children():
-                row = self.tree_stock.item(row_id)["values"]
-                writer.writerow(row)
-        messagebox.showinfo("Exportar", f"Estoque exportado para {file_path}")
+
+            headers = [tree.heading(c)["text"] for c in tree["columns"]]
+            writer.writerow(headers)
+
+            for row_id in tree.get_children():
+                values = tree.item(row_id)["values"]
+                writer.writerow(values)
+
+        messagebox.showinfo(titulo, f"{nome.capitalize()} exportado para:\n{file_path}")
 
         
         
@@ -732,18 +818,191 @@ class App(tk.Tk):
         for index, (val, k) in enumerate(items):
             tv.move(k, "", index)
         tv.heading(col, command=lambda: self.treeview_sort_column(tv, col, not reverse))
+        
+        
+    def build_history_tab(self):
+        tab = self.tab_history  # usa a aba já criada em create_widgets
+
+        top = ttk.Frame(tab)
+        top.pack(fill="x", padx=10, pady=5)
+        ttk.Button(top, text="Exportar CSV",
+                command=lambda: self.exportar_csv(self.tree_history, "Exportar Histórico", "histórico")
+                ).pack(side="right")
+
+        cols = (
+            "ID", "Tipo", "Marca", "Modelo", "Identificador", "Usuário", "CPF",
+            "Cargo", "Centro de Custo", "Revenda",
+            "Data Empréstimo", "Data Devolução"
+        )
+        self.tree_history = ttk.Treeview(tab, columns=cols, show="headings", height=18)
+        widths = {
+            "ID": 60, "Tipo": 100, "Marca": 120, "Modelo": 140, "Identificador": 140,
+            "Usuário": 200, "CPF": 130, "Cargo": 140, "Centro de Custo": 160,
+            "Revenda": 140, "Data Empréstimo": 130, "Data Devolução": 130
+        }
+        for c in cols:
+            self.tree_history.heading(c, text=c)
+            self.tree_history.column(c, width=widths.get(c, 120), anchor="w", stretch=False)
+
+        ysb = ttk.Scrollbar(tab, orient="vertical", command=self.tree_history.yview)
+        xsb = ttk.Scrollbar(tab, orient="horizontal", command=self.tree_history.xview)
+        self.tree_history.configure(yscroll=ysb.set, xscroll=xsb.set)
+
+        self.tree_history.pack(fill="both", expand=True, padx=10, pady=(0,5))
+        ysb.pack(side="right", fill="y")
+        xsb.pack(side="bottom", fill="x")
+
+        # carrega dados ao abrir
+        self.update_history_table()
+
+
 
 
     def build_terms_tab(self):
         frm = ttk.Frame(self.tab_terms, padding=10)
-        frm.pack()
-        ttk.Label(frm, text="Empréstimos ativos:").grid(row=0, column=0, sticky='e')
-        self.cb_terms       = ttk.Combobox(frm, state='readonly', width=40)
-        self.cb_terms.grid(row=0, column=1)
-        self.lbl_terms      = ttk.Label(frm, text="", foreground='red')
-        self.lbl_terms.grid(row=1, column=0, columnspan=2)
-        ttk.Button(frm, text="Gerar Termo", command=self.cmd_generate_term).grid(row=2, column=0, columnspan=2, pady=5)
-        self.update_terms_cb()
+        frm.pack(fill="both", expand=True)
+
+        # --- Filtro de busca ---
+        search_frame = ttk.Frame(frm)
+        search_frame.pack(fill="x", pady=5)
+        ttk.Label(search_frame, text="Buscar:").grid(row=0, column=0, sticky="e")
+        self.e_search_terms = ttk.Entry(search_frame, width=30)
+        self.e_search_terms.grid(row=0, column=1, padx=5)
+        ttk.Button(search_frame, text="Buscar", command=self.cmd_search_terms).grid(row=0, column=2, padx=5)
+
+        # --- Tabela de termos (empréstimos ativos) ---
+        cols = ("ID", "Tipo", "Marca", "Usuário", "CPF", "Data Empréstimo", "Revenda")
+
+        container = ttk.Frame(frm)
+        container.pack(fill="both", expand=True, pady=10)
+
+        xscroll = ttk.Scrollbar(container, orient="horizontal")
+        yscroll = ttk.Scrollbar(container, orient="vertical")
+
+        self.tree_terms = ttk.Treeview(
+            container,
+            columns=cols,
+            show="headings",
+            displaycolumns=cols,
+            xscrollcommand=xscroll.set,
+            yscrollcommand=yscroll.set,
+            height=12
+        )
+
+        self.tree_terms.column("#0", width=0, stretch=False)
+
+        larguras = {
+            "ID": 50,
+            "Tipo": 100,
+            "Marca": 100,
+            "Usuário": 200,
+            "CPF": 150,
+            "Data Empréstimo": 150,
+            "Revenda": 150,
+        }
+
+        for c in cols:
+            self.tree_terms.heading(c, text=c, anchor="w")
+            self.tree_terms.column(c, width=larguras[c], minwidth=larguras[c], anchor="w", stretch=False)
+
+        yscroll.config(command=self.tree_terms.yview)
+        xscroll.config(command=self.tree_terms.xview)
+        yscroll.pack(side="right", fill="y")
+        xscroll.pack(side="bottom", fill="x")
+        self.tree_terms.pack(side="left", fill="both", expand=True)
+
+        
+        # depois de inserir as linhas:
+        self.tree_terms.update_idletasks()
+        for c in cols:
+            atual = self.tree_terms.column(c, "width")
+            minimo = larguras[c]
+            if atual < minimo:
+                self.tree_terms.column(c, width=minimo)
+
+
+        # --- Botão para gerar termo ---
+        self.lbl_terms = ttk.Label(frm, text="", foreground="red")
+        self.lbl_terms.pack()
+        ttk.Button(frm, text="Gerar Termo Selecionado", command=self.cmd_generate_term).pack(pady=5)
+
+        # Carrega os empréstimos ativos
+        self.update_terms_table()
+
+
+    #MASKS CPF AND DATE  
+    def on_cpf_entry(self, event):
+        text = "".join(filter(str.isdigit, self.e_issue_cpf.get()))
+        if len(text) > 11:
+            text = text[:11]
+        formatted = format_cpf(text)
+        self.e_issue_cpf.delete(0, tk.END)
+        self.e_issue_cpf.insert(0, formatted)
+        self.e_issue_cpf.icursor(tk.END)
+
+    def on_date_entry(self, event, entry_widget):
+        text = "".join(filter(str.isdigit, entry_widget.get()))  # só números
+        if len(text) > 8:
+            text = text[:8]
+
+        # monta a string formatada
+        formatted = text
+        if len(text) > 2:
+            formatted = text[:2] + "/" + text[2:]
+        if len(text) > 4:
+            formatted = formatted[:5] + "/" + formatted[5:]
+
+        # atualiza o campo sem perder o cursor no final
+        entry_widget.delete(0, tk.END)
+        entry_widget.insert(0, formatted)
+        entry_widget.icursor(tk.END)
+
+
+    def update_history_table(self):
+        self.tree_history.delete(*self.tree_history.get_children())
+        for h in self.inv.history:
+            self.tree_history.insert("", "end", values=(
+                h.get("id", ""),               # Use .get() for safety
+                h.get("tipo", ""),             # Use .get() for safety
+                h.get("marca", ""),            # Use .get() for safety
+                h.get("modelo", ""),           # Added missing field
+                h.get("identificador", ""),    # Added missing field
+                h.get("usuario", ""),          # Use .get() for safety
+                format_cpf(h.get("cpf", "")),
+                h.get("cargo", ""),
+                h.get("center_cost", ""),
+                h.get("revenda", ""),
+                format_date(h.get("data_emprestimo", "")),
+                format_date(h.get("data_devolucao", "")) if h.get("data_devolucao") else ""
+            ))
+
+    
+
+    def update_terms_table(self, search_text=""):
+        self.tree_terms.delete(*self.tree_terms.get_children())
+        for p in self.inv.items:
+            if p['status'] == 'Indisponível':
+                row_str = " ".join(str(v).lower() for v in p.values())
+                if search_text and search_text not in row_str:
+                    continue
+                row = (
+                    p.get('id', ''),
+                    p.get('tipo', ''),
+                    p.get('brand', ''),
+                    p.get('assigned_to', ''),
+                    format_cpf(p.get('cpf', '')),
+                    format_date(p.get('date_issued', '')),
+                    p.get('revenda', '')        # agora aparece a revenda
+                )
+                self.tree_terms.insert('', 'end', values=row)
+
+  
+                
+    def cmd_search_terms(self):
+        term = self.e_search_terms.get().strip().lower()
+        self.update_terms_table(term)
+
+
 
     def build_graph_tab(self):
         frm = ttk.Frame(self.tab_graphs, padding=10)
@@ -806,6 +1065,7 @@ class App(tk.Tk):
                 p.get('model', ''),
                 p.get('status', ''),
                 p.get('assigned_to', ''),
+                format_cpf(p.get('cpf', '')),
                 p.get('identificador', ''),
                 p.get('dominio', ''),
                 p.get('host', ''),
@@ -819,7 +1079,7 @@ class App(tk.Tk):
                 p.get('setor', ''),
                 p.get('ip', ''),
                 p.get('mac', ''),
-                p.get('date_registered', ''),
+                format_date(p.get('date_registered', '')),
             )
             tag = "disp" if p.get('status') == "Disponível" else "indisp"
             self.tree_stock.insert('', 'end', values=row, tags=(tag,))
@@ -850,12 +1110,18 @@ class App(tk.Tk):
         self.cb_remove.set('')
 
     def update_terms_cb(self):
-        lst = [
-            f"{p['id']} - {p['brand']} {p['model']} ({p['assigned_to']})"
-            for p in self.inv.items if p['status'] == 'Indisponível'
-        ]
-        self.cb_terms['values'] = lst
-        self.cb_terms.set('')
+        # se a combobox ainda não foi criada, não faz nada
+        if not hasattr(self, "cb_terms"):
+            return
+
+        lst = []
+        for p in self.inv.items:  # <- corrigido (era products)
+            if p.get("assigned_to"):
+                lst.append(f'{p["id"]} - {p["brand"]} ({p["assigned_to"]})')
+
+        self.cb_terms["values"] = lst
+
+
 
 
     def safe_get(self, attr):
@@ -998,6 +1264,8 @@ class App(tk.Tk):
             self.e_date_issue.delete(0, 'end')
             self.update_stock(); self.update_issue_cb()
             self.update_return_cb(); self.update_terms_cb()
+            self.update_history_table()
+
 
     def cmd_return(self):
         sel = self.cb_return.get()
@@ -1014,6 +1282,8 @@ class App(tk.Tk):
             self.update_stock(); self.update_issue_cb()
             self.update_return_cb(); self.update_remove_cb()
             self.update_terms_cb()
+            self.update_history_table()
+
 
     def cmd_remove(self):
         sel = self.cb_remove.get()
@@ -1065,8 +1335,9 @@ class App(tk.Tk):
         except ValueError:
             messagebox.showerror("Erro", "Ano/Mês inválidos.")
             return
-        report_data = self.inv.generate_monthly_report(year, month)
-        for log in report_data:
+
+        flat_logs = self.inv.generate_monthly_report(year, month)
+        for log in flat_logs:
             item = self.inv.find(log['item_id']) or {}
             row = (
                 log['item_id'],
@@ -1075,9 +1346,9 @@ class App(tk.Tk):
                 item.get('model', '-'),
                 item.get('identificador', '-'),
                 log.get('user', '-'),
-                log.get('cpf', item.get('cpf', '-')),
+                format_cpf(log.get('cpf', item.get('cpf', '-'))),
                 log['operation'],
-                log['date'],
+                format_date(log['date']),
                 log.get('center_cost', '-'),
                 log.get('cargo', '-'),
                 log.get('revenda', '-')
@@ -1085,72 +1356,91 @@ class App(tk.Tk):
             self.tree_report.insert('', 'end', values=row)
         self.autosize_treeview(self.tree_report)
 
+
     def cmd_delete_report_entry(self):
         selected = self.tree_report.selection()
         if not selected:
             messagebox.showwarning("Aviso", "Selecione um lançamento do relatório.")
             return
+
         pwd = simpledialog.askstring("Autorização", "Digite a senha mãe:", show='*')
         if pwd != ADMIN_PASS:
             messagebox.showerror("Erro", "Senha incorreta.")
             return
 
-        item = self.tree_report.item(selected[0])
-        values = item['values']
+        values = self.tree_report.item(selected[0])['values']
+        # Mapeamento das colunas no relatório:
+        # 0 ID | 1 Tipo | 2 Marca | 3 Modelo | 4 Identificador |
+        # 5 Usuário | 6 CPF | 7 Operação | 8 Data | 9 Centro de Custo | 10 Cargo | 11 Revenda
         item_id = int(values[0])
-        selected_operation = values[1]
-        selected_date = values[3]
-        selected_user = values[2]
+        selected_user = values[5]
+        selected_operation = values[7]
+        selected_date_str = values[8]  # está em dd/mm/aaaa
+        try:
+            selected_date_iso = datetime.strptime(selected_date_str, "%d/%m/%Y").strftime("%Y-%m-%d")
+        except:
+            messagebox.showerror("Erro", "Data inválida na seleção.")
+            return
 
-        # Se for empréstimo, verifique se há devolução posterior para o mesmo aparelho:
-        if selected_operation == "issue":
-            issue_date = datetime.strptime(selected_date, "%Y-%m-%d")
-            for log in self.inv.history:
-                if log['item_id'] == item_id and log['operation'] == "return":
-                    return_date = datetime.strptime(log['date'], "%Y-%m-%d")
-                    if return_date > issue_date:
-                        messagebox.showerror("Erro", "Estorne pridentificadorro a devolução antes de estornar o empréstimo.")
-                        return
-
-        indice_remover = None
-        for i, log in enumerate(self.inv.history):
-            if (log['item_id'] == item_id and 
-                log['operation'] == selected_operation and 
-                log['date'] == selected_date and 
-                log['user'] == selected_user):
-                indice_remover = i
+        # Localiza o registro no histórico "completo"
+        idx_encontrado = None
+        for i, h in enumerate(self.inv.history):
+            if h.get("id") != item_id:
+                continue
+            if selected_operation == "Empréstimo" and h.get("data_emprestimo") == selected_date_iso and h.get("usuario") == selected_user:
+                idx_encontrado = i
+                break
+            if selected_operation == "Devolução" and h.get("data_devolucao") == selected_date_iso and h.get("usuario") == selected_user:
+                idx_encontrado = i
                 break
 
-        if indice_remover is None:
+        if idx_encontrado is None:
             messagebox.showerror("Erro", "Lançamento não encontrado no histórico.")
             return
 
-        del self.inv.history[indice_remover]
+        h = self.inv.history[idx_encontrado]
+        if selected_operation == "Empréstimo":
+            # só pode estornar empréstimo se NÃO houver devolução nesse mesmo registro
+            if h.get("data_devolucao"):
+                messagebox.showerror("Erro", "Estorne primeiro a devolução deste empréstimo.")
+                return
+            # remove o registro inteiro
+            del self.inv.history[idx_encontrado]
+        else:
+            # Estornar devolução => apenas limpar a data_devolucao
+            h["data_devolucao"] = ""
+
         self.inv.save_history()
         self.inv.recalc_item_status(item_id)
 
+        # Atualiza telas
         self.cmd_generate_report()
         self.update_stock()
         self.update_issue_cb()
         self.update_return_cb()
         self.update_remove_cb()
         self.update_terms_cb()
+        self.update_history_table()
 
         messagebox.showinfo("Sucesso", "Lançamento estornado.")
 
+
     def cmd_generate_term(self):
-        sel = self.cb_terms.get()
-        if not sel:
+        selected = self.tree_terms.selection()
+        if not selected:
             self.lbl_terms.config(text="Selecione um empréstimo.", foreground='red')
             return
-        pid = sel.split(' - ')[0]
-        user = sel.split('(')[1][:-1]
-        ok, filename = self.inv.generate_term(int(pid), user)
+        values = self.tree_terms.item(selected[0])["values"]
+        pid = int(values[0])
+        user = values[3]  # coluna "Usuário"
+        ok, filename = self.inv.generate_term(pid, user)
         if ok:
             self.lbl_terms.config(text=f"Termo gerado: {filename}", foreground='green')
             os.startfile(filename)
         else:
             self.lbl_terms.config(text=filename, foreground='red')
+
+
 
     # --- Funções de Gráficos ---
     def graph_issue_return(self):
