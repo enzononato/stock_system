@@ -310,51 +310,57 @@ class Inventory:
 
         safe_user_name = user.replace(" ", "_")
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        saida_path = os.path.join(TERMS_DIR, f"termo_{item_id}_{safe_user_name}_{revenda}_{timestamp}.docx")
+        saida_path = os.path.join(
+            TERMS_DIR,
+            f"termo_{item_id}_{safe_user_name}_{revenda}_{timestamp}.docx"
+        )
 
         doc = Document(modelo_path)
 
+        # 🔹 Mapeia placeholders
         substituicoes = {
             "{{nome}}": user,
             "{{data_hoje}}": datetime.now().strftime("%d/%m/%Y"),
         }
 
+        # adiciona placeholders para todos os campos do item
         for key, value in item.items():
             placeholder = f"{{{{{key}}}}}"
-            str_value = str(value) if value not in [None, ''] else ""
+            str_value = str(value) if value not in [None, ""] else ""
+            # adiciona espaço antes somente se houver valor
+            if str_value:
+                str_value = " " + str_value
             substituicoes[placeholder] = str_value
 
+        # sobrescreve alguns campos com formatação especial
         substituicoes["{{cpf}}"] = format_cpf(item.get("cpf", ""))
         substituicoes["{{data_cadastro}}"] = format_date(item.get("date_registered", ""))
         substituicoes["{{data_emprestimo}}"] = format_date(item.get("date_issued", ""))
-        substituicoes["{{marca}}"] = item.get("brand", "")
-        substituicoes["{{modelo}}"] = item.get("model", "")
-        substituicoes["{{tipo}}"] = item.get("tipo", "")
-        substituicoes["{{identificador}}"] = item.get("identificador", "")
-        
 
+        # principais atributos com espaço condicional
+        substituicoes["{{marca}}"] = " " + item.get("brand", "") if item.get("brand") else ""
+        substituicoes["{{modelo}}"] = " " + item.get("model", "") if item.get("model") else ""
+        substituicoes["{{tipo}}"] = item.get("tipo", "")  # tipo não leva espaço
+        substituicoes["{{identificador}}"] = " " + item.get("identificador", "") if item.get("identificador") else ""
+
+        # 🔹 Substitui em todos os parágrafos
         for p in doc.paragraphs:
             for chave, valor in substituicoes.items():
                 if chave in p.text:
-                    inline = p.runs
-                    for i in range(len(inline)):
-                        if chave in inline[i].text:
-                            text = inline[i].text.replace(chave, str(valor))
-                            inline[i].text = text
+                    p.text = p.text.replace(chave, str(valor))
 
+        # 🔹 Substitui em todas as tabelas
         for tabela in doc.tables:
             for linha in tabela.rows:
                 for celula in linha.cells:
                     for p in celula.paragraphs:
                         for chave, valor in substituicoes.items():
                             if chave in p.text:
-                                inline = p.runs
-                                for i in range(len(inline)):
-                                    if chave in inline[i].text:
-                                        text = inline[i].text.replace(chave, str(valor))
-                                        inline[i].text = text
+                                p.text = p.text.replace(chave, str(valor))
+
         doc.save(saida_path)
         return True, saida_path
+
 
     def recalc_item_status(self, item_id):
         """
