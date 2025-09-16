@@ -17,7 +17,7 @@ from config import (
 class App(tk.Tk):
     def __init__(self, user, role):
         super().__init__()
-        self.title("Gestão de Estoque de Celulares")
+        self.title("Gestão de Estoque")
         self.geometry("1200x800")
         self.inv = InventoryDBManager()
         self.logged_user = user
