@@ -1,0 +1,19 @@
+/venv
+/__pycache__
+
+database_mysql.py
+# Crie esse arquivo acima e coloque esse código e substitua com seus dados
+#
+# import mysql.connector
+#
+# DB_CONFIG = {
+#    "host": "localhost",
+#    "user": "user",          <<< usuário
+#    "password": "senha",     <<< coloque a senha aqui
+#    "database": "db_name"    <<< nome do banco
+#}
+#
+# def get_connection():
+#    return mysql.connector.connect(**DB_CONFIG)
+
+
