@@ -1040,8 +1040,8 @@ class App(tk.Tk):
             tag = "disp" if p.get('status') == "Disponível" else "indisp"
             self.tree_stock.insert('', 'end', values=cleaned_row, tags=(tag,))
 
-        self.tree_stock.tag_configure("disp", background="#D4EDDA") # Verde mais suave
-        self.tree_stock.tag_configure("indisp", background="#F8D7DA") # Vermelho mais suave
+        self.tree_stock.tag_configure("disp", background="#7EFF9C") # Verde mais suave
+        self.tree_stock.tag_configure("indisp", background="#FF7E89") # Vermelho mais suave
 
     def update_issue_cb(self):
         items = self.inv.list_items()

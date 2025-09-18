@@ -168,8 +168,12 @@ class InventoryDBManager:
         conn = get_connection()
         cur = conn.cursor()
         cur.execute("""
-            UPDATE items SET status='Indisponível', assigned_to=%s, cpf=%s, date_issued=%s WHERE id=%s
-        """, (user, cpf, dt_issue.strftime("%Y-%m-%d"), pid))
+            UPDATE items 
+            SET status='Indisponível', assigned_to=%s, cpf=%s, date_issued=%s, revenda=%s 
+            WHERE id=%s
+        """, (user, cpf, dt_issue.strftime("%Y-%m-%d"), revenda, pid))
+
+
 
         cur.execute("""
             INSERT INTO history (item_id, operador, usuario, cpf, cargo, center_cost, revenda, data_operacao, operation)
