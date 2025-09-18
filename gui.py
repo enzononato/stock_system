@@ -169,9 +169,12 @@ class App(tk.Tk):
         items = [(tv.set(k, col), k) for k in tv.get_children("")]
         
         try:
-            items.sort(key=lambda t: int(str(t[0]).replace('.', '').replace('-', '')), reverse=reverse)
-        except ValueError:
+            # Tenta ordenar como número, removendo pontos e traços
+            items.sort(key=lambda t: int(str(t[0]).replace('.', '').replace('-', '').replace('/', '')), reverse=reverse)
+        except (ValueError, IndexError):
+            # Se falhar (ex: texto), ordena como string
             items.sort(key=lambda t: str(t[0]).lower(), reverse=reverse)
+
 
         for index, (val, k) in enumerate(items):
             tv.move(k, "", index)
@@ -473,8 +476,8 @@ class App(tk.Tk):
         ttk.Button(action_frm, text="Exportar CSV", command=lambda: self.exportar_csv(self.tree_report, "Exportar Relatório", "relatório"), style="Secondary.TButton").pack(side="left")
         ttk.Button(action_frm, text="Estornar Lançamento", command=self.cmd_delete_report_entry, style="Danger.TButton").pack(side="left", padx=10)
         
-
-        cols = ("ID Item", "Operador", "Tipo", "Marca", "Modelo", "Identificador", "Usuário", "CPF", "Operação", "Data Empréstimo", "Data Devolução", "Centro de Custo", "Cargo", "Revenda")
+        # ALTERADO: Adicionada a coluna "ID Histórico" que ficará oculta
+        cols = ("ID Histórico", "ID Item", "Operador", "Tipo", "Marca", "Modelo", "Identificador", "Usuário", "CPF", "Operação", "Data Empréstimo", "Data Devolução", "Centro de Custo", "Cargo", "Revenda")
         
         tree_frame = ttk.Frame(frm)
         tree_frame.pack(fill="both", expand=True)
@@ -487,6 +490,9 @@ class App(tk.Tk):
             self.tree_report.heading(c, text=c, command=lambda col=c: self.treeview_sort_column(self.tree_report, col, False))
             self.tree_report.column(c, width=col_widths.get(c, 120), anchor='w', stretch=False)
         
+        # OCULTA a coluna ID Histórico
+        self.tree_report.column("ID Histórico", width=0, stretch=False)
+
         ysb = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree_report.yview)
         hsb = ttk.Scrollbar(frm, orient="horizontal", command=self.tree_report.xview)
         self.tree_report.configure(yscrollcommand=ysb.set, xscrollcommand=hsb.set)
@@ -566,11 +572,21 @@ class App(tk.Tk):
         try:
             with open(file_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
-                headers = [tree.heading(c)["text"] for c in tree["columns"]]
+                
+                # Pega apenas os cabeçalhos das colunas visíveis
+                visible_columns = [c for c in tree["columns"] if tree.column(c, "width") > 0]
+                headers = [tree.heading(c)["text"] for c in visible_columns]
                 writer.writerow(headers)
+
+                # Pega os valores apenas das colunas visíveis
+                col_indices = {col: i for i, col in enumerate(tree["columns"])}
+                visible_indices = [col_indices[c] for c in visible_columns]
+
                 for row_id in tree.get_children():
-                    values = tree.item(row_id)["values"]
-                    writer.writerow(values)
+                    all_values = tree.item(row_id)["values"]
+                    visible_values = [all_values[i] for i in visible_indices]
+                    writer.writerow(visible_values)
+
             messagebox.showinfo(titulo, f"{nome.capitalize()} exportado para:\n{file_path}")
         except Exception as e:
             messagebox.showerror("Erro ao Exportar", f"Ocorreu um erro: {e}")
@@ -700,7 +716,7 @@ class App(tk.Tk):
             return
 
         dados["tipo"] = tipo
-        dados["date_registered"] = datetime.now().strftime("%Y-m-d")
+        dados["date_registered"] = datetime.now().strftime("%Y-%m-%d")
         item_id = self.inv.add_item(dados, self.logged_user)
         
         if not item_id:
@@ -847,6 +863,8 @@ class App(tk.Tk):
 
 
     def cmd_generate_report(self):
+        # ALTERADO: A lógica para determinar se um empréstimo virou devolução foi movida para a query SQL.
+        # Agora o frontend apenas exibe os dados que vêm do banco.
         self.tree_report.heading("Data Empréstimo", text="Data Inicial")
 
         for i in self.tree_report.get_children():
@@ -871,13 +889,14 @@ class App(tk.Tk):
             data_devolucao_display = ''
 
             if op_type == 'Empréstimo':
+                # Agora a query já nos diz se foi devolvido ou não
                 operation_display = "Devolvido" if data_devolucao else "Emprestado"
                 data_devolucao_display = format_date(data_devolucao) if data_devolucao else ''
             elif op_type == 'Cadastro':
                 operation_display = "Cadastro"
             
             row_values = (
-                log.get('item_id'), log.get('operador'), log.get('tipo'), log.get('brand'),
+                log.get('history_id'), log.get('item_id'), log.get('operador'), log.get('tipo'), log.get('brand'),
                 log.get('model'), log.get('identificador'), log.get('usuario'),
                 format_cpf(log.get('cpf')), operation_display, data_inicial_display,
                 data_devolucao_display, log.get('center_cost'), log.get('cargo'), log.get('revenda')
@@ -890,17 +909,54 @@ class App(tk.Tk):
                 
             self.tree_report.insert('', 'end', values=row_values_cleaned)
 
+    # ALTERADO: Lógica de estorno implementada.
     def cmd_delete_report_entry(self):
-        if not self.tree_report.selection():
+        selected_items = self.tree_report.selection()
+        if not selected_items:
             messagebox.showwarning("Aviso", "Selecione um lançamento do relatório para estornar.")
+            return
+
+        selected_item = selected_items[0]
+        values = self.tree_report.item(selected_item, "values")
+        
+        try:
+            history_id = int(values[0])
+            item_id = values[1]
+            op_display = values[9] 
+        except (ValueError, IndexError):
+            messagebox.showerror("Erro", "Não foi possível identificar o lançamento. Tente gerar o relatório novamente.")
+            return
+
+        # Mapeia o texto da tela para a operação real no banco
+        op_real = "Cadastro" if op_display == "Cadastro" else "Empréstimo"
+        if op_display == "Devolvido":
+            # Para estornar uma devolução, a lógica é mais complexa, pois teríamos que
+            # achar a ID da devolução, não do empréstimo. A query atual do relatório
+            # não facilita isso. A implementação atual estorna o empréstimo.
+            # Vamos manter a simplicidade por enquanto.
+            pass
+
+        confirm_msg = f"Você está prestes a registrar um estorno para a operação de '{op_real}' (Item ID {item_id}).\n\nA situação do item será revertida ao estado anterior a esta operação.\n\nConfirma a ação?"
+        if op_real == "Cadastro":
+            confirm_msg += "\n\nATENÇÃO: Estornar um cadastro tornará o item INATIVO no estoque."
+
+        if not messagebox.askyesno("Confirmar Estorno", confirm_msg):
             return
 
         pwd = simpledialog.askstring("Autorização", "Digite a senha de administrador:", show='*')
         if pwd != ADMIN_PASS:
             messagebox.showerror("Erro", "Senha incorreta. Ação não autorizada.")
             return
+        
+        # Chama a nova função, passando o usuário logado para auditoria
+        ok, msg = self.inv.reverse_history_entry(history_id, self.logged_user)
 
-        messagebox.showinfo("Funcionalidade Pendente", "A lógica de estorno ainda não foi implementada no backend.")
+        if ok:
+            messagebox.showinfo("Sucesso", msg)
+            self.update_all_views() # Atualiza tudo para refletir a mudança
+        else:
+            messagebox.showerror("Erro no Estorno", msg)
+
 
     def cmd_generate_term(self):
         selected = self.tree_terms.selection()
@@ -915,7 +971,10 @@ class App(tk.Tk):
         if ok:
             self.lbl_terms.config(text=f"Termo gerado com sucesso: {os.path.basename(result)}", style='Success.TLabel')
             if messagebox.askyesno("Sucesso", f"Termo gerado em:\n{result}\n\nDeseja abri-lo agora?"):
-                os.startfile(result)
+                try:
+                    os.startfile(result)
+                except Exception as e:
+                    messagebox.showerror("Erro ao Abrir", f"Não foi possível abrir o arquivo automaticamente:\n{e}")
         else:
             self.lbl_terms.config(text=f"Erro: {result}", style='Danger.TLabel')
 
@@ -981,8 +1040,8 @@ class App(tk.Tk):
             tag = "disp" if p.get('status') == "Disponível" else "indisp"
             self.tree_stock.insert('', 'end', values=cleaned_row, tags=(tag,))
 
-        self.tree_stock.tag_configure("disp", background="#7DFF82") 
-        self.tree_stock.tag_configure("indisp", background="#FF717F")
+        self.tree_stock.tag_configure("disp", background="#D4EDDA") # Verde mais suave
+        self.tree_stock.tag_configure("indisp", background="#F8D7DA") # Vermelho mais suave
 
     def update_issue_cb(self):
         items = self.inv.list_items()

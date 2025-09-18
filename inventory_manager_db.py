@@ -31,6 +31,7 @@ class InventoryDBManager:
             is_active TINYINT(1) DEFAULT 1 
         )
         """)
+        # ALTERADO: Adicionado 'Estorno' ao ENUM e a coluna 'is_reversed'
         cur.execute("""
         CREATE TABLE IF NOT EXISTS history (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -42,7 +43,8 @@ class InventoryDBManager:
             center_cost VARCHAR(100),
             revenda VARCHAR(100),
             data_operacao DATE,
-            operation ENUM('Cadastro','Empréstimo','Devolução', 'Edição', 'Exclusão') DEFAULT 'Cadastro',
+            operation ENUM('Cadastro','Empréstimo','Devolução', 'Edição', 'Exclusão', 'Estorno') DEFAULT 'Cadastro',
+            is_reversed TINYINT(1) DEFAULT 0,
             -- Campos para guardar dados do item no momento da exclusão
             tipo VARCHAR(50),
             brand VARCHAR(100),
@@ -108,14 +110,12 @@ class InventoryDBManager:
         conn = get_connection()
         cur = conn.cursor()
 
-        # Salva os dados do item no log de histórico ANTES de desativar
         cur.execute("""
             INSERT INTO history (item_id, operador, data_operacao, operation, tipo, brand, model, identificador)
             VALUES (%s, %s, %s, 'Exclusão', %s, %s, %s, %s)
         """, (item_id, logged_user, datetime.now().strftime("%Y-%m-%d"),
               item.get('tipo'), item.get('brand'), item.get('model'), item.get('identificador')))
 
-        # EM VEZ DE DELETAR, APENAS MARCA COMO INATIVO (Exclusão Lógica)
         cur.execute("UPDATE items SET is_active = 0 WHERE id=%s", (item_id,))
         
         conn.commit()
@@ -127,7 +127,6 @@ class InventoryDBManager:
     def list_items(self):
         conn = get_connection()
         cur = conn.cursor(dictionary=True)
-        # Adicionado "WHERE is_active = 1" para listar apenas itens não excluídos
         cur.execute("SELECT * FROM items WHERE is_active = 1")
         rows = cur.fetchall()
         cur.close()
@@ -138,7 +137,6 @@ class InventoryDBManager:
     def find(self, item_id: int):
         conn = get_connection()
         cur = conn.cursor(dictionary=True)
-        # Adicionado "AND is_active = 1" para não encontrar itens já excluídos
         cur.execute("SELECT * FROM items WHERE id=%s AND is_active = 1", (item_id,))
         row = cur.fetchone()
         cur.close()
@@ -148,12 +146,10 @@ class InventoryDBManager:
 
 
     def issue(self, pid, user, cpf, center_cost, cargo, revenda, date_issue, logged_user: str):
-        """Realiza empréstimo de item"""
         item = self.find(pid)
         if not item:
             return False, "Item não encontrado."
 
-        # ---> ADICIONADO: Validação para impedir empréstimo de item já indisponível <---
         if item['status'] != 'Disponível':
             return False, f"Este item já está emprestado para {item.get('assigned_to', 'desconhecido')}."
         
@@ -162,7 +158,6 @@ class InventoryDBManager:
         except ValueError:
             return False, "Data de empréstimo inválida (use dd/mm/aaaa)."
         
-        #Validar que a data do empréstimo não pode ser maior que a data atual
         if dt_issue.date() > datetime.now().date():
             return False, "A data de empréstimo não pode ser no futuro."
 
@@ -187,10 +182,7 @@ class InventoryDBManager:
         return True, f"Aparelho {pid} emprestado para {user}."
 
 
-    # Em inventory_manager_db.py
-
     def ret(self, pid, date_return, logged_user: str):
-        """Realiza devolução de item"""
         item = self.find(pid)
         if not item:
             return False, "Item não encontrado."
@@ -200,7 +192,6 @@ class InventoryDBManager:
         except ValueError:
             return False, "Data de devolução inválida (use dd/mm/aaaa)."
         
-        #data de devolução não pode ser maior que a data atual
         if dt_return.date() > datetime.now().date():
             return False, "A data de devolução não pode ser no futuro."
 
@@ -218,8 +209,6 @@ class InventoryDBManager:
         """, (pid,))
         last_loan_details = cur.fetchone() or {}
 
-        # ---> CORREÇÃO: "revenda=NULL" foi REMOVIDO desta query <---
-        # A revenda é um atributo do item e não deve ser apagada na devolução.
         cur.execute("""
             UPDATE items SET status='Disponível', assigned_to=NULL, cpf=NULL, date_issued=NULL WHERE id=%s
         """, (pid,))
@@ -247,6 +236,7 @@ class InventoryDBManager:
         """Lista histórico de TODAS as operações, tratando itens excluídos."""
         conn = get_connection()
         cur = conn.cursor(dictionary=True)
+        # ALTERADO: Adicionado filtro para não mostrar operações estornadas
         cur.execute("""
             SELECT
                 h.id, h.item_id, h.operador,
@@ -258,6 +248,7 @@ class InventoryDBManager:
                 h.data_operacao, h.operation
             FROM history h
             LEFT JOIN items i ON i.id = h.item_id
+            WHERE h.is_reversed = 0
             ORDER BY h.data_operacao DESC, h.id DESC
         """)
         rows = cur.fetchall()
@@ -266,46 +257,28 @@ class InventoryDBManager:
         return rows
 
 
-
-
     def generate_monthly_report(self, ano, mes):
         """Relatório consolidado de um mês, usando Funções de Janela para maior precisão."""
         conn = get_connection()
         cur = conn.cursor(dictionary=True)
         
+        # ALTERADO: Adicionado "WHERE is_reversed = 0" para ignorar operações estornadas
         sql = """
             WITH EventosOrdenados AS (
-                -- Passo 1: Cria a 'fila' de eventos para cada item
                 SELECT
-                    id,
-                    item_id,
-                    operation,
-                    data_operacao,
-                    operador,
-                    usuario,
-                    cpf,
-                    cargo,
-                    center_cost,
-                    revenda,
-                    -- Passo 2: "Espia" a operação e a data do próximo evento na fila do mesmo item
+                    id, item_id, operation, data_operacao, operador, usuario,
+                    cpf, cargo, center_cost, revenda,
                     LEAD(operation, 1) OVER (PARTITION BY item_id ORDER BY data_operacao, id) as proxima_operacao,
                     LEAD(data_operacao, 1) OVER (PARTITION BY item_id ORDER BY data_operacao, id) as proxima_data
                 FROM
                     history
+                WHERE is_reversed = 0
             ),
             RelatorioEmprestimos AS (
-                -- Passo 3: Filtra apenas os empréstimos e verifica se o próximo evento é uma devolução
                 SELECT
-                    e.item_id,
-                    e.operador,
-                    e.usuario,
-                    e.cpf,
-                    e.cargo,
-                    e.center_cost,
-                    e.revenda,
-                    e.data_operacao,
-                    'Empréstimo' AS operation_type,
-                    -- Se a próxima operação for 'Devolução', usa a data dela. Senão, é NULL.
+                    e.id as history_id,
+                    e.item_id, e.operador, e.usuario, e.cpf, e.cargo, e.center_cost,
+                    e.revenda, e.data_operacao, 'Empréstimo' AS operation_type,
                     CASE
                         WHEN e.proxima_operacao = 'Devolução' THEN e.proxima_data
                         ELSE NULL
@@ -316,9 +289,8 @@ class InventoryDBManager:
                     e.operation = 'Empréstimo'
                     AND YEAR(e.data_operacao) = %s AND MONTH(e.data_operacao) = %s
             )
-            -- Consulta final que une os resultados
             SELECT
-                re.item_id, re.operador, re.usuario, re.cpf, re.cargo, re.center_cost, re.revenda,
+                re.history_id, re.item_id, re.operador, re.usuario, re.cpf, re.cargo, re.center_cost, re.revenda,
                 re.data_operacao, re.operation_type,
                 COALESCE(i.tipo, h.tipo) AS tipo,
                 COALESCE(i.brand, h.brand) AS brand,
@@ -327,15 +299,14 @@ class InventoryDBManager:
                 re.data_devolucao
             FROM RelatorioEmprestimos re
             LEFT JOIN items i ON i.id = re.item_id
-            LEFT JOIN history h ON h.item_id = re.item_id AND h.id = (SELECT MAX(id) FROM history WHERE item_id = re.item_id) -- Pega os dados mais recentes do histórico em caso de item deletado
+            LEFT JOIN history h ON h.item_id = re.item_id AND h.id = (SELECT MAX(id) FROM history WHERE item_id = re.item_id)
 
             UNION ALL
 
-            -- Parte de Cadastros (inalterada)
             SELECT
+                cad.id as history_id,
                 cad.item_id, cad.operador, NULL, NULL, NULL, NULL, i.revenda,
-                cad.data_operacao,
-                'Cadastro' AS operation_type,
+                cad.data_operacao, 'Cadastro' AS operation_type,
                 COALESCE(i.tipo, cad.tipo) AS tipo,
                 COALESCE(i.brand, cad.brand) AS brand,
                 COALESCE(i.model, cad.model) AS model,
@@ -344,6 +315,7 @@ class InventoryDBManager:
             FROM history cad
             LEFT JOIN items i ON i.id = cad.item_id
             WHERE cad.operation = 'Cadastro'
+            AND cad.is_reversed = 0
             AND YEAR(cad.data_operacao) = %s AND MONTH(cad.data_operacao) = %s
             
             ORDER BY data_operacao, item_id;
@@ -353,6 +325,79 @@ class InventoryDBManager:
         cur.close()
         conn.close()
         return rows
+
+    # ALTERADO: Lógica de estorno completamente refeita
+    def reverse_history_entry(self, history_id: int, logged_user: str):
+        """
+        Estorna um lançamento: reverte o estado do item, marca a operação original
+        como 'estornada' e cria um novo registro de 'Estorno' para auditoria.
+        """
+        conn = get_connection()
+        cur = conn.cursor(dictionary=True)
+        
+        try:
+            conn.start_transaction()
+
+            cur.execute("SELECT * FROM history WHERE id = %s", (history_id,))
+            entry_to_reverse = cur.fetchone()
+
+            if not entry_to_reverse:
+                return False, "Lançamento do histórico não encontrado."
+            
+            if entry_to_reverse['is_reversed']:
+                return False, "Esta operação já foi estornada anteriormente."
+
+            op = entry_to_reverse['operation']
+            item_id = entry_to_reverse['item_id']
+
+            # Reverte o estado do item no estoque
+            if op == 'Empréstimo':
+                cur.execute("UPDATE items SET status='Disponível', assigned_to=NULL, cpf=NULL, date_issued=NULL WHERE id = %s", (item_id,))
+            
+            elif op == 'Devolução':
+                cur.execute("""
+                    SELECT usuario, cpf, data_operacao FROM history
+                    WHERE item_id = %s AND operation = 'Empréstimo' AND id < %s AND is_reversed = 0
+                    ORDER BY data_operacao DESC, id DESC LIMIT 1
+                """, (item_id, history_id))
+                last_loan = cur.fetchone()
+
+                if not last_loan:
+                    return False, "Não foi possível encontrar o empréstimo original para reverter a devolução."
+
+                cur.execute("UPDATE items SET status='Indisponível', assigned_to=%s, cpf=%s, date_issued=%s WHERE id = %s", 
+                            (last_loan['usuario'], last_loan['cpf'], last_loan['data_operacao'], item_id))
+            
+            elif op == 'Cadastro':
+                 # Em vez de deletar, apenas marca como inativo
+                cur.execute("UPDATE items SET is_active = 0 WHERE id = %s", (item_id,))
+            else:
+                return False, f"Não é possível estornar uma operação do tipo '{op}'."
+
+            # Marca a operação original como estornada
+            cur.execute("UPDATE history SET is_reversed = 1 WHERE id = %s", (history_id,))
+            
+            # Cria o novo registro de 'Estorno' para auditoria
+            cur.execute("""
+                INSERT INTO history (item_id, operador, data_operacao, operation, usuario, cpf, cargo, center_cost, revenda)
+                VALUES (%s, %s, %s, 'Estorno', %s, %s, %s, %s, %s)
+            """, (
+                item_id, logged_user, datetime.now().strftime("%Y-%m-%d"),
+                entry_to_reverse.get('usuario'), entry_to_reverse.get('cpf'),
+                entry_to_reverse.get('cargo'), entry_to_reverse.get('center_cost'),
+                entry_to_reverse.get('revenda')
+            ))
+            
+            conn.commit()
+            return True, f"Operação '{op}' do item {item_id} estornada com sucesso."
+
+        except Error as e:
+            conn.rollback()
+            return False, f"Erro ao estornar: {e}"
+        finally:
+            cur.close()
+            conn.close()
+
 
     def generate_term(self, item_id, user):
         item = self.find(item_id)
@@ -391,27 +436,22 @@ class InventoryDBManager:
 
     # --- NOVAS FUNÇÕES PARA GRÁFICOS ---
     def get_issue_return_counts(self, year, month):
-        """Busca o número de empréstimos e devoluções por dia para um dado mês/ano."""
         conn = get_connection()
         cur = conn.cursor(dictionary=True)
-        
         num_days = calendar.monthrange(year, month)[1]
         days = list(range(1, num_days + 1))
-        
-        # Inicializa dicionários para empréstimos e devoluções com 0 para todos os dias
         issues = {day: 0 for day in days}
         returns = {day: 0 for day in days}
 
+        # ALTERADO: Adicionado filtro para ignorar operações estornadas
         sql = """
-            SELECT
-                DAY(data_operacao) as dia,
-                operation,
-                COUNT(id) as total
+            SELECT DAY(data_operacao) as dia, operation, COUNT(id) as total
             FROM history
             WHERE
                 YEAR(data_operacao) = %s AND
                 MONTH(data_operacao) = %s AND
-                operation IN ('Empréstimo', 'Devolução')
+                operation IN ('Empréstimo', 'Devolução') AND
+                is_reversed = 0
             GROUP BY dia, operation
         """
         cur.execute(sql, (year, month))
@@ -421,38 +461,32 @@ class InventoryDBManager:
                 issues[row['dia']] = row['total']
             elif row['operation'] == 'Devolução':
                 returns[row['dia']] = row['total']
-                
         cur.close()
         conn.close()
-        
         return list(issues.keys()), list(issues.values()), list(returns.values())
 
     def get_registration_counts(self, year, month):
-        """Busca o número de cadastros por dia para um dado mês/ano."""
         conn = get_connection()
         cur = conn.cursor(dictionary=True)
-        
         num_days = calendar.monthrange(year, month)[1]
         days = list(range(1, num_days + 1))
         registrations = {day: 0 for day in days}
 
+        # ALTERADO: Adicionado filtro para ignorar operações estornadas
         sql = """
-            SELECT
-                DAY(data_operacao) as dia,
-                COUNT(id) as total
+            SELECT DAY(data_operacao) as dia, COUNT(id) as total
             FROM history
             WHERE
                 YEAR(data_operacao) = %s AND
                 MONTH(data_operacao) = %s AND
-                operation = 'Cadastro'
+                operation = 'Cadastro' AND
+                is_reversed = 0
             GROUP BY dia
         """
         cur.execute(sql, (year, month))
         
         for row in cur.fetchall():
             registrations[row['dia']] = row['total']
-            
         cur.close()
         conn.close()
-        
         return list(registrations.keys()), list(registrations.values())

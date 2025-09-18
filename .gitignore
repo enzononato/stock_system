@@ -1,5 +1,6 @@
 /venv
 /__pycache__
+/terms
 
 database_mysql.py
 # Crie esse arquivo acima e coloque esse código e substitua com seus dados
