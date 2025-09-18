@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import ttk, messagebox
 from database_mysql import get_connection
 from gui import App
 
@@ -7,18 +7,49 @@ class LoginWindow(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Login - Gestão de Estoque")
-        self.geometry("300x200")
+        self.geometry("350x280")
         self.resizable(False, False)
+        self.configure(background='#F0F0F0')
 
-        tk.Label(self, text="Usuário:").pack(pady=5)
-        self.username_entry = tk.Entry(self)
-        self.username_entry.pack(pady=5)
+        # Centralizar a janela
+        self.eval('tk::PlaceWindow . center')
 
-        tk.Label(self, text="Senha:").pack(pady=5)
-        self.password_entry = tk.Entry(self, show="*")
-        self.password_entry.pack(pady=5)
+        # Estilo
+        style = ttk.Style(self)
+        style.theme_use('clam')
 
-        tk.Button(self, text="Entrar", command=self.login).pack(pady=10)
+        # Estilo do botão primário
+        style.configure("Primary.TButton",
+            background="#0078D4",
+            foreground="white",
+            font=("Segoe UI", 10, "bold"),
+            padding=(10, 8),
+            borderwidth=0)
+        style.map("Primary.TButton",
+            background=[('active', '#005a9e')]) # Cor ao passar o mouse
+
+        # Frame principal
+        main_frame = ttk.Frame(self, padding=(20, 20), style="TFrame")
+        main_frame.pack(fill="both", expand=True)
+
+        # Título
+        ttk.Label(
+            main_frame,
+            text="Acesso ao Sistema",
+            font=("Segoe UI", 16, "bold"),
+            foreground="#333333"
+        ).pack(pady=(0, 20))
+
+        ttk.Label(main_frame, text="Usuário:", font=("Segoe UI", 10)).pack(pady=(5, 2), anchor="w")
+        self.username_entry = ttk.Entry(main_frame, font=("Segoe UI", 10), width=35)
+        self.username_entry.pack(fill="x", pady=(0, 10))
+        self.username_entry.focus()
+
+        ttk.Label(main_frame, text="Senha:", font=("Segoe UI", 10)).pack(pady=(5, 2), anchor="w")
+        self.password_entry = ttk.Entry(main_frame, show="*", font=("Segoe UI", 10), width=35)
+        self.password_entry.pack(fill="x", pady=(0, 20))
+
+        ttk.Button(main_frame, text="Entrar", command=self.login, style="Primary.TButton").pack(fill="x")
 
     def login(self):
         username = self.username_entry.get().strip()

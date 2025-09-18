@@ -156,7 +156,7 @@ class InventoryDBManager:
         # ---> ADICIONADO: Validação para impedir empréstimo de item já indisponível <---
         if item['status'] != 'Disponível':
             return False, f"Este item já está emprestado para {item.get('assigned_to', 'desconhecido')}."
-
+        
         try:
             dt_issue = datetime.strptime(date_issue, "%d/%m/%Y")
         except ValueError:
