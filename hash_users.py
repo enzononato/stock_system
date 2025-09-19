@@ -1,4 +1,6 @@
-# fileName: hash_users.py
+# ================================================================
+# UTILIZAR APENAS SE TIVER ALGUM USUÁRIO NÃO TIVER A SENHA EM HASH
+# ================================================================
 
 import bcrypt
 from database_mysql import get_connection
