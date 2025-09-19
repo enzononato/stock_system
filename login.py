@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from database_mysql import get_connection
 from gui import App
+import bcrypt
 
 class LoginWindow(tk.Tk):
     def __init__(self):
@@ -12,14 +13,11 @@ class LoginWindow(tk.Tk):
         self.resizable(False, False)
         self.configure(background='#F0F0F0')
 
-        # Centralizar a janela
         self.eval('tk::PlaceWindow . center')
 
-        # Estilo
         style = ttk.Style(self)
         style.theme_use('clam')
 
-        # Estilo do botão primário
         style.configure("Primary.TButton",
             background="#0078D4",
             foreground="white",
@@ -27,13 +25,11 @@ class LoginWindow(tk.Tk):
             padding=(10, 8),
             borderwidth=0)
         style.map("Primary.TButton",
-            background=[('active', '#005a9e')]) # Cor ao passar o mouse
+            background=[('active', '#005a9e')])
 
-        # Frame principal
         main_frame = ttk.Frame(self, padding=(20, 20), style="TFrame")
         main_frame.pack(fill="both", expand=True)
 
-        # Título
         ttk.Label(
             main_frame,
             text="Acesso ao Sistema",
@@ -52,6 +48,7 @@ class LoginWindow(tk.Tk):
 
         ttk.Button(main_frame, text="Entrar", command=self.login, style="Primary.TButton").pack(fill="x")
 
+    # --- 2. LÓGICA DE LOGIN MODIFICADA IMPLEMENTANDO O HASH ---
     def login(self):
         username = self.username_entry.get().strip()
         password = self.password_entry.get().strip()
@@ -62,11 +59,14 @@ class LoginWindow(tk.Tk):
 
         conn = get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT * FROM usuarios WHERE username=%s AND password=%s", (username, password))
+        
+        # Primeiro, busca o usuário APENAS pelo nome de usuário
+        cur.execute("SELECT * FROM usuarios WHERE username = %s", (username,))
         user = cur.fetchone()
         conn.close()
 
-        if user:
+        # Verifica se o usuário existe E se a senha digitada corresponde ao hash salvo
+        if user and bcrypt.checkpw(password.encode('utf-8'), user['password'].encode('utf-8')):
             self.destroy()
             app = App(user["username"], user["role"])
             app.mainloop()
