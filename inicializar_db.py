@@ -5,8 +5,6 @@ from mysql.connector import Error
 # --- Defina aqui os seus usuários padrão ---
 USUARIOS_PADRAO = [
     {'username': 'thiago', 'password': '123', 'role': 'Gestor'},
-    {'username': 'tecnico', 'password': '123', 'role': 'Técnico'},
-    {'username': 'aprendiz', 'password': '123', 'role': 'Jovem Aprendiz'}
 ]
 
 def inicializar_usuarios():
