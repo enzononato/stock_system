@@ -38,7 +38,7 @@ FONT_TREEVIEW_ROW = (FONT_FAMILY, 10)
 class App(tk.Tk):
     def __init__(self, user, role):
         super().__init__()
-        self.title("Gestão de Estoque de Celulares")
+        self.title("Gestão de Estoque de Equipamentos Eletrônicos")
         self.geometry("1280x800")
         self.configure(background=BG_COLOR)
         
