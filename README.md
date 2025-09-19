@@ -23,6 +23,7 @@ Crie um arquivo chamado database_mysql.py na raiz do projeto.
 Copie o código a seguir para dentro desse novo arquivo e substitua as informações de host, user, password e database pelos dados do seu banco.
 
 ```python
+# No arquivo 'database_mysql.py'
 import mysql.connector
 
 DB_CONFIG = {
