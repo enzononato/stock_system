@@ -51,3 +51,15 @@ python inicializar_db.py
 Usuário Padrão:
     Usuário: thiago
     Senha: 123
+
+-----
+
+### 4. Executar o projeto
+
+Tendo feito os passos anteriores, o projeto está pronto para ser executado.
+
+Para executar o projeto abra o terminal na pasta do projeto e execute o comando:
+
+```bash
+python main.py
+```
