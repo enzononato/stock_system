@@ -39,6 +39,9 @@ class App(tk.Tk):
     def __init__(self, user, role):
         super().__init__()
         self.title("Gestão de Estoque de Equipamentos Eletrônicos")
+        # Definir ícone personalizado
+        self.iconbitmap("logo.ico")
+
         self.geometry("1280x800")
         self.configure(background=BG_COLOR)
         

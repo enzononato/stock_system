@@ -7,6 +7,7 @@ class LoginWindow(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Login - Gestão de Estoque")
+        self.iconbitmap("logo.ico")
         self.geometry("350x280")
         self.resizable(False, False)
         self.configure(background='#F0F0F0')
