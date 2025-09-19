@@ -8,6 +8,7 @@ import numpy as np
 
 # Importa de nossos próprios arquivos
 from inventory_manager_db import InventoryDBManager
+from user_manager_db import UserDBManager
 from utils import format_cpf, format_date
 from config import (
     REVENDAS_OPTIONS, CENTER_COST_OPTIONS, ADMIN_PASS, ADMIN_USER
@@ -36,7 +37,7 @@ FONT_TREEVIEW_HEADER = (FONT_FAMILY, 10, "bold")
 FONT_TREEVIEW_ROW = (FONT_FAMILY, 10)
 
 class App(tk.Tk):
-    def __init__(self, user, role):
+    def __init__(self, user_id, user, role):
         super().__init__()
         self.title("Gestão de Estoque de Equipamentos Eletrônicos")
         # Definir ícone personalizado
@@ -46,6 +47,9 @@ class App(tk.Tk):
         self.configure(background=BG_COLOR)
         
         self.inv = InventoryDBManager()
+        self.user_db = UserDBManager()
+        
+        self.logged_user_id = user_id
         self.logged_user = user
         self.role = role
 
@@ -133,6 +137,7 @@ class App(tk.Tk):
         self.tab_report  = ttk.Frame(notebook, padding=15)
         self.tab_terms   = ttk.Frame(notebook, padding=15)
         self.tab_graphs  = ttk.Frame(notebook, padding=15)
+        self.tab_users   = ttk.Frame(notebook, padding=15)
 
         notebook.add(self.tab_stock,  text="Estoque")
         notebook.add(self.tab_add,    text="Cadastrar")
@@ -144,6 +149,7 @@ class App(tk.Tk):
         notebook.add(self.tab_report, text="Relatório")
         notebook.add(self.tab_terms,  text="Termos")
         notebook.add(self.tab_graphs, text="Gráficos")
+        notebook.add(self.tab_users,  text="Usuários")
 
         self.build_stock_tab()
         self.build_add_tab()
@@ -155,13 +161,15 @@ class App(tk.Tk):
         self.build_report_tab()
         self.build_terms_tab()
         self.build_graph_tab()
+        self.build_users_tab()
         
         # Restrições por role
-        if self.role == "Jovem Aprendiz":
+        if self.role != "Gestor":
             notebook.hide(self.tab_remove)
-            notebook.hide(self.tab_history)
-        elif self.role == "Técnico":
-            notebook.hide(self.tab_remove)
+            notebook.hide(self.tab_users)
+            if self.role == "Jovem Aprendiz":
+                notebook.hide(self.tab_history)
+
 
         self.update_all_views()
 
@@ -563,6 +571,61 @@ class App(tk.Tk):
         btns.pack(anchor="center")
         ttk.Button(btns, text="Empréstimos x Devoluções (Mensal)", command=self.graph_issue_return, style="Secondary.TButton").pack(pady=5)
         ttk.Button(btns, text="Cadastros de Novos Itens (Mensal)", command=self.graph_registration, style="Secondary.TButton").pack(pady=5)
+        
+        
+    def build_users_tab(self):
+        tab = self.tab_users
+
+        # --- Frame da Esquerda (Lista de Usuários) ---
+        frm_left = ttk.Frame(tab, padding=10)
+        frm_left.pack(side="left", fill="both", expand=True, padx=(0, 5))
+
+        ttk.Label(frm_left, text="Usuários Cadastrados", style="Title.TLabel").pack(pady=(0, 10), anchor="w")
+
+        cols = ("ID", "Usuário", "Função")
+        self.tree_users = ttk.Treeview(frm_left, columns=cols, show="headings")
+        self.tree_users.pack(fill="both", expand=True)
+
+        for col in cols:
+            self.tree_users.heading(col, text=col)
+        self.tree_users.column("ID", width=50, stretch=False)
+        self.tree_users.column("Usuário", width=200)
+        self.tree_users.column("Função", width=150)
+
+        # --- Frame da Direita (Ações) ---
+        frm_right = ttk.Frame(tab, padding=10)
+        frm_right.pack(side="right", fill="y", padx=(5, 0))
+
+        # -- Sub-frame para Adicionar Usuário --
+        frm_add = ttk.LabelFrame(frm_right, text=" Cadastrar Novo Usuário ", padding=15)
+        frm_add.pack(fill="x", pady=(0, 20))
+
+        ttk.Label(frm_add, text="Nome de Usuário:").grid(row=0, column=0, sticky="w", pady=2)
+        self.e_new_username = ttk.Entry(frm_add, width=30)
+        self.e_new_username.grid(row=1, column=0, sticky="ew", pady=(0, 10))
+
+        ttk.Label(frm_add, text="Senha:").grid(row=2, column=0, sticky="w", pady=2)
+        self.e_new_password = ttk.Entry(frm_add, width=30, show="*")
+        self.e_new_password.grid(row=3, column=0, sticky="ew", pady=(0, 10))
+
+        ttk.Label(frm_add, text="Função:").grid(row=4, column=0, sticky="w", pady=2)
+        self.cb_new_role = ttk.Combobox(frm_add, values=["Técnico", "Jovem Aprendiz", "Gestor"], state="readonly")
+        self.cb_new_role.grid(row=5, column=0, sticky="ew", pady=(0, 15))
+
+        ttk.Button(frm_add, text="Cadastrar Usuário", command=self.cmd_add_user, style="Primary.TButton").grid(row=6, column=0, sticky="ew")
+
+        # -- Sub-frame para Ações no Usuário Selecionado --
+        frm_actions = ttk.LabelFrame(frm_right, text=" Ações no Usuário Selecionado ", padding=15)
+        frm_actions.pack(fill="x", expand=True)
+
+        ttk.Button(frm_actions, text="Alterar Senha", command=self.cmd_change_password, style="Secondary.TButton").pack(fill="x", pady=5)
+        ttk.Button(frm_actions, text="Remover Usuário", command=self.cmd_remove_user, style="Danger.TButton").pack(fill="x", pady=5)
+
+        self.lbl_users = ttk.Label(frm_right, text="", wraplength=250, anchor="center")
+        self.lbl_users.pack(pady=10, fill="x", expand=True, side="bottom")
+        
+        
+    
 
     def exportar_csv(self, tree, titulo="Exportar", nome="dados"):
         file_path = filedialog.asksaveasfilename(
@@ -980,6 +1043,68 @@ class App(tk.Tk):
                     messagebox.showerror("Erro ao Abrir", f"Não foi possível abrir o arquivo automaticamente:\n{e}")
         else:
             self.lbl_terms.config(text=f"Erro: {result}", style='Danger.TLabel')
+            
+            
+    # --- Comandos e Ações da Aba Usuários (NOVOS) ---
+
+    def cmd_add_user(self):
+        username = self.e_new_username.get().strip()
+        password = self.e_new_password.get().strip()
+        role = self.cb_new_role.get()
+
+        ok, msg = self.user_db.add_user(username, password, role)
+        self.lbl_users.config(text=msg, style="Success.TLabel" if ok else "Danger.TLabel")
+
+        if ok:
+            self.e_new_username.delete(0, "end")
+            self.e_new_password.delete(0, "end")
+            self.cb_new_role.set("")
+            self.update_users_table()
+
+    def cmd_remove_user(self):
+        selected = self.tree_users.selection()
+        if not selected:
+            messagebox.showwarning("Atenção", "Selecione um usuário na lista para remover.")
+            return
+
+        item = self.tree_users.item(selected[0])
+        user_id = item["values"][0]
+        username = item["values"][1]
+
+        if user_id == self.logged_user_id:
+            messagebox.showerror("Ação Inválida", "Você não pode remover seu próprio usuário.")
+            return
+
+        if messagebox.askyesno("Confirmar Remoção", f"Tem certeza que deseja remover o usuário '{username}'?\nEsta ação não pode ser desfeita."):
+            ok, msg = self.user_db.remove_user(user_id)
+            self.lbl_users.config(text=msg, style="Success.TLabel" if ok else "Danger.TLabel")
+            if ok:
+                self.update_users_table()
+
+    def cmd_change_password(self):
+        selected = self.tree_users.selection()
+        if not selected:
+            messagebox.showwarning("Atenção", "Selecione um usuário na lista para alterar a senha.")
+            return
+
+        item = self.tree_users.item(selected[0])
+        user_id = item["values"][0]
+        username = item["values"][1]
+
+        new_password = simpledialog.askstring("Alterar Senha", f"Digite a NOVA senha para o usuário '{username}':", show='*')
+
+        if new_password: # Se o usuário não clicou em "Cancelar"
+            ok, msg = self.user_db.update_password(user_id, new_password)
+            self.lbl_users.config(text=msg, style="Success.TLabel" if ok else "Danger.TLabel")
+        else:
+            self.lbl_users.config(text="Alteração de senha cancelada.", style="TLabel")
+
+    def update_users_table(self):
+        """Atualiza a tabela de usuários com os dados do banco."""
+        self.tree_users.delete(*self.tree_users.get_children())
+        users = self.user_db.get_all_users()
+        for user in users:
+            self.tree_users.insert("", "end", values=(user['id'], user['username'], user['role']))
 
     # --- Funções de Máscara ---
     def on_cpf_entry(self, event):
@@ -1115,6 +1240,7 @@ class App(tk.Tk):
         self.update_terms_table()
         self.update_history_table()
         self.cmd_generate_report()
+        self.update_users_table()
 
     # --- Funções de Gráficos ---
     def graph_issue_return(self):

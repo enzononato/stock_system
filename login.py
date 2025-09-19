@@ -4,6 +4,9 @@ from database_mysql import get_connection
 from gui import App
 import bcrypt
 
+
+    # --- 1. ESTILIZAÇÃO DA TELA DE LOGIN ---
+
 class LoginWindow(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -68,7 +71,8 @@ class LoginWindow(tk.Tk):
         # Verifica se o usuário existe E se a senha digitada corresponde ao hash salvo
         if user and bcrypt.checkpw(password.encode('utf-8'), user['password'].encode('utf-8')):
             self.destroy()
-            app = App(user["username"], user["role"])
+            # MODIFICAÇÃO AQUI: Passe o ID do usuário para a classe App
+            app = App(user["id"], user["username"], user["role"])
             app.mainloop()
         else:
             messagebox.showerror("Erro", "Usuário ou senha inválidos.")
