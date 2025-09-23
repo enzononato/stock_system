@@ -5,6 +5,19 @@ from tkinter import ttk, messagebox, simpledialog, filedialog
 from datetime import datetime
 import matplotlib.pyplot as plt
 import numpy as np
+import os
+import sys
+
+# --- Lógica para encontrar recursos como o logo.ico para o pyinstaller ---
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller cria uma pasta temporária e armazena o caminho em _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
 
 # Importa de nossos próprios arquivos
 from inventory_manager_db import InventoryDBManager
@@ -41,7 +54,7 @@ class App(tk.Tk):
         super().__init__()
         self.title("Gestão de Estoque de Equipamentos Eletrônicos")
         # Definir ícone personalizado
-        self.iconbitmap("logo.ico")
+        self.iconbitmap(resource_path("logo.ico"))
 
         self.geometry("1280x800")
         self.configure(background=BG_COLOR)

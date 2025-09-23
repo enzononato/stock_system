@@ -3,7 +3,19 @@ from tkinter import ttk, messagebox
 from database_mysql import get_connection
 from gui import App
 import bcrypt
+import os
+import sys
 
+# --- Lógica para encontrar recursos como o logo.ico para o pyinstaller ---
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller cria uma pasta temporária e armazena o caminho em _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
 
     # --- 1. ESTILIZAÇÃO DA TELA DE LOGIN ---
 
@@ -11,7 +23,7 @@ class LoginWindow(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Login - Gestão de Estoque")
-        self.iconbitmap("logo.ico")
+        self.iconbitmap(resource_path("logo.ico"))
         self.geometry("350x280")
         self.resizable(False, False)
         self.configure(background='#F0F0F0')

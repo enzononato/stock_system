@@ -1,5 +1,16 @@
 import os
+import sys
 
+# --- Lógica para encontrar recursos como o logo.ico para o pyinstaller ---
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller cria uma pasta temporária e armazena o caminho em _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
 TERMS_DIR = 'terms'
 
 if not os.path.exists(TERMS_DIR):
@@ -30,11 +41,11 @@ REVENDAS_OPTIONS = [
 ]
 
 TERMO_MODELOS = {
-    "Revalle Juazeiro": "modelos/termo_juazeiro.docx",
-    "Revalle Bonfim": "modelos/termo_bonfim.docx",
-    "Revalle Petrolina": "modelos/termo_petrolina.docx",
-    "Revalle Ribeira": "modelos/termo_ribeira.docx",
-    "Revalle Paulo Afonso": "modelos/termo_pauloafonso.docx",
-    "Revalle Alagoinhas": "modelos/termo_alagoinhas.docx",
-    "Revalle Serrinha": "modelos/termo_serrinha.docx",
+    "Revalle Juazeiro": resource_path("modelos/termo_juazeiro.docx"),
+    "Revalle Bonfim": resource_path("modelos/termo_bonfim.docx"),
+    "Revalle Petrolina": resource_path("modelos/termo_petrolina.docx"),
+    "Revalle Ribeira": resource_path("modelos/termo_ribeira.docx"),
+    "Revalle Paulo Afonso": resource_path("modelos/termo_pauloafonso.docx"),
+    "Revalle Alagoinhas": resource_path("modelos/termo_alagoinhas.docx"),
+    "Revalle Serrinha": resource_path("modelos/termo_serrinha.docx"),
 }

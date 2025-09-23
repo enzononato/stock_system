@@ -9,6 +9,7 @@ from database_mysql import get_connection
 from config import TERMS_DIR, TERMO_MODELOS
 from utils import format_cpf, format_date
 
+
 class InventoryDBManager:
     def __init__(self):
         self._create_tables()
