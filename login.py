@@ -50,9 +50,11 @@ class LoginWindow(tk.Tk):
         self.password_entry.pack(fill="x", pady=(0, 20))
 
         ttk.Button(main_frame, text="Entrar", command=self.login, style="Primary.TButton").pack(fill="x")
+        # Vincula a tecla Enter (Return) à função de login para a janela inteira
+        self.bind('<Return>', self.login)
 
     # --- 2. LÓGICA DE LOGIN MODIFICADA IMPLEMENTANDO O HASH ---
-    def login(self):
+    def login(self, event=None):
         username = self.username_entry.get().strip()
         password = self.password_entry.get().strip()
 

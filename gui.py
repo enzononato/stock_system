@@ -118,6 +118,33 @@ class App(tk.Tk):
 
         # Para o TCombobox, é prciso configurar o estilo da lista também
         style.map('Error.TCombobox', fieldbackground=[('readonly', '#FFA2AC')])
+        
+
+    def _on_tab_changed(self, event):
+        """
+        Esta função é chamada sempre que o usuário muda de aba.
+        Ela reconfigura a tecla 'Enter' para a ação da aba atual.
+        """
+        # Primeiro, remove qualquer ação anterior da tecla Enter
+        self.unbind('<Return>')
+
+        # Pega o texto da aba que foi selecionada
+        selected_tab_text = event.widget.tab(event.widget.select(), "text")
+
+        # Mapeia o texto da aba para a função que o Enter deve chamar
+        tab_actions = {
+            "Cadastrar": self.cmd_add,
+            "Emprestar": self.cmd_issue,
+            "Devolver": self.cmd_return,
+            "Remover": self.cmd_remove,
+            "Editar": self.cmd_save_edit,
+            "Usuários": self.cmd_add_user # Na aba usuários, o Enter vai cadastrar
+        }
+
+        # Se a aba selecionada tem uma ação definida, vincula o Enter a ela
+        if selected_tab_text in tab_actions:
+            action_function = tab_actions[selected_tab_text]
+            self.bind('<Return>', action_function)
 
 
     # ==========================================================
@@ -126,6 +153,9 @@ class App(tk.Tk):
     def create_widgets(self):
         notebook = ttk.Notebook(self)
         notebook.pack(fill='both', expand=True, padx=10, pady=10)
+        
+        # Vincula o evento de mudança de aba à função _on_tab_changed
+        notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
 
         self.tab_stock   = ttk.Frame(notebook, padding=15)
         self.tab_add     = ttk.Frame(notebook, padding=15)
@@ -365,7 +395,7 @@ class App(tk.Tk):
         
         self.e_issue_cpf.bind("<KeyRelease>", self.on_cpf_entry)
         self.e_date_issue.bind("<KeyRelease>", lambda e: self.on_date_entry(e, self.e_date_issue))
-
+        
         self.lbl_issue = ttk.Label(frm, text="", anchor="center")
         self.lbl_issue.grid(row=len(fields), column=0, columnspan=2, pady=10, sticky="ew")
         
@@ -732,7 +762,7 @@ class App(tk.Tk):
         return widgets
 
 
-    def cmd_add(self):
+    def cmd_add(self, event=None):
         self.lbl_add.config(text="")
         tipo = self.cb_tipo.get().strip()
         if not tipo:
@@ -818,7 +848,7 @@ class App(tk.Tk):
         self.current_edit_id = item_id
         self.edit_widgets = self._create_dynamic_form(self.frm_edit_dynamic, item.get('tipo'), item)
 
-    def cmd_save_edit(self):
+    def cmd_save_edit(self, event=None):
         if self.current_edit_id is None:
             messagebox.showerror("Erro", "Nenhum item foi carregado para edição.")
             return
@@ -835,7 +865,7 @@ class App(tk.Tk):
             self.cb_edit.set('')
             self.update_all_views()
 
-    def cmd_issue(self):
+    def cmd_issue(self, event=None):
         self.lbl_issue.config(text="")
         widgets_to_reset = [self.cb_issue, self.e_issue_user, self.e_issue_cpf, self.cb_center, self.e_cargo, self.cb_revenda, self.e_date_issue]
         for widget in widgets_to_reset:
@@ -887,7 +917,7 @@ class App(tk.Tk):
             self.e_date_issue.delete(0, 'end')
             self.update_all_views()
 
-    def cmd_return(self):
+    def cmd_return(self, event=None):
         sel = self.cb_return.get()
         date_return = self.e_date_return.get().strip()
         if not (sel and date_return):
@@ -902,7 +932,7 @@ class App(tk.Tk):
             self.e_date_return.delete(0, 'end')
             self.update_all_views()
 
-    def cmd_remove(self):
+    def cmd_remove(self, event=None):
         sel = self.cb_remove.get()
         if not sel:
             self.lbl_rem.config(text="Selecione um aparelho para remover.", style="Danger.TLabel"); return
@@ -1047,7 +1077,7 @@ class App(tk.Tk):
             
     # --- Comandos e Ações da Aba Usuários (NOVOS) ---
 
-    def cmd_add_user(self):
+    def cmd_add_user(self, event=None):
         username = self.e_new_username.get().strip()
         password = self.e_new_password.get().strip()
         role = self.cb_new_role.get()
