@@ -1,6 +1,6 @@
 import bcrypt
 from database_mysql import get_connection
-from mysql.connector import Error
+import pymysql
 
 class UserDBManager:
     """
@@ -37,7 +37,7 @@ class UserDBManager:
             cur.close()
             conn.close()
             return True, f"Usuário '{username}' cadastrado com sucesso."
-        except Error as e:
+        except pymysql.MySQLError as e:
             # Código 1062 é para entrada duplicada (username UNIQUE)
             if e.errno == 1062:
                 return False, f"O nome de usuário '{username}' já existe."
@@ -53,7 +53,7 @@ class UserDBManager:
             cur.close()
             conn.close()
             return True, "Usuário removido com sucesso."
-        except Error as e:
+        except pymysql.MySQLError as e:
             return False, f"Erro ao remover usuário: {e}"
 
     def update_password(self, user_id, new_password):
@@ -71,5 +71,5 @@ class UserDBManager:
             cur.close()
             conn.close()
             return True, "Senha alterada com sucesso."
-        except Error as e:
+        except pymysql.MySQLError as e:
             return False, f"Erro ao alterar a senha: {e}"

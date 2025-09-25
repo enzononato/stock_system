@@ -2,7 +2,7 @@
 
 import bcrypt
 from database_mysql import get_connection
-from mysql.connector import Error
+import pymysql
 
 # --- Defina aqui os seus usuários padrão ---
 USUARIOS_PADRAO = [
@@ -65,7 +65,7 @@ def setup_database():
         conn.commit()
         print("\nUsuários padrão criados com sucesso!")
 
-    except Error as e:
+    except pymysql.MySQLError as e:
         print(f"Ocorreu um erro de banco de dados durante a configuração: {e}")
     finally:
         if 'conn' in locals() and conn.is_connected():

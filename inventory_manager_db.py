@@ -1,7 +1,6 @@
 import os
 from datetime import datetime
-import mysql.connector
-from mysql.connector import Error
+import pymysql
 from docx import Document
 import calendar
 
@@ -396,7 +395,7 @@ class InventoryDBManager:
             conn.commit()
             return True, f"Operação '{op}' do item {item_id} estornada com sucesso."
 
-        except Error as e:
+        except pymysql.MySQLError as e:
             conn.rollback()
             return False, f"Erro ao estornar: {e}"
         finally:
