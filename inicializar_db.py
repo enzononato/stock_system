@@ -34,8 +34,9 @@ def setup_database():
         print("-> Tabela 'usuarios' verificada/criada com sucesso.")
 
         # 2. Verifica se a tabela já tem algum usuário
-        cur.execute("SELECT COUNT(id) FROM usuarios")
-        (numero_de_usuarios,) = cur.fetchone()
+        cur.execute("SELECT COUNT(id) AS total FROM usuarios")
+        row = cur.fetchone()
+        numero_de_usuarios = int(row["total"])
 
         # 3. Se já existirem usuários, não faz nada
         if numero_de_usuarios > 0:
@@ -68,7 +69,7 @@ def setup_database():
     except pymysql.MySQLError as e:
         print(f"Ocorreu um erro de banco de dados durante a configuração: {e}")
     finally:
-        if 'conn' in locals() and conn.is_connected():
+        if 'conn' in locals() and conn:
             cur.close()
             conn.close()
             print("Conexão com o banco de dados fechada.")

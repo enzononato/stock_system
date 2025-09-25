@@ -5,6 +5,7 @@ from gui import App
 import bcrypt
 import os
 import sys
+import pymysql
 
 # --- Lógica para encontrar recursos como o logo.ico para o pyinstaller ---
 def resource_path(relative_path):
@@ -75,7 +76,7 @@ class LoginWindow(tk.Tk):
             return
 
         conn = get_connection()
-        cur = conn.cursor(dictionary=True)
+        cur = conn.cursor(pymysql.cursors.DictCursor)  # dicionário válido no PyMySQL
         
         # Primeiro, busca o usuário APENAS pelo nome de usuário
         cur.execute("SELECT * FROM usuarios WHERE username = %s", (username,))

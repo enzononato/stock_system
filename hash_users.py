@@ -3,6 +3,7 @@
 # ================================================================
 
 import bcrypt
+import pymysql
 from database_mysql import get_connection
 
 def hash_existing_passwords():
@@ -11,7 +12,7 @@ def hash_existing_passwords():
     e as atualiza no banco de dados.
     """
     conn = get_connection()
-    cur = conn.cursor(dictionary=True)
+    cur = conn.cursor(pymysql.cursors.DictCursor)
 
     try:
         # Busca todos os usuários

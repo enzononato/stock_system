@@ -10,7 +10,7 @@ class UserDBManager:
     def get_all_users(self):
         """Retorna uma lista de todos os usuários (sem o hash da senha)."""
         conn = get_connection()
-        cur = conn.cursor(dictionary=True)
+        cur = conn.cursor(pymysql.cursors.DictCursor)
         # Nunca retorne o campo 'password' para a interface
         cur.execute("SELECT id, username, role FROM usuarios")
         users = cur.fetchall()

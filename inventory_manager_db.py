@@ -126,7 +126,7 @@ class InventoryDBManager:
 
     def list_items(self):
         conn = get_connection()
-        cur = conn.cursor(dictionary=True)
+        cur = conn.cursor(pymysql.cursors.DictCursor)
         cur.execute("SELECT * FROM items WHERE is_active = 1")
         rows = cur.fetchall()
         cur.close()
@@ -136,7 +136,7 @@ class InventoryDBManager:
 
     def find(self, item_id: int):
         conn = get_connection()
-        cur = conn.cursor(dictionary=True)
+        cur = conn.cursor(pymysql.cursors.DictCursor)
         cur.execute("SELECT * FROM items WHERE id=%s AND is_active = 1", (item_id,))
         row = cur.fetchone()
         cur.close()
@@ -204,7 +204,7 @@ class InventoryDBManager:
             return False, f"Data de devolução não pode ser anterior ao empréstimo ({data_formatada})."
 
         conn = get_connection()
-        cur = conn.cursor(dictionary=True)
+        cur = conn.cursor(pymysql.cursors.DictCursor)
         
         cur.execute("""
             SELECT usuario, cpf, cargo, center_cost, revenda FROM history
@@ -239,7 +239,7 @@ class InventoryDBManager:
     def list_history(self):
         """Lista histórico de TODAS as operações, tratando itens excluídos."""
         conn = get_connection()
-        cur = conn.cursor(dictionary=True)
+        cur = conn.cursor(pymysql.cursors.DictCursor)
         # ALTERADO: Adicionado filtro para não mostrar operações estornadas
         cur.execute("""
             SELECT
@@ -264,7 +264,7 @@ class InventoryDBManager:
     def generate_monthly_report(self, ano, mes):
         """Relatório consolidado de um mês, usando Funções de Janela para maior precisão."""
         conn = get_connection()
-        cur = conn.cursor(dictionary=True)
+        cur = conn.cursor(pymysql.cursors.DictCursor)
         
         # ALTERADO: Adicionado "WHERE is_reversed = 0" para ignorar operações estornadas
         sql = """
@@ -337,7 +337,7 @@ class InventoryDBManager:
         como 'estornada' e cria um novo registro de 'Estorno' para auditoria.
         """
         conn = get_connection()
-        cur = conn.cursor(dictionary=True)
+        cur = conn.cursor(pymysql.cursors.DictCursor)
         
         try:
             conn.start_transaction()
@@ -441,7 +441,7 @@ class InventoryDBManager:
     # --- NOVAS FUNÇÕES PARA GRÁFICOS ---
     def get_issue_return_counts(self, year, month):
         conn = get_connection()
-        cur = conn.cursor(dictionary=True)
+        cur = conn.cursor(pymysql.cursors.DictCursor)
         num_days = calendar.monthrange(year, month)[1]
         days = list(range(1, num_days + 1))
         issues = {day: 0 for day in days}
@@ -471,7 +471,7 @@ class InventoryDBManager:
 
     def get_registration_counts(self, year, month):
         conn = get_connection()
-        cur = conn.cursor(dictionary=True)
+        cur = conn.cursor(pymysql.cursors.DictCursor)
         num_days = calendar.monthrange(year, month)[1]
         days = list(range(1, num_days + 1))
         registrations = {day: 0 for day in days}
