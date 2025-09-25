@@ -24,17 +24,19 @@ Copie o código a seguir para dentro desse novo arquivo e substitua as informaç
 
 ```python
 # No arquivo 'database_mysql.py'
-import mysql.connector
+import pymysql
 
 DB_CONFIG = {
     "host": "localhost",
-    "user": "seu_usuario",       # Substitua pelo seu usuário do MySQL
-    "password": "sua_senha",       # Substitua pela sua senha
-    "database": "nome_do_banco"   # Substitua pelo nome do seu banco de dados
+    "user": "seu_usuario",        # Substitua pelo seu usuário do MySQL
+    "password": "sua_senha",           # Substitua pela sua senha
+    "database": "nome_do_banco",      # Substitua pelo nome do seu banco de dados
+    "charset": "utf8mb4",
+    "cursorclass": pymysql.cursors.DictCursor
 }
 
 def get_connection():
-    return mysql.connector.connect(**DB_CONFIG)
+    return pymysql.connect(**DB_CONFIG)
 ```
 
 ----
