@@ -116,6 +116,8 @@ class App(tk.Tk):
         style.map("Secondary.TButton", background=[('active', SECONDARY_COLOR_HOVER)], relief=[('pressed', 'sunken')])
         style.configure("Danger.TButton", background=DANGER_COLOR, foreground="white")
         style.map("Danger.TButton", background=[('active', DANGER_COLOR_HOVER)], relief=[('pressed', 'sunken')])
+        style.configure("Success.TButton", background=SUCCESS_COLOR, foreground="white")
+        style.map("Success.TButton", background=[('active', '#2E7D32')], relief=[('pressed', 'sunken')])
 
         # Estilos de Labels, Entries, Comboboxes - BORDAS ADICIONADAS
         style.configure("TLabel", font=FONT_NORMAL, background=FRAME_BG_COLOR, foreground=LABEL_COLOR)
@@ -245,7 +247,7 @@ class App(tk.Tk):
         frm_filters.pack(fill="x")
 
         ttk.Label(frm_filters, text="Status:").grid(row=0, column=0, padx=(0, 5), pady=5, sticky="e")
-        self.cb_status_filter = ttk.Combobox(frm_filters, values=["", "Disponível", "Indisponível"], state="readonly", width=15)
+        self.cb_status_filter = ttk.Combobox(frm_filters, values=["", "Disponível", "Indisponível", "Pendente"], state="readonly", width=15)
         self.cb_status_filter.grid(row=0, column=1, padx=5, pady=5)
 
         ttk.Label(frm_filters, text="Tipo:").grid(row=0, column=2, padx=(15, 5), pady=5, sticky="e")
@@ -596,37 +598,99 @@ class App(tk.Tk):
         self.e_search_report.delete(0, "end")
         self.cmd_generate_report()
 
+
     def build_terms_tab(self):
-        frm = ttk.Frame(self.tab_terms)
-        frm.pack(fill="both", expand=True)
-
-        search_frame = ttk.Frame(frm, padding=(0,0,0,10))
-        search_frame.pack(fill="x")
-        ttk.Label(search_frame, text="Buscar:").grid(row=0, column=0, sticky="e", padx=(0,5), pady=5)
-        self.e_search_terms = ttk.Entry(search_frame, width=30)
-        self.e_search_terms.grid(row=0, column=1, padx=5, pady=5)
-        ttk.Button(search_frame, text="Buscar", command=self.update_terms_table, style="Primary.TButton").grid(row=0, column=2, padx=10, pady=5)
-
-        cols = ("ID", "Tipo", "Marca", "Usuário", "CPF", "Data Empréstimo", "Revenda")
+        # Variável para guardar o caminho do termo assinado selecionado
+        self.signed_term_path = None
         
-        tree_frame = ttk.Frame(frm)
+        tab = self.tab_terms
+        
+        # --- Frame Superior: Empréstimos Pendentes ---
+        frm_pending = ttk.LabelFrame(tab, text=" Empréstimos Pendentes (Aguardando Termo Assinado) ", padding=10)
+        frm_pending.pack(fill="x", expand=False, padx=10, pady=(10, 5))
+
+        # Tabela de pendentes
+        cols_pending = ("ID", "Tipo", "Marca", "Usuário", "CPF", "Data Empréstimo", "Revenda")
+        self.tree_terms_pending = ttk.Treeview(frm_pending, columns=cols_pending, show="headings", height=8)
+        self.tree_terms_pending.pack(fill="x", expand=True)
+        for c in cols_pending:
+            self.tree_terms_pending.heading(c, text=c, anchor="w")
+        self.tree_terms_pending.column("ID", width=50, stretch=False)
+        self.tree_terms_pending.column("Usuário", width=200)
+
+        # Ações para pendentes
+        frm_pending_actions = ttk.Frame(frm_pending)
+        frm_pending_actions.pack(fill="x", pady=(10, 0))
+        
+        ttk.Button(frm_pending_actions, text="Gerar Termo de Responsabilidade", command=self.cmd_generate_term, style="Primary.TButton").pack(side="left")
+        
+        ttk.Separator(frm_pending_actions, orient="vertical").pack(side="left", fill="y", padx=20, pady=5)
+        
+        ttk.Button(frm_pending_actions, text="Anexar Termo Assinado (PDF)...", command=self.select_signed_term_attachment).pack(side="left")
+        self.lbl_signed_term = ttk.Label(frm_pending_actions, text=" Nenhum arquivo selecionado.", width=40)
+        self.lbl_signed_term.pack(side="left", padx=10)
+
+        ttk.Button(frm_pending_actions, text="Confirmar Empréstimo", command=self.cmd_confirm_loan, style="Success.TButton").pack(side="left", padx=(10,0))
+
+
+        # --- Frame Inferior: Empréstimos Ativos ---
+        frm_active = ttk.LabelFrame(tab, text=" Empréstimos Ativos (Termo OK) ", padding=10)
+        frm_active.pack(fill="both", expand=True, padx=10, pady=(5, 10))
+        
+        cols_active = ("ID", "Tipo", "Marca", "Usuário", "CPF", "Data Empréstimo", "Revenda")
+        tree_frame = ttk.Frame(frm_active)
         tree_frame.pack(fill="both", expand=True)
 
-        self.tree_terms = ttk.Treeview(tree_frame, columns=cols, show="headings")
+        self.tree_terms_active = ttk.Treeview(tree_frame, columns=cols_active, show="headings")
+        self.tree_terms_active.pack(side="left", fill="both", expand=True)
+        for c in cols_active:
+            self.tree_terms_active.heading(c, text=c, anchor="w")
+        self.tree_terms_active.column("ID", width=50, stretch=False)
+        self.tree_terms_active.column("Usuário", width=200)
         
-        col_widths = { "ID": 50, "CPF": 120, "Data Empréstimo": 120 }
-        for c in cols:
-            self.tree_terms.heading(c, text=c, anchor="w", command=lambda col=c: self.treeview_sort_column(self.tree_terms, col, False))
-            self.tree_terms.column(c, width=col_widths.get(c, 150), anchor="w")
-
-        ysb = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree_terms.yview)
-        self.tree_terms.configure(yscrollcommand=ysb.set)
-        self.tree_terms.pack(side="left", fill="both", expand=True)
+        ysb = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree_terms_active.yview)
         ysb.pack(side="right", fill="y")
+        self.tree_terms_active.configure(yscrollcommand=ysb.set)
         
-        self.lbl_terms = ttk.Label(frm, text="")
-        self.lbl_terms.pack(pady=10)
-        ttk.Button(frm, text="Gerar Termo Selecionado", command=self.cmd_generate_term, style="Primary.TButton").pack(pady=5)
+        # Label para mensagens
+        self.lbl_terms = ttk.Label(tab, text="", anchor="center")
+        self.lbl_terms.pack(pady=5, fill="x")
+
+    def select_signed_term_attachment(self):
+        """Abre uma caixa de diálogo para selecionar o termo assinado em PDF."""
+        file_path = filedialog.askopenfilename(
+            title="Selecione o Termo de Responsabilidade Assinado",
+            filetypes=[("Arquivos PDF", "*.pdf")]
+        )
+        if file_path:
+            self.signed_term_path = file_path
+            filename = os.path.basename(file_path)
+            self.lbl_signed_term.config(text=f" {filename}")
+        else:
+            self.signed_term_path = None
+            self.lbl_signed_term.config(text=" Nenhum arquivo selecionado.")
+
+    def cmd_confirm_loan(self):
+        """Confirma um empréstimo pendente após anexar o termo."""
+        selected = self.tree_terms_pending.selection()
+        if not selected:
+            self.lbl_terms.config(text="Selecione um empréstimo pendente na tabela acima.", style='Danger.TLabel')
+            return
+
+        if not self.signed_term_path:
+            self.lbl_terms.config(text="É obrigatório anexar o termo assinado (PDF) para confirmar.", style='Danger.TLabel')
+            return
+
+        item_id = int(self.tree_terms_pending.item(selected[0])["values"][0])
+        
+        ok, msg = self.inv.confirm_loan(item_id, self.logged_user, self.signed_term_path)
+        self.lbl_terms.config(text=msg, style='Success.TLabel' if ok else 'Danger.TLabel')
+        
+        if ok:
+            # Limpa os campos e atualiza tudo
+            self.signed_term_path = None
+            self.lbl_signed_term.config(text=" Nenhum arquivo selecionado.")
+            self.update_all_views()
 
     def build_graph_tab(self):
         frm = ttk.Frame(self.tab_graphs)
@@ -973,6 +1037,7 @@ class App(tk.Tk):
             self.e_cargo.delete(0, 'end')
             self.cb_revenda.set('')
             self.e_date_issue.delete(0, 'end')
+            messagebox.showinfo("Status: Pendente", "Empréstimo iniciado!\n\nVá para a aba 'Termos' para gerar o termo de responsabilidade e confirmar o empréstimo.")
             self.update_all_views()
 
     def cmd_return(self, event=None):
@@ -1121,17 +1186,18 @@ class App(tk.Tk):
 
 
     def cmd_generate_term(self):
-        selected = self.tree_terms.selection()
+        # AGORA, a seleção vem da tabela de PENDENTES
+        selected = self.tree_terms_pending.selection()
         if not selected:
-            self.lbl_terms.config(text="Selecione um empréstimo na tabela.", style='Danger.TLabel')
+            self.lbl_terms.config(text="Selecione um empréstimo pendente na tabela para gerar o termo.", style='Danger.TLabel')
             return
 
-        values = self.tree_terms.item(selected[0])["values"]
+        values = self.tree_terms_pending.item(selected[0])["values"]
         pid, user = int(values[0]), values[3]
         
         ok, result = self.inv.generate_term(pid, user)
         if ok:
-            self.lbl_terms.config(text=f"Termo gerado com sucesso: {os.path.basename(result)}", style='Success.TLabel')
+            self.lbl_terms.config(text=f"Termo gerado: {os.path.basename(result)}", style='Success.TLabel')
             if messagebox.askyesno("Sucesso", f"Termo gerado em:\n{result}\n\nDeseja abri-lo agora?"):
                 try:
                     os.startfile(result)
@@ -1261,11 +1327,21 @@ class App(tk.Tk):
             )
             
             cleaned_row = tuple(v or '' for v in row)
-            tag = "disp" if p.get('status') == "Disponível" else "indisp"
+            
+            status = p.get('status')
+            tag = ""
+            if status == "Disponível":
+                tag = "disp"
+            elif status == "Indisponível":
+                tag = "indisp"
+            elif status == "Pendente":
+                tag = "pend"
+                
             self.tree_stock.insert('', 'end', values=cleaned_row, tags=(tag,))
 
-        self.tree_stock.tag_configure("disp", background="#7EFF9C") # Verde mais suave
-        self.tree_stock.tag_configure("indisp", background="#FF7E89") # Vermelho mais suave
+        self.tree_stock.tag_configure("disp", background="#7EFF9C") # Verde
+        self.tree_stock.tag_configure("indisp", background="#FF7E89") # Vermelho
+        self.tree_stock.tag_configure("pend", background="#FFD966") # Amarelo/Laranja
 
     def update_issue_cb(self):
         items = self.inv.list_items()
@@ -1310,21 +1386,22 @@ class App(tk.Tk):
                 
             self.tree_history.insert("", "end", values=cleaned_row)
 
+
     def update_terms_table(self):
-        self.tree_terms.delete(*self.tree_terms.get_children())
-        search_text = self.e_search_terms.get().lower().strip()
+        self.tree_terms_pending.delete(*self.tree_terms_pending.get_children())
+        self.tree_terms_active.delete(*self.tree_terms_active.get_children())
 
         for p in self.inv.list_items():
-            if p['status'] == 'Indisponível':
-                row_str = " ".join(str(v or '').lower() for v in p.values())
-                if search_text and search_text not in row_str:
-                    continue
-                
-                row = (
-                    p.get('id'), p.get('tipo'), p.get('brand'), p.get('assigned_to'),
-                    format_cpf(p.get('cpf')), format_date(p.get('date_issued')), p.get('revenda')
-                )
-                self.tree_terms.insert('', 'end', values=tuple(v or '' for v in row))
+            row = (
+                p.get('id'), p.get('tipo'), p.get('brand'), p.get('assigned_to'),
+                format_cpf(p.get('cpf')), format_date(p.get('date_issued')), p.get('revenda')
+            )
+            values = tuple(v or '' for v in row)
+
+            if p['status'] == 'Pendente':
+                self.tree_terms_pending.insert('', 'end', values=values)
+            elif p['status'] == 'Indisponível':
+                self.tree_terms_active.insert('', 'end', values=values)
 
     def update_all_views(self):
         """Chama todas as funções de atualização da UI."""

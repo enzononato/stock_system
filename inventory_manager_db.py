@@ -6,7 +6,7 @@ from docx import Document
 import calendar
 
 from database_mysql import get_connection
-from config import TERMS_DIR, TERMO_MODELOS, REMOVAL_NOTES_DIR
+from config import TERMS_DIR, TERMO_MODELOS, REMOVAL_NOTES_DIR, SIGNED_TERMS_DIR
 from utils import format_cpf, format_date
 
 
@@ -23,7 +23,7 @@ class InventoryDBManager:
             id INT AUTO_INCREMENT PRIMARY KEY,
             tipo VARCHAR(50), brand VARCHAR(100), model VARCHAR(100), identificador VARCHAR(100),
             nota_fiscal VARCHAR(9) UNIQUE,
-            status ENUM('Disponível','Indisponível') DEFAULT 'Disponível',
+            status ENUM('Disponível','Indisponível', 'Pendente') DEFAULT 'Disponível',
             assigned_to VARCHAR(100), cpf VARCHAR(20), revenda VARCHAR(100),
             dominio VARCHAR(50), host VARCHAR(100), endereco_fisico VARCHAR(150),
             cpu VARCHAR(100), ram VARCHAR(50), storage VARCHAR(50),
@@ -45,15 +45,16 @@ class InventoryDBManager:
             center_cost VARCHAR(100),
             revenda VARCHAR(100),
             data_operacao DATE,
-            operation ENUM('Cadastro','Empréstimo','Devolução', 'Edição', 'Exclusão', 'Estorno') DEFAULT 'Cadastro',
+            operation ENUM('Cadastro','Empréstimo','Devolução', 'Edição', 'Exclusão', 'Estorno', 'Confirmação Empréstimo') DEFAULT 'Cadastro',
             is_reversed TINYINT(1) DEFAULT 0,
-            -- Campos para guardar dados do item no momento da exclusão
+            -- Campos para guardar dados do item
             tipo VARCHAR(50),
             brand VARCHAR(100),
             model VARCHAR(100),
             identificador VARCHAR(100),
             nota_fiscal VARCHAR(9),
             nota_fiscal_anexo VARCHAR(255) NULL,
+            termo_assinado_anexo VARCHAR(255) NULL,
             FOREIGN KEY(item_id) REFERENCES items(id) ON DELETE SET NULL
         )
         """)
@@ -169,7 +170,7 @@ class InventoryDBManager:
             return False, "Item não encontrado."
 
         if item['status'] != 'Disponível':
-            return False, f"Este item já está emprestado para {item.get('assigned_to', 'desconhecido')}."
+            return False, f"Este item não está disponível para empréstimo."
         
         try:
             dt_issue = datetime.strptime(date_issue, "%d/%m/%Y")
@@ -185,13 +186,12 @@ class InventoryDBManager:
 
         conn = get_connection()
         cur = conn.cursor()
+        # ALTERAÇÃO AQUI: O status agora é 'Pendente'
         cur.execute("""
             UPDATE items 
-            SET status='Indisponível', assigned_to=%s, cpf=%s, date_issued=%s, revenda=%s 
+            SET status='Pendente', assigned_to=%s, cpf=%s, date_issued=%s, revenda=%s 
             WHERE id=%s
         """, (user, cpf, dt_issue.strftime("%Y-%m-%d"), revenda, pid))
-
-
 
         cur.execute("""
             INSERT INTO history (item_id, operador, usuario, cpf, cargo, center_cost, revenda, data_operacao, operation)
@@ -201,7 +201,65 @@ class InventoryDBManager:
         conn.commit()
         cur.close()
         conn.close()
-        return True, f"Aparelho {pid} emprestado para {user}."
+        return True, f"Empréstimo do item {pid} para {user} iniciado. Status: Pendente."
+    
+    def confirm_loan(self, item_id: int, logged_user: str, signed_term_path: str):
+        """
+        finaliza o empréstimo, anexa o termo e muda o status para Indisponível.
+        """
+        item = self.find(item_id)
+        if not item or item['status'] != 'Pendente':
+            return False, "Apenas itens com status 'Pendente' podem ser confirmados."
+
+        # --- Lógica para copiar o anexo ---
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            original_filename = os.path.basename(signed_term_path)
+            new_filename = f"termo_{item_id}_{timestamp}_{original_filename}"
+            destination_path = os.path.join(SIGNED_TERMS_DIR, new_filename)
+            shutil.copy(signed_term_path, destination_path)
+        except Exception as e:
+            return False, f"Erro ao processar o termo assinado: {e}"
+        # ------------------------------------
+
+        conn = get_connection()
+        cur = conn.cursor(pymysql.cursors.DictCursor)
+
+        # Encontra o último registro de empréstimo para este item
+        cur.execute("""
+            SELECT id, usuario, cpf, cargo, center_cost, revenda FROM history
+            WHERE item_id = %s AND operation = 'Empréstimo' AND is_reversed = 0
+            ORDER BY data_operacao DESC, id DESC LIMIT 1
+        """, (item_id,))
+        last_loan_details = cur.fetchone()
+
+        if not last_loan_details:
+            conn.close()
+            return False, "Registro de empréstimo original não encontrado no histórico."
+
+        # Atualiza o status do item para Indisponível
+        cur.execute("UPDATE items SET status='Indisponível' WHERE id=%s", (item_id,))
+
+        # Cria o novo registro de "Confirmação" no histórico, salvando o caminho do anexo
+        cur.execute("""
+            INSERT INTO history (item_id, operador, usuario, cpf, cargo, center_cost, revenda, data_operacao, operation, termo_assinado_anexo)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'Confirmação Empréstimo', %s)
+        """, (
+            item_id,
+            logged_user,
+            last_loan_details.get('usuario'),
+            last_loan_details.get('cpf'),
+            last_loan_details.get('cargo'),
+            last_loan_details.get('center_cost'),
+            last_loan_details.get('revenda'),
+            datetime.now().strftime("%Y-%m-%d"),
+            destination_path  # Salva o caminho do termo assinado
+        ))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+        return True, f"Empréstimo do item {item_id} confirmado com sucesso."
 
 
     def ret(self, pid, date_return, logged_user: str):
