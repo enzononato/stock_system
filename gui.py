@@ -445,14 +445,51 @@ class App(tk.Tk):
         frm.pack()
         frm.grid_columnconfigure(1, weight=1)
         
+        # --- Campo de Seleção do Aparelho ---
         ttk.Label(frm, text="Selecione aparelho:").grid(row=0, column=0, sticky='e', padx=5, pady=5)
         self.cb_remove = ttk.Combobox(frm, state='readonly')
         self.cb_remove.grid(row=0, column=1, pady=5, padx=5, sticky="ew")
+        
+        # --- Campo de Anexo ---
+        ttk.Label(frm, text="Anexar Nota (PDF):").grid(row=1, column=0, sticky='e', padx=5, pady=8)
+        
+        frm_anexo = ttk.Frame(frm)
+        frm_anexo.grid(row=1, column=1, sticky="ew", padx=5, pady=8)
+        frm_anexo.grid_columnconfigure(1, weight=1) 
+        
+        self.btn_anexo = ttk.Button(frm_anexo, text="Selecionar Arquivo...", command=self.select_removal_attachment)
+        # Coloca o botão na primeira coluna (coluna 0)
+        self.btn_anexo.grid(row=0, column=0, sticky='w') 
+        
+        self.lbl_remove_attachment = ttk.Label(frm_anexo, text=" Nenhum arquivo selecionado.", anchor="w")
+        # Coloca o label na segunda coluna (coluna 1), fazendo-o esticar (sticky='ew')
+        self.lbl_remove_attachment.grid(row=0, column=1, sticky='ew', padx=(10, 0)) 
+        
+        self.remove_attachment_path = None
 
         self.lbl_rem = ttk.Label(frm, text="", anchor="center")
-        self.lbl_rem.grid(row=1, column=0, columnspan=2, pady=10, sticky="ew")
+        self.lbl_rem.grid(row=2, column=0, columnspan=2, pady=10, sticky="ew")
 
-        ttk.Button(frm, text="Remover", command=self.cmd_remove, style="Danger.TButton").grid(row=2, column=0, columnspan=2, pady=10)
+        ttk.Button(frm, text="Remover", command=self.cmd_remove, style="Danger.TButton").grid(row=3, column=0, columnspan=2, pady=10)
+
+    def select_removal_attachment(self): 
+        # =======================================
+        # Função para selecionar o arquivo da nota de remoção
+        # =======================================
+        """Abre uma caixa de diálogo para o usuário selecionar um arquivo PDF."""
+        file_path = filedialog.askopenfilename(
+            title="Selecione a Nota Fiscal de Remoção",
+            filetypes=[("Arquivos PDF", "*.pdf")]
+        )
+        
+        if file_path:
+            self.remove_attachment_path = file_path
+            # Mostra apenas o nome do arquivo, e não o caminho completo
+            filename = os.path.basename(file_path)
+            self.lbl_remove_attachment.config(text=f" {filename}")
+        else:
+            self.remove_attachment_path = None
+            self.lbl_remove_attachment.config(text=" Nenhum arquivo selecionado.")
 
     def build_history_tab(self):
         tab = self.tab_history
@@ -957,6 +994,12 @@ class App(tk.Tk):
         sel = self.cb_remove.get()
         if not sel:
             self.lbl_rem.config(text="Selecione um aparelho para remover.", style="Danger.TLabel"); return
+        
+        # --- NOVA VERIFICAÇÃO ---
+        if not self.remove_attachment_path:
+            self.lbl_rem.config(text="É obrigatório anexar a nota fiscal (PDF) para remover.", style="Danger.TLabel")
+            return
+        # ------------------------
 
         pid = int(sel.split(' - ', 1)[0])
         item = self.inv.find(pid)
@@ -971,13 +1014,15 @@ class App(tk.Tk):
         if pwd != ADMIN_PASS:
             self.lbl_rem.config(text="Senha incorreta. Ação não autorizada.", style='Danger.TLabel'); return
             
-        ok, msg = self.inv.remove(pid, self.logged_user)
+        # Passe o caminho do anexo para a função 'remove'
+        ok, msg = self.inv.remove(pid, self.logged_user, self.remove_attachment_path)
         self.lbl_rem.config(text=msg, style='Success.TLabel' if ok else 'Danger.TLabel')
         
         if ok:
+            # Limpa os campos após o sucesso
+            self.remove_attachment_path = None
+            self.lbl_remove_attachment.config(text=" Nenhum arquivo selecionado.")
             self.update_all_views()
-
-
 
     def cmd_generate_report(self):
         # ALTERADO: A lógica para determinar se um empréstimo virou devolução foi movida para a query SQL.

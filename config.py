@@ -12,9 +12,18 @@ def resource_path(relative_path):
 
     return os.path.join(base_path, relative_path)
 TERMS_DIR = 'terms'
+REMOVAL_NOTES_DIR = 'notas_remocao' # Diretório para notas de remoção
+SIGNED_TERMS_DIR = 'termos_assinados' # Diretório para termos assinados
+
 
 if not os.path.exists(TERMS_DIR):
     os.makedirs(TERMS_DIR)
+    
+if not os.path.exists(REMOVAL_NOTES_DIR):
+    os.makedirs(REMOVAL_NOTES_DIR)
+
+if not os.path.exists(SIGNED_TERMS_DIR):
+    os.makedirs(SIGNED_TERMS_DIR)
 
 # Usuário "Mãe" e senha
 ADMIN_USER = "mãe"

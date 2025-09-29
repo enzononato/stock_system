@@ -1,11 +1,12 @@
 import os
+import shutil
 from datetime import datetime
 import pymysql
 from docx import Document
 import calendar
 
 from database_mysql import get_connection
-from config import TERMS_DIR, TERMO_MODELOS
+from config import TERMS_DIR, TERMO_MODELOS, REMOVAL_NOTES_DIR
 from utils import format_cpf, format_date
 
 
@@ -52,6 +53,7 @@ class InventoryDBManager:
             model VARCHAR(100),
             identificador VARCHAR(100),
             nota_fiscal VARCHAR(9),
+            nota_fiscal_anexo VARCHAR(255) NULL,
             FOREIGN KEY(item_id) REFERENCES items(id) ON DELETE SET NULL
         )
         """)
@@ -103,20 +105,34 @@ class InventoryDBManager:
         return True, f"Item {item_id} atualizado com sucesso."
 
 
-    def remove(self, item_id: int, logged_user: str):
+    def remove(self, item_id: int, logged_user: str, attachment_path: str):
         """"Remove" (desativa) item do estoque, salvando seus dados no histórico."""
         item = self.find(item_id)
         if not item: return False, "ID não encontrado."
         if item["status"] != "Disponível": return False, "Não é possível remover produto emprestado."
+        
+        # --- Lógica para copiar o anexo ---
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            original_filename = os.path.basename(attachment_path)
+            # Cria um nome de arquivo seguro e único
+            new_filename = f"remocao_{item_id}_{timestamp}_{original_filename}"
+            destination_path = os.path.join(REMOVAL_NOTES_DIR, new_filename)
+            
+            # Copia o arquivo para a pasta de notas
+            shutil.copy(attachment_path, destination_path)
+        except Exception as e:
+            return False, f"Erro ao processar o anexo: {e}"
+        # ------------------------------------
 
         conn = get_connection()
         cur = conn.cursor()
 
         cur.execute("""
-            INSERT INTO history (item_id, operador, data_operacao, operation, tipo, brand, model, identificador, nota_fiscal)
-            VALUES (%s, %s, %s, 'Exclusão', %s, %s, %s, %s, %s)
+            INSERT INTO history (item_id, operador, data_operacao, operation, tipo, brand, model, identificador, nota_fiscal, nota_fiscal_anexo)
+            VALUES (%s, %s, %s, 'Exclusão', %s, %s, %s, %s, %s, %s)
         """, (item_id, logged_user, datetime.now().strftime("%Y-%m-%d"),
-              item.get('tipo'), item.get('brand'), item.get('model'), item.get('identificador'), item.get('nota_fiscal')))
+              item.get('tipo'), item.get('brand'), item.get('model'), item.get('identificador'), item.get('nota_fiscal'), destination_path))
 
         cur.execute("UPDATE items SET is_active = 0 WHERE id=%s", (item_id,))
         
