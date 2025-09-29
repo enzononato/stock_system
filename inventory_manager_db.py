@@ -21,6 +21,7 @@ class InventoryDBManager:
         CREATE TABLE IF NOT EXISTS items (
             id INT AUTO_INCREMENT PRIMARY KEY,
             tipo VARCHAR(50), brand VARCHAR(100), model VARCHAR(100), identificador VARCHAR(100),
+            nota_fiscal VARCHAR(9) UNIQUE,
             status ENUM('Disponível','Indisponível') DEFAULT 'Disponível',
             assigned_to VARCHAR(100), cpf VARCHAR(20), revenda VARCHAR(100),
             dominio VARCHAR(50), host VARCHAR(100), endereco_fisico VARCHAR(150),
@@ -50,6 +51,7 @@ class InventoryDBManager:
             brand VARCHAR(100),
             model VARCHAR(100),
             identificador VARCHAR(100),
+            nota_fiscal VARCHAR(9),
             FOREIGN KEY(item_id) REFERENCES items(id) ON DELETE SET NULL
         )
         """)
@@ -111,10 +113,10 @@ class InventoryDBManager:
         cur = conn.cursor()
 
         cur.execute("""
-            INSERT INTO history (item_id, operador, data_operacao, operation, tipo, brand, model, identificador)
-            VALUES (%s, %s, %s, 'Exclusão', %s, %s, %s, %s)
+            INSERT INTO history (item_id, operador, data_operacao, operation, tipo, brand, model, identificador, nota_fiscal)
+            VALUES (%s, %s, %s, 'Exclusão', %s, %s, %s, %s, %s)
         """, (item_id, logged_user, datetime.now().strftime("%Y-%m-%d"),
-              item.get('tipo'), item.get('brand'), item.get('model'), item.get('identificador')))
+              item.get('tipo'), item.get('brand'), item.get('model'), item.get('identificador'), item.get('nota_fiscal')))
 
         cur.execute("UPDATE items SET is_active = 0 WHERE id=%s", (item_id,))
         
@@ -248,6 +250,7 @@ class InventoryDBManager:
                 COALESCE(i.brand, h.brand) as marca,
                 COALESCE(i.model, h.model) as modelo,
                 COALESCE(i.identificador, h.identificador) as identificador,
+                COALESCE(i.nota_fiscal, h.nota_fiscal) as nota_fiscal,
                 h.usuario, h.cpf, h.cargo, h.center_cost, h.revenda,
                 h.data_operacao, h.operation
             FROM history h
@@ -300,6 +303,7 @@ class InventoryDBManager:
                 COALESCE(i.brand, h.brand) AS brand,
                 COALESCE(i.model, h.model) AS model,
                 COALESCE(i.identificador, h.identificador) AS identificador,
+                COALESCE(i.nota_fiscal, h.nota_fiscal) AS nota_fiscal,
                 re.data_devolucao
             FROM RelatorioEmprestimos re
             LEFT JOIN items i ON i.id = re.item_id
@@ -315,6 +319,7 @@ class InventoryDBManager:
                 COALESCE(i.brand, cad.brand) AS brand,
                 COALESCE(i.model, cad.model) AS model,
                 COALESCE(i.identificador, cad.identificador) AS identificador,
+                COALESCE(i.nota_fiscal, cad.nota_fiscal) AS nota_fiscal,
                 NULL AS data_devolucao
             FROM history cad
             LEFT JOIN items i ON i.id = cad.item_id
@@ -419,7 +424,8 @@ class InventoryDBManager:
             "{{cpf}}": format_cpf(item.get("cpf", "")), "{{data_cadastro}}": format_date(item.get("date_registered", "")),
             "{{data_emprestimo}}": format_date(item.get("date_issued", "")), "{{marca}}": f" {item.get('brand', '')}" if item.get("brand") else "",
             "{{modelo}}": f" {item.get('model', '')}" if item.get("model") else "", "{{tipo}}": item.get("tipo", ""),
-            "{{identificador}}": f" {item.get('identificador', '')}" if item.get("identificador") else ""
+            "{{identificador}}": f" {item.get('identificador', '')}" if item.get("identificador") else "",
+            "{{nota_fiscal}}": f" {item.get('nota_fiscal', '')}" if item.get("nota_fiscal") else ""
         }
         for key, value in item.items():
             placeholder = f"{{{{{key}}}}}"

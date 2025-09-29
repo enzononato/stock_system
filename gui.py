@@ -267,7 +267,7 @@ class App(tk.Tk):
         ttk.Button(frm_filters, text="Exportar CSV", command=lambda: self.exportar_csv(self.tree_stock, "Exportar Estoque", "estoque"), style="Secondary.TButton").grid(row=0, column=10, padx=5, pady=5, sticky="e")
 
         cols = [
-            "ID", "Revenda", "Tipo", "Marca", "Modelo", "Status", "Usuário", "CPF",
+            "ID", "Revenda", "Tipo", "Marca", "Modelo", "Status", "Usuário", "CPF", "Nota Fiscal",
             "Identificador", "Domínio", "Host", "Endereço Físico", "CPU",
             "RAM", "Storage", "Sistema", "Licença", "AnyDesk",
             "Setor", "IP", "MAC", "Data Cadastro"
@@ -281,7 +281,7 @@ class App(tk.Tk):
 
         col_widths = {
             "ID": 40, "Revenda": 130, "Tipo": 100, "Marca": 100, "Modelo": 120, "Status": 100,
-            "Usuário": 140, "CPF": 110, "Identificador": 140
+            "Usuário": 140, "CPF": 110, "Identificador": 140, "Nota Fiscal": 100,
         }
 
         for col in cols:
@@ -472,8 +472,8 @@ class App(tk.Tk):
                 style="Secondary.TButton").pack(side="right", padx=5, pady=5)
 
         cols = (
-            "ID Item", "Operador", "Operação", "Data", "Tipo", "Marca", "Modelo", "Identificador",
-            "Usuário", "CPF", "Cargo", "Centro de Custo", "Revenda"
+            "ID Item", "Operador", "Operação", "Data", "Tipo", "Marca", "Modelo", "Nota Fiscal",
+            "Identificador", "Usuário", "CPF", "Cargo", "Centro de Custo", "Revenda"
         )
         
         tree_frame = ttk.Frame(tab)
@@ -531,7 +531,7 @@ class App(tk.Tk):
         ttk.Button(action_frm, text="Estornar Lançamento", command=self.cmd_delete_report_entry, style="Danger.TButton").pack(side="left", padx=10)
         
         # ALTERADO: Adicionada a coluna "ID Histórico" que ficará oculta
-        cols = ("ID Histórico", "ID Item", "Operador", "Tipo", "Marca", "Modelo", "Identificador", "Usuário", "CPF", "Operação", "Data Empréstimo", "Data Devolução", "Centro de Custo", "Cargo", "Revenda")
+        cols = ("ID Histórico", "ID Item", "Operador", "Tipo", "Marca", "Modelo", "Nota Fiscal", "Identificador", "Usuário", "CPF", "Operação", "Data Empréstimo", "Data Devolução", "Centro de Custo", "Cargo", "Revenda")
         
         tree_frame = ttk.Frame(frm)
         tree_frame.pack(fill="both", expand=True)
@@ -708,20 +708,28 @@ class App(tk.Tk):
         widgets = {}
         
         # Campos comuns
-        ttk.Label(parent_frame, text="Marca:").grid(row=1, column=0, sticky="e", pady=5, padx=5)
+        ttk.Label(parent_frame, text="Marca:").grid(row=0, column=0, sticky="e", pady=5, padx=5)
         e_brand = ttk.Entry(parent_frame)
-        e_brand.grid(row=1, column=1, pady=5, padx=5, sticky="ew")
+        e_brand.grid(row=0, column=1, pady=5, padx=5, sticky="ew")
         e_brand.insert(0, item_data.get('brand') or '')
         e_brand.bind("<KeyRelease>", self.on_widget_interaction)
         widgets['brand'] = e_brand
 
-        ttk.Label(parent_frame, text="Revenda:").grid(row=2, column=0, sticky="e", pady=5, padx=5)
+        ttk.Label(parent_frame, text="Revenda:").grid(row=1, column=0, sticky="e", pady=5, padx=5)
         cb_revenda = ttk.Combobox(parent_frame, values=REVENDAS_OPTIONS, state="readonly")
-        cb_revenda.grid(row=2, column=1, pady=5, padx=5, sticky="ew")
+        cb_revenda.grid(row=1, column=1, pady=5, padx=5, sticky="ew")
         cb_revenda.set(item_data.get('revenda') or '')
         cb_revenda.bind("<KeyRelease>", self.on_widget_interaction)
         cb_revenda.bind("<<ComboboxSelected>>", self.on_widget_interaction)
         widgets['revenda'] = cb_revenda
+        
+        # Adicionando o campo Nota Fiscal como um campo comum
+        ttk.Label(parent_frame, text="Nota Fiscal:").grid(row=2, column=0, sticky="e", pady=5, padx=5)
+        e_nota_fiscal = ttk.Entry(parent_frame)
+        e_nota_fiscal.grid(row=2, column=1, pady=5, padx=5, sticky="ew")
+        e_nota_fiscal.insert(0, item_data.get('nota_fiscal') or '')
+        e_nota_fiscal.bind("<KeyRelease>", self.on_widget_interaction)
+        widgets['nota_fiscal'] = e_nota_fiscal
 
         # Campos específicos
         row_start = 3
@@ -790,8 +798,8 @@ class App(tk.Tk):
                 dados[key] = widget.get().strip()
         erros = []
         if not dados.get("brand"): erros.append((self.add_widgets['brand'], "Informe a marca."))
-        
         if not dados.get("revenda"): erros.append((self.add_widgets['revenda'], "Informe o campo Revenda."))
+        if not dados.get("nota_fiscal"): erros.append((self.add_widgets['nota_fiscal'], "Informe a Nota Fiscal."))
         
         if tipo in ["Celular", "Tablet"]:
             if not dados.get("model"): erros.append((self.add_widgets['model'], "Informe o modelo."))
@@ -1006,7 +1014,7 @@ class App(tk.Tk):
             
             row_values = (
                 log.get('history_id'), log.get('item_id'), log.get('operador'), log.get('tipo'), log.get('brand'),
-                log.get('model'), log.get('identificador'), log.get('usuario'),
+                log.get('model'), log.get('nota_fiscal'), log.get('identificador'), log.get('usuario'),
                 format_cpf(log.get('cpf')), operation_display, data_inicial_display,
                 data_devolucao_display, log.get('center_cost'), log.get('cargo'), log.get('revenda')
             )
@@ -1201,7 +1209,7 @@ class App(tk.Tk):
             row = (
                 p.get('id'), p.get('revenda'), p.get('tipo'), p.get('brand'), 
                 p.get('model'), p.get('status'), p.get('assigned_to'), 
-                format_cpf(p.get('cpf')), p.get('identificador'), p.get('dominio'), 
+                format_cpf(p.get('cpf')), p.get('nota_fiscal'), p.get('identificador'), p.get('dominio'), 
                 p.get('host'), p.get('endereco_fisico'), p.get('cpu'), p.get('ram'), 
                 p.get('storage'), p.get('sistema'), p.get('licenca'), p.get('anydesk'), 
                 p.get('setor'), p.get('ip'), p.get('mac'), format_date(p.get('date_registered'))
@@ -1246,7 +1254,7 @@ class App(tk.Tk):
             row_values = (
                 h.get("item_id"), h.get("operador"), h.get("operation"), 
                 format_date(h.get("data_operacao")), h.get("tipo"), h.get("marca"), 
-                h.get("modelo"), h.get("identificador"), h.get("usuario"), 
+                h.get("modelo"), h.get("nota_fiscal"), h.get("identificador"), h.get("usuario"), 
                 format_cpf(h.get("cpf")), h.get("cargo"), h.get("center_cost"), 
                 h.get("revenda")
             )
