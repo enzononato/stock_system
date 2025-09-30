@@ -8,18 +8,21 @@ main.spec
 /terms
 
 database_mysql.py
-# Crie esse arquivo acima e coloque esse código e substitua com seus dados
-#
-# import mysql.connector
-#
-# DB_CONFIG = {
-#    "host": "localhost",
-#    "user": "user",          <<< usuário
-#    "password": "senha",     <<< coloque a senha aqui
-#    "database": "db_name"    <<< nome do banco
-# }
-#
-# def get_connection():
-#    return mysql.connector.connect(**DB_CONFIG)
+
+"""
+import pymysql
+
+DB_CONFIG = {
+    "host": "localhost",
+    "user": "seu_usuario",        # Substitua pelo seu usuário do MySQL
+    "password": "sua_senha",           # Substitua pela sua senha
+    "database": "nome_do_banco",      # Substitua pelo nome do seu banco de dados
+    "charset": "utf8mb4",
+    "cursorclass": pymysql.cursors.DictCursor
+}
+
+def get_connection():
+    return pymysql.connect(**DB_CONFIG)
 
 
+"""
