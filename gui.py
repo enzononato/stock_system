@@ -1185,17 +1185,19 @@ class App(tk.Tk):
             messagebox.showerror("Erro no Estorno", msg)
 
 
+# Em gui.py, substitua a função cmd_generate_term inteira:
+
     def cmd_generate_term(self):
-        # AGORA, a seleção vem da tabela de PENDENTES
         selected = self.tree_terms_pending.selection()
         if not selected:
-            self.lbl_terms.config(text="Selecione um empréstimo pendente na tabela para gerar o termo.", style='Danger.TLabel')
+            messagebox.showwarning("Atenção", "Selecione um empréstimo pendente na tabela para gerar o termo.")
             return
 
         values = self.tree_terms_pending.item(selected[0])["values"]
         pid, user = int(values[0]), values[3]
         
         ok, result = self.inv.generate_term(pid, user)
+        
         if ok:
             self.lbl_terms.config(text=f"Termo gerado: {os.path.basename(result)}", style='Success.TLabel')
             if messagebox.askyesno("Sucesso", f"Termo gerado em:\n{result}\n\nDeseja abri-lo agora?"):
@@ -1204,8 +1206,8 @@ class App(tk.Tk):
                 except Exception as e:
                     messagebox.showerror("Erro ao Abrir", f"Não foi possível abrir o arquivo automaticamente:\n{e}")
         else:
-            self.lbl_terms.config(text=f"Erro: {result}", style='Danger.TLabel')
-            
+            messagebox.showerror("Erro ao Gerar Termo", result)
+            self.lbl_terms.config(text=f"Erro: {result}", style='Danger.TLabel')            
             
     # --- Comandos e Ações da Aba Usuários (NOVOS) ---
 

@@ -484,15 +484,25 @@ class InventoryDBManager:
 
     def generate_term(self, item_id, user):
         item = self.find(item_id)
-        if not item: return False, "Equipamento não encontrado."
-        if item["status"] != "Indisponível" or item["assigned_to"] != user: return False, "Equipamento não está emprestado para este usuário."
+        if not item: 
+            return False, "Equipamento não encontrado."
+        
+
+        # Verifica por "Pendente", que é o estado correto para gerar um termo.
+        if item["status"] != "Pendente" or item["assigned_to"] != user:
+            return False, "Este equipamento não está pendente de empréstimo para este usuário."
+        # ----------------------------------------
+
         revenda = item.get("revenda")
         modelo_path = TERMO_MODELOS.get(revenda)
-        if not modelo_path or not os.path.exists(modelo_path): return False, f"Modelo de termo não encontrado para {revenda}."
+        if not modelo_path or not os.path.exists(modelo_path): 
+            return False, f"Modelo de termo não encontrado para {revenda}."
+            
         safe_user_name = user.replace(" ", "_")
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         saida_path = os.path.join(TERMS_DIR, f"termo_{item_id}_{safe_user_name}_{revenda}_{timestamp}.docx")
         doc = Document(modelo_path)
+        
         substituicoes = {
             "{{nome}}": user, "{{data_hoje}}": datetime.now().strftime("%d/%m/%Y"),
             "{{cpf}}": format_cpf(item.get("cpf", "")), "{{data_cadastro}}": format_date(item.get("date_registered", "")),
@@ -501,20 +511,24 @@ class InventoryDBManager:
             "{{identificador}}": f" {item.get('identificador', '')}" if item.get("identificador") else "",
             "{{nota_fiscal}}": f" {item.get('nota_fiscal', '')}" if item.get("nota_fiscal") else ""
         }
+        
         for key, value in item.items():
             placeholder = f"{{{{{key}}}}}"
             str_value = str(value) if value not in [None, ""] else ""
             if str_value: str_value = " " + str_value
             substituicoes[placeholder] = str_value
+        
         for p in doc.paragraphs:
             for chave, valor in substituicoes.items():
                 if chave in p.text: p.text = p.text.replace(chave, str(valor))
+        
         for tabela in doc.tables:
             for linha in tabela.rows:
                 for celula in linha.cells:
                     for p in celula.paragraphs:
                         for chave, valor in substituicoes.items():
                             if chave in p.text: p.text = p.text.replace(chave, str(valor))
+                            
         doc.save(saida_path)
         return True, saida_path
 
