@@ -49,6 +49,56 @@ FONT_TITLE = (FONT_FAMILY, 12, "bold")
 FONT_TREEVIEW_HEADER = (FONT_FAMILY, 10, "bold")
 FONT_TREEVIEW_ROW = (FONT_FAMILY, 10)
 
+
+# --- NOVA CLASSE PARA FRAME COM ROLAGEM ---
+class ScrollableFrame(ttk.Frame):
+    """
+    Um frame que contém uma barra de rolagem vertical.
+    Use o atributo 'scrollable_frame' para colocar seus widgets.
+    """
+    def __init__(self, container, *args, **kwargs):
+        super().__init__(container, *args, **kwargs)
+        
+        # O Canvas permite "desenhar" widgets e rolar a visualização
+        # A cor de fundo é ajustada para combinar com o fundo principal da janela
+        canvas = tk.Canvas(self, borderwidth=0, highlightthickness=0, background="#F5F5F5") # <-- ALTERAÇÃO
+
+        # A barra de rolagem que controla o Canvas
+        scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
+        
+        # Este é o frame interno que conterá os widgets.
+        # Ele também precisa ter a cor de fundo correta para parecer invisível.
+        self.scrollable_frame = ttk.Frame(canvas, style="TFrame") # <-- ALTERAÇÃO (garante o estilo correto)
+
+        # Atualiza a região de rolagem do canvas sempre que o frame interno muda de tamanho
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(
+                scrollregion=canvas.bbox("all")
+            )
+        )
+
+        # Coloca o frame interno dentro do canvas
+        canvas_window = canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        
+        # Faz o frame interno ter a mesma largura do canvas, permitindo a centralização do conteúdo
+        canvas.bind("<Configure>", lambda e: canvas.itemconfig(canvas_window, width=e.width)) # <-- ALTERAÇÃO (essencial para centralizar)
+
+        # Configura o canvas para ser controlado pela barra de rolagem
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # --- Ativa a rolagem com o mouse ---
+        self.bind_all("<MouseWheel>", lambda e: self._on_mouse_wheel(e, canvas), add="+")
+
+        # Empacota os componentes
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+    def _on_mouse_wheel(self, event, canvas):
+        # Verifica se o cursor está sobre o canvas ou um de seus filhos antes de rolar
+        if (str(event.widget).startswith(str(canvas))):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+
 class App(tk.Tk):
     def __init__(self, user_id, user, role):
         super().__init__()
@@ -155,9 +205,8 @@ class App(tk.Tk):
         # Mapeia o texto da aba para a função que o Enter deve chamar
         tab_actions = {
             "Cadastrar": self.cmd_add,
-            "Emprestar": self.cmd_issue,
-            "Devolver": self.cmd_return,
             "Remover": self.cmd_remove,
+            "Emprestar": self.cmd_issue,
             "Editar": self.cmd_save_edit,
             "Usuários": self.cmd_add_user # Na aba usuários, o Enter vai cadastrar
         }
@@ -330,12 +379,16 @@ class App(tk.Tk):
 
 
     def build_add_tab(self):
-        # Frame container principal para centralizar o conteúdo
-        container = ttk.Frame(self.tab_add)
-        container.pack(anchor="n", pady=20)
-
+        # Cria o container rolável que preenche toda a aba
+        scroll_container = ScrollableFrame(self.tab_add)
+        scroll_container.pack(fill="both", expand=True)
+        
+        # Pega o frame interno (o que realmente rola) para colocar nosso conteúdo
+        container = scroll_container.scrollable_frame
+        
+        # O resto do código permanece o mesmo, mas agora está dentro da área rolável
         frm = ttk.Frame(container)
-        frm.pack()
+        frm.pack(anchor="n", pady=20, padx=20)
 
         # Configura colunas para alinhamento
         frm.grid_columnconfigure(1, weight=1)
@@ -357,7 +410,6 @@ class App(tk.Tk):
 
         ttk.Button(frm, text="Cadastrar", command=self.cmd_add, style="Primary.TButton").grid(row=4, column=0, columnspan=2, pady=10)
 
-
     def on_tipo_selected(self, event=None):
         for widget in self.frm_dynamic.winfo_children():
             widget.destroy()
@@ -370,11 +422,13 @@ class App(tk.Tk):
         self.current_edit_id = None
         self.edit_widgets = {}
 
-        container = ttk.Frame(self.tab_edit)
-        container.pack(anchor="n", pady=20, fill="x")
+        scroll_container = ScrollableFrame(self.tab_edit)
+        scroll_container.pack(fill="both", expand=True)
+        
+        container = scroll_container.scrollable_frame
         
         frm = ttk.Frame(container)
-        frm.pack(fill="x")
+        frm.pack(anchor="n", pady=20, padx=20, fill="x")
 
         frm_select = ttk.Frame(frm)
         frm_select.pack(fill="x", pady=5)
@@ -442,26 +496,58 @@ class App(tk.Tk):
 
 
     def build_return_tab(self):
-        container = ttk.Frame(self.tab_return)
-        container.pack(anchor="n", pady=20)
+        # Variáveis para guardar os caminhos dos anexos
+        self.signed_return_term_path = None
+        
+        # Usamos nossa classe rolável para toda a aba
+        scroll_container = ScrollableFrame(self.tab_return)
+        scroll_container.pack(fill="both", expand=True)
 
-        frm = ttk.Frame(container)
-        frm.pack()
-        frm.grid_columnconfigure(1, weight=1)
+        # Todo o conteúdo vai dentro do 'scrollable_frame'
+        tab = scroll_container.scrollable_frame
+        
+        # --- Frame Superior: Empréstimos Ativos (para gerar termo) ---
+        frm_active = ttk.LabelFrame(tab, text=" Empréstimos Ativos (Para Gerar Termo de Devolução) ", padding=10)
+        frm_active.pack(fill="x", expand=False, padx=10, pady=(10, 5))
 
-        ttk.Label(frm, text="Selecione aparelho:").grid(row=0, column=0, sticky='e', padx=5, pady=5)
-        self.cb_return = ttk.Combobox(frm, state='readonly')
-        self.cb_return.grid(row=0, column=1, pady=5, padx=5, sticky="ew")
+        cols_active = ("ID", "Tipo", "Marca", "Usuário", "CPF", "Data Empréstimo", "Revenda")
+        self.tree_return_active = ttk.Treeview(frm_active, columns=cols_active, show="headings", height=8)
+        self.tree_return_active.pack(fill="x", expand=True)
+        for c in cols_active:
+            self.tree_return_active.heading(c, text=c, anchor="w")
+        self.tree_return_active.column("ID", width=50, stretch=False)
+        self.tree_return_active.column("Usuário", width=200)
 
-        ttk.Label(frm, text="Data Devolução (dd/mm/aaaa):").grid(row=1, column=0, sticky='e', padx=5, pady=5)
-        self.e_date_return = ttk.Entry(frm)
-        self.e_date_return.grid(row=1, column=1, pady=5, padx=5, sticky="ew")
-        self.e_date_return.bind("<KeyRelease>", lambda e: self.on_date_entry(e, self.e_date_return))
+        frm_active_actions = ttk.Frame(frm_active)
+        frm_active_actions.pack(fill="x", pady=(10, 0))
+        
+        ttk.Button(frm_active_actions, text="Gerar Termo de Devolução", command=self.cmd_generate_and_initiate_return, style="Primary.TButton").pack(side="left")
 
-        self.lbl_ret = ttk.Label(frm, text="", anchor="center")
-        self.lbl_ret.grid(row=2, column=0, columnspan=2, pady=10, sticky="ew")
+        # --- Frame Inferior: Devoluções Pendentes ---
+        frm_pending = ttk.LabelFrame(tab, text=" Devoluções Pendentes (Aguardando Anexo do Termo Assinado) ", padding=10)
+        frm_pending.pack(fill="x", expand=False, padx=10, pady=(5, 10))
+        
+        cols_pending = ("ID", "Tipo", "Marca", "Usuário", "CPF", "Data Empréstimo", "Revenda")
+        self.tree_return_pending = ttk.Treeview(frm_pending, columns=cols_pending, show="headings", height=8)
+        self.tree_return_pending.pack(fill="both", expand=True)
+        for c in cols_pending:
+            self.tree_return_pending.heading(c, text=c, anchor="w")
+        self.tree_return_pending.column("ID", width=50, stretch=False)
+        self.tree_return_pending.column("Usuário", width=200)
+        
+        # Ações para pendentes
+        frm_pending_actions = ttk.Frame(frm_pending)
+        frm_pending_actions.pack(fill="x", pady=(10, 0))
+        
+        ttk.Button(frm_pending_actions, text="Anexar Termo de Devolução Assinado (PDF)...", command=self.select_signed_return_term_attachment).pack(side="left")
+        self.lbl_signed_return_term = ttk.Label(frm_pending_actions, text=" Nenhum arquivo selecionado.", width=40)
+        self.lbl_signed_return_term.pack(side="left", padx=10)
 
-        ttk.Button(frm, text="Devolver", command=self.cmd_return, style="Primary.TButton").grid(row=3, column=0, columnspan=2, pady=10)
+        ttk.Button(frm_pending_actions, text="Confirmar Devolução", command=self.cmd_confirm_return, style="Success.TButton").pack(side="left", padx=(10,0))
+        
+        # Label para mensagens
+        self.lbl_ret = ttk.Label(tab, text="", anchor="center")
+        self.lbl_ret.pack(pady=5, fill="x")
 
     def build_remove_tab(self):
         container = ttk.Frame(self.tab_remove)
@@ -1102,20 +1188,69 @@ class App(tk.Tk):
             messagebox.showinfo("Status: Pendente", "Empréstimo iniciado!\n\nVá para a aba 'Termos' para gerar o termo de responsabilidade e confirmar o empréstimo.")
             self.update_all_views()
 
-    def cmd_return(self, event=None):
-        sel = self.cb_return.get()
-        date_return = self.e_date_return.get().strip()
-        if not (sel and date_return):
-            self.lbl_ret.config(text="Selecione aparelho e informe data de devolução.", style="Danger.TLabel")
+
+
+    # ANTIGA A FUNÇÃO cmd_return REMOVIDA (ATO DE DEVOLUÇÃO SÃO AS PRÓXIMAS 4 FUNCOES)
+
+    def cmd_generate_and_initiate_return(self):
+        selected = self.tree_return_active.selection()
+        if not selected:
+            messagebox.showwarning("Atenção", "Selecione um empréstimo ativo na lista para gerar o termo.")
             return
+
+        item_id = int(self.tree_return_active.item(selected[0])["values"][0])
+        
+        # Chama a nova função única do backend
+        ok, result = self.inv.generate_and_initiate_return(item_id, self.logged_user)
+        
+        if ok:
+            self.lbl_ret.config(text=f"Termo de devolução gerado. Status alterado para 'Pendente Devolução'.", style='Success.TLabel')
+            self.update_all_views() # Atualiza as listas
             
-        pid = int(sel.split(' - ', 1)[0])
-        ok, msg = self.inv.ret(pid, date_return, self.logged_user)
+            # Pergunta se o usuário quer abrir o arquivo gerado
+            if messagebox.askyesno("Sucesso", f"Termo gerado em:\n{result}\n\nDeseja abri-lo agora?"):
+                try:
+                    os.startfile(result)
+                except Exception as e:
+                    messagebox.showerror("Erro ao Abrir", f"Não foi possível abrir o arquivo automaticamente:\n{e}")
+        else:
+            # Se der erro, mostra a mensagem e não faz mais nada
+            messagebox.showerror("Erro ao Gerar Termo", result)
+            self.lbl_ret.config(text=f"Erro: {result}", style='Danger.TLabel')
+
+    def select_signed_return_term_attachment(self):
+        file_path = filedialog.askopenfilename(
+            title="Selecione o Termo de Devolução Assinado",
+            filetypes=[("Arquivos PDF", "*.pdf")]
+        )
+        if file_path:
+            self.signed_return_term_path = file_path
+            filename = os.path.basename(file_path)
+            self.lbl_signed_return_term.config(text=f" {filename}")
+        else:
+            self.signed_return_term_path = None
+            self.lbl_signed_return_term.config(text=" Nenhum arquivo selecionado.")
+
+    def cmd_confirm_return(self):
+        selected = self.tree_return_pending.selection()
+        if not selected:
+            self.lbl_ret.config(text="Selecione uma devolução pendente na tabela para confirmar.", style='Danger.TLabel')
+            return
+
+        if not self.signed_return_term_path:
+            self.lbl_ret.config(text="É obrigatório anexar o termo de devolução assinado para confirmar.", style='Danger.TLabel')
+            return
+
+        item_id = int(self.tree_return_pending.item(selected[0])["values"][0])
+        
+        ok, msg = self.inv.confirm_return(item_id, self.logged_user, self.signed_return_term_path)
         self.lbl_ret.config(text=msg, style='Success.TLabel' if ok else 'Danger.TLabel')
         
         if ok:
-            self.e_date_return.delete(0, 'end')
+            self.signed_return_term_path = None
+            self.lbl_signed_return_term.config(text=" Nenhum arquivo selecionado.")
             self.update_all_views()
+            
 
     def cmd_remove(self, event=None):
         sel = self.cb_remove.get()
@@ -1406,12 +1541,15 @@ class App(tk.Tk):
                 tag = "indisp"
             elif status == "Pendente":
                 tag = "pend"
+            elif status == "Pendente Devolução":
+                tag = "pend_ret"
                 
             self.tree_stock.insert('', 'end', values=cleaned_row, tags=(tag,))
 
         self.tree_stock.tag_configure("disp", background="#7EFF9C") # Verde
         self.tree_stock.tag_configure("indisp", background="#FF7E89") # Vermelho
         self.tree_stock.tag_configure("pend", background="#FFD966") # Amarelo/Laranja
+        self.tree_stock.tag_configure("pend_ret", background="#87CEEB") # Azul Claro
 
     def update_issue_cb(self):
         items = self.inv.list_items()
@@ -1419,11 +1557,22 @@ class App(tk.Tk):
         self.cb_issue['values'] = disponiveis
         self.cb_issue.set('')
 
-    def update_return_cb(self):
-        items = self.inv.list_items()
-        indisponiveis = [f"{p['id']} - {p.get('brand') or ''} {p.get('model') or ''} ({p.get('assigned_to') or ''})" for p in items if p['status'] == 'Indisponível']
-        self.cb_return['values'] = indisponiveis
-        self.cb_return.set('')
+    def update_return_views(self):
+        """Atualiza as tabelas da aba de devolução."""
+        self.tree_return_active.delete(*self.tree_return_active.get_children())
+        self.tree_return_pending.delete(*self.tree_return_pending.get_children())
+
+        for p in self.inv.list_items():
+            row_data = (
+                p.get('id'), p.get('tipo'), p.get('brand'), p.get('assigned_to'),
+                format_cpf(p.get('cpf')), format_date(p.get('date_issued')), p.get('revenda')
+            )
+            values = tuple(v or '' for v in row_data)
+
+            if p['status'] == 'Indisponível':
+                self.tree_return_active.insert('', 'end', values=values)
+            elif p['status'] == 'Pendente Devolução':
+                self.tree_return_pending.insert('', 'end', values=values)
 
     def update_remove_cb(self):
         items = self.inv.list_items()
@@ -1477,7 +1626,7 @@ class App(tk.Tk):
         """Chama todas as funções de atualização da UI."""
         self.update_stock()
         self.update_issue_cb()
-        self.update_return_cb()
+        self.update_return_views()
         self.update_remove_cb()
         self.update_edit_cb()
         self.update_terms_table()

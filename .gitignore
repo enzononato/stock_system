@@ -2,10 +2,14 @@
 /__pycache__
 /build
 main.spec
+GestaoEstoque.spec
 /dist/terms
+/dist/notas_remocao
+/dist/termos_assinados
 /notas_remocao
 /termos_assinados
-/terms
+/termos_devolucao_assinados
+
 
 database_mysql.py
 

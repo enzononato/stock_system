@@ -6,7 +6,7 @@ from docx import Document
 import calendar
 
 from database_mysql import get_connection
-from config import TERMS_DIR, TERMO_MODELOS, REMOVAL_NOTES_DIR, SIGNED_TERMS_DIR
+from config import TERMS_DIR, TERMO_MODELOS, REMOVAL_NOTES_DIR, SIGNED_TERMS_DIR, RETURN_TERMS_DIR, SIGNED_RETURN_TERMS_DIR, TERMO_DEVOLUCAO_MODELOS
 from utils import format_cpf, format_date
 
 
@@ -23,7 +23,7 @@ class InventoryDBManager:
             id INT AUTO_INCREMENT PRIMARY KEY,
             tipo VARCHAR(50), brand VARCHAR(100), model VARCHAR(100), identificador VARCHAR(100),
             nota_fiscal VARCHAR(9) UNIQUE,
-            status ENUM('Disponível','Indisponível', 'Pendente') DEFAULT 'Disponível',
+            status ENUM('Disponível','Indisponível', 'Pendente', 'Pendente Devolução') DEFAULT 'Disponível',
             assigned_to VARCHAR(100), cpf VARCHAR(20), revenda VARCHAR(100),
             dominio VARCHAR(50), host VARCHAR(100), endereco_fisico VARCHAR(150),
             cpu VARCHAR(100), ram VARCHAR(50), storage VARCHAR(50),
@@ -33,7 +33,15 @@ class InventoryDBManager:
             is_active TINYINT(1) DEFAULT 1 
         )
         """)
-        # ALTERADO: Adicionado 'Estorno' ao ENUM e a coluna 'is_reversed'
+        # Aplica a alteração para bancos já existentes
+        try:
+            cur.execute("ALTER TABLE items MODIFY COLUMN status ENUM('Disponível','Indisponível', 'Pendente', 'Pendente Devolução') DEFAULT 'Disponível'")
+        except pymysql.MySQLError as e:
+            # Ignora o erro se a coluna já tiver o tipo correto
+            if e.args[0] != 1060: # 1060 is "Duplicate column name" error, not quite right but catches most cases of already existing
+                 print(f"Aviso ao alterar tabela 'items': {e}")
+                 
+
         cur.execute("""
         CREATE TABLE IF NOT EXISTS history (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -45,7 +53,7 @@ class InventoryDBManager:
             center_cost VARCHAR(100),
             revenda VARCHAR(100),
             data_operacao DATE,
-            operation ENUM('Cadastro','Empréstimo','Devolução', 'Edição', 'Exclusão', 'Estorno', 'Confirmação Empréstimo') DEFAULT 'Cadastro',
+            operation ENUM('Cadastro','Empréstimo','Devolução', 'Edição', 'Exclusão', 'Estorno', 'Confirmação Empréstimo', 'Confirmação Devolução') DEFAULT 'Cadastro',
             is_reversed TINYINT(1) DEFAULT 0,
             -- Campos para guardar dados do item
             tipo VARCHAR(50),
@@ -58,6 +66,13 @@ class InventoryDBManager:
             FOREIGN KEY(item_id) REFERENCES items(id) ON DELETE SET NULL
         )
         """)
+        # Aplica a alteração para bancos já existentes
+        try:
+            cur.execute("ALTER TABLE history MODIFY COLUMN operation ENUM('Cadastro','Empréstimo','Devolução', 'Edição', 'Exclusão', 'Estorno', 'Confirmação Empréstimo', 'Confirmação Devolução') DEFAULT 'Cadastro'")
+        except pymysql.MySQLError as e:
+            if e.args[0] != 1060:
+                print(f"Aviso ao alterar tabela 'history': {e}")
+
         conn.commit()
         cur.close()
         conn.close()
@@ -260,57 +275,119 @@ class InventoryDBManager:
         cur.close()
         conn.close()
         return True, f"Empréstimo do item {item_id} confirmado com sucesso."
+    
+    
+# PROCESSO DE DEVOLUÇÃO, 2 PRÓXIMAS FUNÇÕES
+    
+    def generate_and_initiate_return(self, item_id: int, logged_user: str):
+        """
+        Gera o termo de devolução e, se bem-sucedido, inicia o processo
+        mudando o status do item para 'Pendente Devolução'.
+        """
+        item = self.find(item_id)
+        if not item or item['status'] != 'Indisponível':
+            return False, "Apenas itens com status 'Indisponível' podem ter um termo de devolução gerado."
 
+        # Pega o nome do usuário que está com o item
+        user = item.get("assigned_to")
+        if not user:
+            return False, "Não foi possível encontrar o usuário associado a este empréstimo."
 
-    def ret(self, pid, date_return, logged_user: str):
-        item = self.find(pid)
-        if not item:
-            return False, "Item não encontrado."
+        # --- Parte 1: Gerar o Termo (lógica de generate_return_term) ---
+        revenda = item.get("revenda")
+        modelo_path = TERMO_DEVOLUCAO_MODELOS.get(revenda)
+        if not modelo_path or not os.path.exists(modelo_path):
+            return False, f"Modelo de termo de devolução não encontrado para {revenda}."
+
+        safe_user_name = user.replace(" ", "_")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        saida_path = os.path.join(RETURN_TERMS_DIR, f"termo_devolucao_{item_id}_{safe_user_name}_{revenda}_{timestamp}.docx")
+        doc = Document(modelo_path)
+        
+        substituicoes = {
+            "{{nome}}": user, "{{data_hoje}}": datetime.now().strftime("%d/%m/%Y"),
+            "{{cpf}}": format_cpf(item.get("cpf", "")),
+            "{{data_emprestimo}}": format_date(item.get("date_issued", "")), "{{marca}}": f" {item.get('brand', '')}" if item.get("brand") else "",
+            "{{modelo}}": f" {item.get('model', '')}" if item.get("model") else "", "{{tipo}}": item.get("tipo", ""),
+            "{{identificador}}": f" {item.get('identificador', '')}" if item.get("identificador") else "",
+            "{{nota_fiscal}}": f" {item.get('nota_fiscal', '')}" if item.get("nota_fiscal") else ""
+        }
+        
+        try:
+            for p in doc.paragraphs:
+                for chave, valor in substituicoes.items():
+                    if chave in p.text: p.text = p.text.replace(chave, str(valor))
+            
+            for tabela in doc.tables:
+                for linha in tabela.rows:
+                    for celula in linha.cells:
+                        for p in celula.paragraphs:
+                            for chave, valor in substituicoes.items():
+                                if chave in p.text: p.text = p.text.replace(chave, str(valor))
+            doc.save(saida_path)
+        except Exception as e:
+            return False, f"Erro ao salvar o documento do termo: {e}"
+
+        # --- Parte 2: Iniciar a Devolução (lógica de initiate_return) ---
+        conn = get_connection()
+        cur = conn.cursor()
+        
+        cur.execute("UPDATE items SET status='Pendente Devolução' WHERE id=%s", (item_id,))
+        
+        cur.execute("""
+            INSERT INTO history (item_id, operador, data_operacao, operation)
+            VALUES (%s, %s, %s, 'Devolução')
+        """, (item_id, logged_user, datetime.now().strftime("%Y-%m-%d")))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        # Se tudo deu certo, retorna True e o caminho do arquivo gerado
+        return True, saida_path
+
+    def confirm_return(self, item_id: int, logged_user: str, signed_return_term_path: str):
+        """
+        Finaliza a devolução, anexa o termo e muda o status para Disponível.
+        """
+        item = self.find(item_id)
+        if not item or item['status'] != 'Pendente Devolução':
+            return False, "Apenas itens com status 'Pendente Devolução' podem ser confirmados."
 
         try:
-            dt_return = datetime.strptime(date_return, "%d/%m/%Y")
-        except ValueError:
-            return False, "Data de devolução inválida (use dd/mm/aaaa)."
-        
-        if dt_return.date() > datetime.now().date():
-            return False, "A data de devolução não pode ser no futuro."
-
-        if item.get('date_issued') and dt_return.date() < item['date_issued']:
-            data_formatada = format_date(str(item['date_issued']))
-            return False, f"Data de devolução não pode ser anterior ao empréstimo ({data_formatada})."
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            original_filename = os.path.basename(signed_return_term_path)
+            new_filename = f"termo_devolucao_{item_id}_{timestamp}_{original_filename}"
+            destination_path = os.path.join(SIGNED_RETURN_TERMS_DIR, new_filename)
+            shutil.copy(signed_return_term_path, destination_path)
+        except Exception as e:
+            return False, f"Erro ao processar o termo de devolução assinado: {e}"
 
         conn = get_connection()
         cur = conn.cursor(pymysql.cursors.DictCursor)
-        
-        cur.execute("""
-            SELECT usuario, cpf, cargo, center_cost, revenda FROM history
-            WHERE item_id = %s AND operation = 'Empréstimo'
-            ORDER BY data_operacao DESC LIMIT 1
-        """, (pid,))
-        last_loan_details = cur.fetchone() or {}
 
+        # Atualiza o status do item para Disponível e limpa os dados do usuário
         cur.execute("""
-            UPDATE items SET status='Disponível', assigned_to=NULL, cpf=NULL, date_issued=NULL WHERE id=%s
-        """, (pid,))
+            UPDATE items SET status='Disponível', assigned_to=NULL, cpf=NULL, date_issued=NULL 
+            WHERE id=%s
+        """, (item_id,))
 
+        # Cria o novo registro de "Confirmação Devolução" no histórico
         cur.execute("""
-            INSERT INTO history (item_id, operador, usuario, cpf, cargo, center_cost, revenda, data_operacao, operation)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'Devolução')
+            INSERT INTO history (item_id, operador, data_operacao, operation, termo_assinado_anexo)
+            VALUES (%s, %s, %s, 'Confirmação Devolução', %s)
         """, (
-            pid,
+            item_id,
             logged_user,
-            last_loan_details.get('usuario'),
-            last_loan_details.get('cpf'),
-            last_loan_details.get('cargo'),
-            last_loan_details.get('center_cost'),
-            last_loan_details.get('revenda'),
-            dt_return.strftime("%Y-%m-%d")
+            datetime.now().strftime("%Y-%m-%d"),
+            destination_path
         ))
 
         conn.commit()
         cur.close()
         conn.close()
-        return True, f"Aparelho {pid} devolvido."
+        return True, f"Devolução do item {item_id} confirmada com sucesso."
+
 
     def list_history(self):
         """Lista histórico de TODAS as operações, tratando itens excluídos."""
@@ -430,28 +507,39 @@ class InventoryDBManager:
             op = entry_to_reverse['operation']
             item_id = entry_to_reverse['item_id']
 
-            # Reverte o estado do item no estoque
-            if op == 'Empréstimo':
+            # --- LÓGICA DE REVERSÃO ATUALIZADA ---
+            if op == 'Confirmação Empréstimo':
+                cur.execute("UPDATE items SET status='Pendente' WHERE id = %s", (item_id,))
+            
+            elif op == 'Empréstimo':
                 cur.execute("UPDATE items SET status='Disponível', assigned_to=NULL, cpf=NULL, date_issued=NULL WHERE id = %s", (item_id,))
             
+            elif op == 'Confirmação Devolução':
+                # Reverte o item para 'Pendente Devolução', mas mantém os dados do usuário
+                # pois ele ainda está "associado" ao item até a devolução ser estornada por completo.
+                cur.execute("UPDATE items SET status='Pendente Devolução' WHERE id = %s", (item_id,))
+            
             elif op == 'Devolução':
+                # Encontra os dados do último empréstimo válido para restaurar o estado
                 cur.execute("""
                     SELECT usuario, cpf, data_operacao FROM history
-                    WHERE item_id = %s AND operation = 'Empréstimo' AND id < %s AND is_reversed = 0
+                    WHERE item_id = %s AND operation IN ('Empréstimo', 'Confirmação Empréstimo') AND id < %s AND is_reversed = 0
                     ORDER BY data_operacao DESC, id DESC LIMIT 1
                 """, (item_id, history_id))
                 last_loan = cur.fetchone()
 
                 if not last_loan:
+                    conn.rollback()
                     return False, "Não foi possível encontrar o empréstimo original para reverter a devolução."
 
                 cur.execute("UPDATE items SET status='Indisponível', assigned_to=%s, cpf=%s, date_issued=%s WHERE id = %s", 
                             (last_loan['usuario'], last_loan['cpf'], last_loan['data_operacao'], item_id))
             
             elif op == 'Cadastro':
-                 # Em vez de deletar, apenas marca como inativo
                 cur.execute("UPDATE items SET is_active = 0 WHERE id = %s", (item_id,))
+            
             else:
+                conn.rollback()
                 return False, f"Não é possível estornar uma operação do tipo '{op}'."
 
             # Marca a operação original como estornada
@@ -462,7 +550,7 @@ class InventoryDBManager:
                 INSERT INTO history (item_id, operador, data_operacao, operation, usuario, cpf, cargo, center_cost, revenda)
                 VALUES (%s, %s, %s, 'Estorno', %s, %s, %s, %s, %s)
             """, (
-                item_id, logged_user, datetime.now().strftime("%Y-%m-%d"),
+                item_id, logged_user, datetime.now(),
                 entry_to_reverse.get('usuario'), entry_to_reverse.get('cpf'),
                 entry_to_reverse.get('cargo'), entry_to_reverse.get('center_cost'),
                 entry_to_reverse.get('revenda')
@@ -486,7 +574,9 @@ class InventoryDBManager:
         
 
         # Verifica por "Pendente", que é o estado correto para gerar um termo.
-        if item["status"] != "Pendente" or item["assigned_to"] != user:
+        assigned_user = str(item.get("assigned_to", "")).strip()
+        user_param = str(user).strip()
+        if item["status"] != "Pendente" or assigned_user != user_param:
             return False, "Este equipamento não está pendente de empréstimo para este usuário."
         # ----------------------------------------
 
@@ -495,7 +585,7 @@ class InventoryDBManager:
         if not modelo_path or not os.path.exists(modelo_path): 
             return False, f"Modelo de termo não encontrado para {revenda}."
             
-        safe_user_name = user.replace(" ", "_")
+        safe_user_name = user_param.replace(" ", "_")
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         saida_path = os.path.join(TERMS_DIR, f"termo_{item_id}_{safe_user_name}_{revenda}_{timestamp}.docx")
         doc = Document(modelo_path)

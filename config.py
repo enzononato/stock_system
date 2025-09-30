@@ -14,6 +14,8 @@ def resource_path(relative_path):
 TERMS_DIR = 'terms'
 REMOVAL_NOTES_DIR = 'notas_remocao' # Diretório para notas de remoção
 SIGNED_TERMS_DIR = 'termos_assinados' # Diretório para termos assinados
+RETURN_TERMS_DIR = 'termos_devolucao' # Diretório para os termos de devolução gerados
+SIGNED_RETURN_TERMS_DIR = 'termos_devolucao_assinados' # Diretório para os termos de devolução assinados
 
 
 if not os.path.exists(TERMS_DIR):
@@ -24,6 +26,12 @@ if not os.path.exists(REMOVAL_NOTES_DIR):
 
 if not os.path.exists(SIGNED_TERMS_DIR):
     os.makedirs(SIGNED_TERMS_DIR)
+    
+if not os.path.exists(RETURN_TERMS_DIR):
+    os.makedirs(RETURN_TERMS_DIR)
+
+if not os.path.exists(SIGNED_RETURN_TERMS_DIR):
+    os.makedirs(SIGNED_RETURN_TERMS_DIR)
 
 # Usuário "Mãe" e senha
 ADMIN_USER = "mãe"
@@ -57,4 +65,14 @@ TERMO_MODELOS = {
     "Revalle Paulo Afonso": resource_path("modelos/termo_pauloafonso.docx"),
     "Revalle Alagoinhas": resource_path("modelos/termo_alagoinhas.docx"),
     "Revalle Serrinha": resource_path("modelos/termo_serrinha.docx"),
+}
+
+TERMO_DEVOLUCAO_MODELOS = {
+    "Revalle Juazeiro": resource_path("modelos/devolucao/termo_devolucao_juazeiro.docx"),
+    "Revalle Bonfim": resource_path("modelos/devolucao/termo_devolucao_bonfim.docx"),
+    "Revalle Petrolina": resource_path("modelos/devolucao/termo_devolucao_petrolina.docx"),
+    "Revalle Ribeira": resource_path("modelos/devolucao/termo_devolucao_ribeira.docx"),
+    "Revalle Paulo Afonso": resource_path("modelos/devolucao/termo_devolucao_pauloafonso.docx"),
+    "Revalle Alagoinhas": resource_path("modelos/devolucao/termo_devolucao_alagoinhas.docx"),
+    "Revalle Serrinha": resource_path("modelos/devolucao/termo_devolucao_serrinha.docx"),
 }
