@@ -338,70 +338,67 @@ class InventoryDBManager:
         return rows
 
 
+
     def generate_monthly_report(self, ano, mes):
-        """Relatório consolidado de um mês, usando Funções de Janela para maior precisão."""
+        """Relatório consolidado de um mês, que agora diferencia empréstimos pendentes, confirmados e devolvidos."""
         conn = get_connection()
         cur = conn.cursor(pymysql.cursors.DictCursor)
         
-        # ALTERADO: Adicionado "WHERE is_reversed = 0" para ignorar operações estornadas
+        # A nova query usa subconsultas para encontrar as datas de confirmação e devolução
+        # associadas a cada registro de empréstimo.
         sql = """
-            WITH EventosOrdenados AS (
+            WITH EmprestimosDoMes AS (
                 SELECT
-                    id, item_id, operation, data_operacao, operador, usuario,
-                    cpf, cargo, center_cost, revenda,
-                    LEAD(operation, 1) OVER (PARTITION BY item_id ORDER BY data_operacao, id) as proxima_operacao,
-                    LEAD(data_operacao, 1) OVER (PARTITION BY item_id ORDER BY data_operacao, id) as proxima_data
+                    h.id AS history_id,
+                    h.item_id, h.operador, h.usuario, h.cpf, h.cargo, h.center_cost, h.revenda,
+                    h.data_operacao AS data_emprestimo,
+                    
+                    (SELECT MIN(hc.data_operacao) FROM history hc 
+                     WHERE hc.item_id = h.item_id AND hc.operation = 'Confirmação Empréstimo' 
+                     AND hc.id > h.id AND hc.is_reversed = 0) AS data_confirmacao,
+                     
+                    (SELECT MIN(hd.data_operacao) FROM history hd 
+                     WHERE hd.item_id = h.item_id AND hd.operation = 'Devolução' 
+                     AND hd.id > h.id AND hd.is_reversed = 0) AS data_devolucao
                 FROM
-                    history
-                WHERE is_reversed = 0
-            ),
-            RelatorioEmprestimos AS (
-                SELECT
-                    e.id as history_id,
-                    e.item_id, e.operador, e.usuario, e.cpf, e.cargo, e.center_cost,
-                    e.revenda, e.data_operacao, 'Empréstimo' AS operation_type,
-                    CASE
-                        WHEN e.proxima_operacao = 'Devolução' THEN e.proxima_data
-                        ELSE NULL
-                    END AS data_devolucao
-                FROM
-                    EventosOrdenados e
+                    history h
                 WHERE
-                    e.operation = 'Empréstimo'
-                    AND YEAR(e.data_operacao) = %s AND MONTH(e.data_operacao) = %s
+                    h.operation = 'Empréstimo'
+                    AND h.is_reversed = 0
+                    AND YEAR(h.data_operacao) = %s AND MONTH(h.data_operacao) = %s
             )
             SELECT
-                re.history_id, re.item_id, re.operador, re.usuario, re.cpf, re.cargo, re.center_cost, re.revenda,
-                re.data_operacao, re.operation_type,
-                COALESCE(i.tipo, h.tipo) AS tipo,
-                COALESCE(i.brand, h.brand) AS brand,
-                COALESCE(i.model, h.model) AS model,
-                COALESCE(i.identificador, h.identificador) AS identificador,
-                COALESCE(i.nota_fiscal, h.nota_fiscal) AS nota_fiscal,
-                re.data_devolucao
-            FROM RelatorioEmprestimos re
-            LEFT JOIN items i ON i.id = re.item_id
-            LEFT JOIN history h ON h.item_id = re.item_id AND h.id = (SELECT MAX(id) FROM history WHERE item_id = re.item_id)
+                em.*,
+                'Empréstimo' AS operation_type,
+                COALESCE(i.tipo, h_item.tipo) AS tipo,
+                COALESCE(i.brand, h_item.brand) AS brand,
+                COALESCE(i.model, h_item.model) AS model,
+                COALESCE(i.identificador, h_item.identificador) AS identificador,
+                COALESCE(i.nota_fiscal, h_item.nota_fiscal) AS nota_fiscal
+            FROM EmprestimosDoMes em
+            LEFT JOIN items i ON i.id = em.item_id
+            LEFT JOIN history h_item ON h_item.id = em.history_id
 
             UNION ALL
 
             SELECT
-                cad.id as history_id,
-                cad.item_id, cad.operador, NULL, NULL, NULL, NULL, i.revenda,
-                cad.data_operacao, 'Cadastro' AS operation_type,
+                cad.id as history_id, cad.item_id, cad.operador, NULL, NULL, NULL, NULL, i.revenda,
+                cad.data_operacao AS data_emprestimo,
+                NULL AS data_confirmacao,
+                NULL AS data_devolucao,
+                'Cadastro' AS operation_type,
                 COALESCE(i.tipo, cad.tipo) AS tipo,
                 COALESCE(i.brand, cad.brand) AS brand,
                 COALESCE(i.model, cad.model) AS model,
                 COALESCE(i.identificador, cad.identificador) AS identificador,
-                COALESCE(i.nota_fiscal, cad.nota_fiscal) AS nota_fiscal,
-                NULL AS data_devolucao
+                COALESCE(i.nota_fiscal, cad.nota_fiscal) AS nota_fiscal
             FROM history cad
             LEFT JOIN items i ON i.id = cad.item_id
             WHERE cad.operation = 'Cadastro'
             AND cad.is_reversed = 0
             AND YEAR(cad.data_operacao) = %s AND MONTH(cad.data_operacao) = %s
             
-            ORDER BY data_operacao, item_id;
+            ORDER BY data_emprestimo, item_id;
         """
         cur.execute(sql, (ano, mes, ano, mes))
         rows = cur.fetchall()

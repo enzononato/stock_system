@@ -1089,9 +1089,8 @@ class App(tk.Tk):
             self.lbl_remove_attachment.config(text=" Nenhum arquivo selecionado.")
             self.update_all_views()
 
+
     def cmd_generate_report(self):
-        # ALTERADO: A lógica para determinar se um empréstimo virou devolução foi movida para a query SQL.
-        # Agora o frontend apenas exibe os dados que vêm do banco.
         self.tree_report.heading("Data Empréstimo", text="Data Inicial")
 
         for i in self.tree_report.get_children():
@@ -1109,18 +1108,25 @@ class App(tk.Tk):
         
         for log in report_data:
             op_type = log.get('operation_type')
+            
             data_devolucao = log.get('data_devolucao')
+            data_confirmacao = log.get('data_confirmacao')
             
             operation_display = ''
-            data_inicial_display = format_date(log.get('data_operacao'))
+            data_inicial_display = format_date(log.get('data_emprestimo'))
             data_devolucao_display = ''
 
             if op_type == 'Empréstimo':
-                # Agora a query já nos diz se foi devolvido ou não
-                operation_display = "Devolvido" if data_devolucao else "Emprestado"
-                data_devolucao_display = format_date(data_devolucao) if data_devolucao else ''
+                if data_devolucao:
+                    operation_display = "Devolvido"
+                    data_devolucao_display = format_date(data_devolucao)
+                elif data_confirmacao:
+                    operation_display = "Confirmado"
+                else:
+                    operation_display = "Pendente"
             elif op_type == 'Cadastro':
                 operation_display = "Cadastro"
+            # -----------------------------
             
             row_values = (
                 log.get('history_id'), log.get('item_id'), log.get('operador'), log.get('tipo'), log.get('brand'),
