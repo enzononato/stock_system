@@ -65,6 +65,12 @@ class App(tk.Tk):
         self.logged_user_id = user_id
         self.logged_user = user
         self.role = role
+        
+        # Registra a função de validação para ser usada pelo Tcl/Tk
+        # %P é o valor do campo APÓS a edição
+        # %L é o comprimento máximo que passaremos (para nota fiscal é o '9')
+        vcmd = (self.register(self._validate_numeric_input), '%P', '9')
+        self.numeric_validation = vcmd
 
         self.setup_styles()
         self.create_widgets()
@@ -217,6 +223,24 @@ class App(tk.Tk):
 
 
         self.update_all_views()
+        
+
+    def _validate_numeric_input(self, P, max_len):
+        """
+        Função de validação para Tcl/Tk.
+        P: O valor que o Entry terá APÓS a edição.
+        max_len: O comprimento máximo permitido.
+        """
+        # Permite que o campo fique vazio (se o usuário apagar tudo)
+        if P == "":
+            return True
+        
+        # Verifica se o novo valor é numérico E se está dentro do limite de tamanho
+        if P.isdigit() and len(P) <= int(max_len):
+            return True
+        
+        # Se não atender às condições, rejeita a alteração
+        return False
 
     # ==========================================================
     # Helper: ordenar colunas da treeview
@@ -826,7 +850,15 @@ class App(tk.Tk):
         
         # Adicionando o campo Nota Fiscal como um campo comum
         ttk.Label(parent_frame, text="Nota Fiscal:").grid(row=2, column=0, sticky="e", pady=5, padx=5)
-        e_nota_fiscal = ttk.Entry(parent_frame)
+        
+        # CUIDADO: É importante passar o `validatecommand` com o comprimento correto.
+        # Se precisar de outro campo com outro limite, você teria que registrar outro comando.
+        vcmd_nf = (self.register(self._validate_numeric_input), '%P', '9')
+        
+        e_nota_fiscal = ttk.Entry(parent_frame, 
+                                  validate="key", # Valida a cada tecla pressionada
+                                  validatecommand=vcmd_nf) # Usa nosso comando registrado
+                                  
         e_nota_fiscal.grid(row=2, column=1, pady=5, padx=5, sticky="ew")
         e_nota_fiscal.insert(0, item_data.get('nota_fiscal') or '')
         e_nota_fiscal.bind("<KeyRelease>", self.on_widget_interaction)
@@ -900,8 +932,12 @@ class App(tk.Tk):
         erros = []
         if not dados.get("brand"): erros.append((self.add_widgets['brand'], "Informe a marca."))
         if not dados.get("revenda"): erros.append((self.add_widgets['revenda'], "Informe o campo Revenda."))
-        if not dados.get("nota_fiscal"): erros.append((self.add_widgets['nota_fiscal'], "Informe a Nota Fiscal."))
-        
+        nota_fiscal = dados.get("nota_fiscal")
+        if not nota_fiscal:
+            erros.append((self.add_widgets['nota_fiscal'], "Informe a Nota Fiscal."))
+        elif not nota_fiscal.isdigit() or len(nota_fiscal) != 9:
+            erros.append((self.add_widgets['nota_fiscal'], "A Nota Fiscal deve conter exatamente 9 números."))
+            
         if tipo in ["Celular", "Tablet"]:
             if not dados.get("model"): erros.append((self.add_widgets['model'], "Informe o modelo."))
             if not dados.get("identificador"): erros.append((self.add_widgets['identificador'], "Informe o Identificador (IMEI/Nº de Série)."))
@@ -970,13 +1006,39 @@ class App(tk.Tk):
         self.current_edit_id = item_id
         self.edit_widgets = self._create_dynamic_form(self.frm_edit_dynamic, item.get('tipo'), item)
 
+
     def cmd_save_edit(self, event=None):
         if self.current_edit_id is None:
             messagebox.showerror("Erro", "Nenhum item foi carregado para edição.")
             return
 
+        # Limpa estilos de erro anteriores
+        for widget in self.edit_widgets.values():
+            style_name = str(widget.cget('style')).replace('Error.', '')
+            widget.configure(style=style_name)
+
         new_data = {key: widget.get().strip() for key, widget in self.edit_widgets.items() if widget.winfo_exists()}
         
+        erros = []
+        if not new_data.get("brand"): erros.append((self.edit_widgets['brand'], "Informe a marca."))
+        if not new_data.get("revenda"): erros.append((self.edit_widgets['revenda'], "Informe a revenda."))
+        
+        nota_fiscal = new_data.get("nota_fiscal")
+        if not nota_fiscal:
+            erros.append((self.edit_widgets['nota_fiscal'], "Informe a Nota Fiscal."))
+        elif not nota_fiscal.isdigit() or len(nota_fiscal) != 9:
+            erros.append((self.edit_widgets['nota_fiscal'], "A Nota Fiscal deve conter exatamente 9 números."))
+
+        if erros:
+            for widget, _ in erros:
+                widget_class = str(widget.winfo_class())
+                if 'TCombobox' in widget_class: widget.configure(style="Error.TCombobox")
+                elif 'TEntry' in widget_class: widget.configure(style="Error.TEntry")
+            
+            self.lbl_edit.config(text=erros[0][1], style="Danger.TLabel") # Mostra o primeiro erro
+            return
+
+
         ok, msg = self.inv.update_item(self.current_edit_id, new_data, self.logged_user)
         self.lbl_edit.config(text=msg, style="Success.TLabel" if ok else "Danger.TLabel")
         
