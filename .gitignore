@@ -3,6 +3,9 @@
 /build
 main.spec
 /dist/terms
+/notas_remocao
+/termos_assinados
+/terms
 
 database_mysql.py
 # Crie esse arquivo acima e coloque esse código e substitua com seus dados
