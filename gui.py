@@ -99,6 +99,7 @@ class ScrollableFrame(ttk.Frame):
         if (str(event.widget).startswith(str(canvas))):
             canvas.yview_scroll(int(-1*(event.delta/120)), "units")
 
+
 class App(tk.Tk):
     def __init__(self, user_id, user, role):
         super().__init__()
@@ -238,10 +239,14 @@ class App(tk.Tk):
         self.tab_terms   = ttk.Frame(notebook, padding=15)
         self.tab_graphs  = ttk.Frame(notebook, padding=15)
         self.tab_users   = ttk.Frame(notebook, padding=15)
+        self.tab_peripherals = ttk.Frame(notebook, padding=15)
+        self.tab_linking     = ttk.Frame(notebook, padding=15)
 
         notebook.add(self.tab_stock,  text="Estoque")
         notebook.add(self.tab_add,    text="Cadastrar")
         notebook.add(self.tab_edit,   text="Editar")
+        notebook.add(self.tab_peripherals, text="Periféricos")
+        notebook.add(self.tab_linking,text="Vincular")
         notebook.add(self.tab_issue,  text="Emprestar")
         notebook.add(self.tab_return, text="Devolver")
         notebook.add(self.tab_remove, text="Remover")
@@ -254,6 +259,8 @@ class App(tk.Tk):
         self.build_stock_tab()
         self.build_add_tab()
         self.build_edit_tab()
+        self.build_peripherals_tab()
+        self.build_linking_tab()
         self.build_issue_tab()
         self.build_return_tab()
         self.build_remove_tab()
@@ -342,10 +349,12 @@ class App(tk.Tk):
         ttk.Button(frm_filters, text="Exportar CSV", command=lambda: self.exportar_csv(self.tree_stock, "Exportar Estoque", "estoque"), style="Secondary.TButton").grid(row=0, column=10, padx=5, pady=5, sticky="e")
 
         cols = [
-            "ID", "Revenda", "Tipo", "Marca", "Modelo", "Status", "Usuário", "CPF", "Nota Fiscal",
+            "ID", "Revenda", "Tipo", "Marca", "Modelo", "Status", "Periféricos (Qtd)", "Usuário", "CPF", "Nota Fiscal",
             "Identificador", "Domínio", "Host", "Endereço Físico", "CPU",
             "RAM", "Storage", "Sistema", "Licença", "AnyDesk",
-            "Setor", "IP", "MAC", "Data Cadastro"
+            "Setor", "IP", "MAC",
+            "POE", "Qtd. Portas",
+            "Data Cadastro"
         ]
 
         tree_frame = ttk.Frame(tab)
@@ -356,6 +365,7 @@ class App(tk.Tk):
 
         col_widths = {
             "ID": 40, "Revenda": 130, "Tipo": 100, "Marca": 100, "Modelo": 120, "Status": 100,
+            "Periféricos (Qtd)": 110, "PoE": 60, "Qtd. Portas": 90,
             "Usuário": 140, "CPF": 110, "Identificador": 140, "Nota Fiscal": 100,
         }
 
@@ -394,7 +404,7 @@ class App(tk.Tk):
         frm.grid_columnconfigure(1, weight=1)
 
         ttk.Label(frm, text="Tipo de Equipamento:", font=FONT_BOLD).grid(row=0, column=0, sticky="e", padx=5, pady=(0, 10))
-        self.cb_tipo = ttk.Combobox(frm, values=["Celular", "Notebook", "Desktop", "Impressora", "Tablet"], state="readonly")
+        self.cb_tipo = ttk.Combobox(frm, values=["Celular", "Notebook", "Desktop", "Impressora", "Tablet", "Switch", "HD"], state="readonly")
         self.cb_tipo.grid(row=0, column=1, sticky="ew", padx=5, pady=(0, 10))
         self.cb_tipo.bind("<<ComboboxSelected>>", self.on_tipo_selected)
 
@@ -452,6 +462,112 @@ class App(tk.Tk):
         ttk.Button(frm, text="Salvar Alterações", command=self.cmd_save_edit, style="Primary.TButton").pack(pady=10)
         
         self.update_edit_cb()
+
+
+    def build_peripherals_tab(self):
+        tab = self.tab_peripherals
+        
+        # --- Frame Superior: Cadastro ---
+        frm_add = ttk.LabelFrame(tab, text=" Cadastrar Novo Periférico ", padding=15)
+        frm_add.pack(fill="x", pady=(0, 15))
+        
+        frm_add.grid_columnconfigure(1, weight=1)
+        frm_add.grid_columnconfigure(3, weight=1)
+
+        # Linha 1
+        ttk.Label(frm_add, text="Tipo:").grid(row=0, column=0, sticky="e", padx=5, pady=5)
+        self.cb_peri_tipo = ttk.Combobox(frm_add, state="readonly", values=["Mouse", "Teclado", "Monitor", "Headset", "Webcam", "Adaptador", "Outro"])
+        self.cb_peri_tipo.grid(row=0, column=1, sticky="ew", padx=5, pady=5)
+        
+        ttk.Label(frm_add, text="Marca:").grid(row=0, column=2, sticky="e", padx=5, pady=5)
+        self.e_peri_brand = ttk.Entry(frm_add)
+        self.e_peri_brand.grid(row=0, column=3, sticky="ew", padx=5, pady=5)
+
+        # Linha 2
+        ttk.Label(frm_add, text="Modelo:").grid(row=1, column=0, sticky="e", padx=5, pady=5)
+        self.e_peri_model = ttk.Entry(frm_add)
+        self.e_peri_model.grid(row=1, column=1, sticky="ew", padx=5, pady=5)
+        
+        ttk.Label(frm_add, text="Identificador:").grid(row=1, column=2, sticky="e", padx=5, pady=5)
+        self.e_peri_id = ttk.Entry(frm_add)
+        self.e_peri_id.grid(row=1, column=3, sticky="ew", padx=5, pady=5)
+
+        # Ações
+        frm_add_actions = ttk.Frame(frm_add)
+        frm_add_actions.grid(row=2, column=0, columnspan=4, pady=(10,0))
+        ttk.Button(frm_add_actions, text="Cadastrar Periférico", command=self.cmd_add_peripheral, style="Primary.TButton").pack(side="left")
+        self.lbl_peri_add = ttk.Label(frm_add_actions, text="")
+        self.lbl_peri_add.pack(side="left", padx=15)
+
+        # --- Frame Inferior: Lista de Periféricos ---
+        frm_list = ttk.LabelFrame(tab, text=" Lista de Periféricos ", padding=15)
+        frm_list.pack(fill="both", expand=True)
+
+        cols = ("ID", "Status", "Tipo", "Marca", "Modelo", "Identificador")
+        self.tree_peripherals = ttk.Treeview(frm_list, columns=cols, show="headings")
+        self.tree_peripherals.pack(fill="both", expand=True)
+        
+        for c in cols:
+            self.tree_peripherals.heading(c, text=c)
+        self.tree_peripherals.column("ID", width=50, stretch=False)
+        self.tree_peripherals.column("Status", width=100, stretch=False)
+
+        # Configuração de cores por status
+        self.tree_peripherals.tag_configure("disp", background="#E8F5E9") # Verde claro
+        self.tree_peripherals.tag_configure("emuso", background="#FFF9C4") # Amarelo claro
+        self.tree_peripherals.tag_configure("defeito", background="#FFEBEE", foreground="red") # Vermelho claro
+        
+    def build_linking_tab(self):
+        tab = self.tab_linking
+
+        # --- Frame de Seleção de Equipamento ---
+        frm_select = ttk.Frame(tab, padding=(0, 0, 0, 10))
+        frm_select.pack(fill="x")
+        frm_select.grid_columnconfigure(1, weight=1)
+
+        ttk.Label(frm_select, text="Selecione o Equipamento Principal:", font=FONT_BOLD).grid(row=0, column=0, sticky="e", padx=(0,10))
+        self.cb_link_equip = ttk.Combobox(frm_select, state="readonly", values=[])
+        self.cb_link_equip.grid(row=0, column=1, sticky="ew")
+        self.cb_link_equip.bind("<<ComboboxSelected>>", self.cmd_load_equipment_for_linking)
+
+        # --- Frame Principal com as duas listas ---
+        frm_main = ttk.Frame(tab)
+        frm_main.pack(fill="both", expand=True)
+        frm_main.grid_columnconfigure(0, weight=1)
+        frm_main.grid_columnconfigure(2, weight=1) # Faz as colunas das tabelas terem o mesmo peso
+
+        # Frame Esquerdo: Vinculados
+        frm_linked = ttk.LabelFrame(frm_main, text=" Periféricos Vinculados a este Equipamento ", padding=10)
+        frm_linked.grid(row=0, column=0, sticky="nsew", padx=(0,5))
+        
+        cols_linked = ("ID Vínculo", "ID Per.", "Tipo", "Marca/Modelo", "Identificador")
+        self.tree_linked_peripherals = ttk.Treeview(frm_linked, columns=cols_linked, show="headings")
+        self.tree_linked_peripherals.pack(fill="both", expand=True)
+        for c in cols_linked: self.tree_linked_peripherals.heading(c, text=c)
+        self.tree_linked_peripherals.column("ID Vínculo", width=0, stretch=False) # Oculta ID do Vínculo
+        self.tree_linked_peripherals.column("ID Per.", width=60, stretch=False)
+
+        # Frame Central: Botões de Ação
+        frm_actions = ttk.Frame(frm_main)
+        frm_actions.grid(row=0, column=1, padx=10, sticky="ns")
+        ttk.Button(frm_actions, text="< Desvincular", command=self.cmd_unlink_peripheral, style="Danger.TButton").pack(pady=5)
+        ttk.Button(frm_actions, text="Vincular >", command=self.cmd_link_peripheral, style="Success.TButton").pack(pady=5)
+        ttk.Separator(frm_actions, orient="horizontal").pack(fill="x", pady=20)
+        ttk.Button(frm_actions, text="Substituir...", command=self.cmd_replace_peripheral_dialog, style="Secondary.TButton").pack(pady=5)
+        
+        # Frame Direito: Disponíveis
+        frm_available = ttk.LabelFrame(frm_main, text=" Periféricos Disponíveis ", padding=10)
+        frm_available.grid(row=0, column=2, sticky="nsew", padx=(5,0))
+        
+        cols_avail = ("ID", "Tipo", "Marca/Modelo", "Identificador")
+        self.tree_available_peripherals = ttk.Treeview(frm_available, columns=cols_avail, show="headings")
+        self.tree_available_peripherals.pack(fill="both", expand=True)
+        for c in cols_avail: self.tree_available_peripherals.heading(c, text=c)
+        self.tree_available_peripherals.column("ID", width=60, stretch=False)
+
+        # Label de Mensagens
+        self.lbl_link_msg = ttk.Label(tab, text="Selecione um equipamento para começar.", anchor="center")
+        self.lbl_link_msg.pack(fill="x", pady=(10,0))
 
     def build_issue_tab(self):
         container = ttk.Frame(self.tab_issue)
@@ -621,8 +737,8 @@ class App(tk.Tk):
                 style="Secondary.TButton").pack(side="right", padx=5, pady=5)
 
         cols = (
-            "ID Item", "Operador", "Operação", "Data", "Tipo", "Marca", "Modelo", "Nota Fiscal",
-            "Identificador", "Usuário", "CPF", "Cargo", "Centro de Custo", "Revenda"
+            "ID Item", "Operador", "Operação", "Revenda", "Data", "Tipo", "Marca", "Modelo", "Nota Fiscal",
+            "Identificador", "Usuário", "CPF", "Cargo", "Centro de Custo"
         )
         
         tree_frame = ttk.Frame(tab)
@@ -680,7 +796,7 @@ class App(tk.Tk):
         ttk.Button(action_frm, text="Estornar Lançamento", command=self.cmd_delete_report_entry, style="Danger.TButton").pack(side="left", padx=10)
         
         # ALTERADO: Adicionada a coluna "ID Histórico" que ficará oculta
-        cols = ("ID Histórico", "ID Item", "Operador", "Tipo", "Marca", "Modelo", "Nota Fiscal", "Identificador", "Usuário", "CPF", "Operação", "Data Empréstimo", "Data Devolução", "Centro de Custo", "Cargo", "Revenda")
+        cols = ("ID Histórico", "ID Item", "Operador", "Revenda", "Tipo", "Marca", "Modelo", "Nota Fiscal", "Identificador", "Usuário", "CPF", "Operação", "Data Empréstimo", "Data Devolução", "Centro de Custo", "Cargo")
         
         tree_frame = ttk.Frame(frm)
         tree_frame.pack(fill="both", expand=True)
@@ -918,7 +1034,8 @@ class App(tk.Tk):
         
         widgets = {}
         
-        # Campos comuns
+        # --- CAMPOS COMUNS REORGANIZADOS ---
+        # Marca
         ttk.Label(parent_frame, text="Marca:").grid(row=0, column=0, sticky="e", pady=5, padx=5)
         e_brand = ttk.Entry(parent_frame)
         e_brand.grid(row=0, column=1, pady=5, padx=5, sticky="ew")
@@ -926,37 +1043,37 @@ class App(tk.Tk):
         e_brand.bind("<KeyRelease>", self.on_widget_interaction)
         widgets['brand'] = e_brand
 
-        ttk.Label(parent_frame, text="Revenda:").grid(row=1, column=0, sticky="e", pady=5, padx=5)
+        # Modelo (ADICIONADO AOS CAMPOS COMUNS)
+        ttk.Label(parent_frame, text="Modelo:").grid(row=1, column=0, sticky="e", pady=5, padx=5)
+        e_model = ttk.Entry(parent_frame)
+        e_model.grid(row=1, column=1, pady=5, padx=5, sticky="ew")
+        e_model.insert(0, item_data.get('model') or '')
+        e_model.bind("<KeyRelease>", self.on_widget_interaction)
+        widgets['model'] = e_model
+
+        # Revenda
+        ttk.Label(parent_frame, text="Revenda:").grid(row=2, column=0, sticky="e", pady=5, padx=5)
         cb_revenda = ttk.Combobox(parent_frame, values=REVENDAS_OPTIONS, state="readonly")
-        cb_revenda.grid(row=1, column=1, pady=5, padx=5, sticky="ew")
+        cb_revenda.grid(row=2, column=1, pady=5, padx=5, sticky="ew")
         cb_revenda.set(item_data.get('revenda') or '')
         cb_revenda.bind("<KeyRelease>", self.on_widget_interaction)
         cb_revenda.bind("<<ComboboxSelected>>", self.on_widget_interaction)
         widgets['revenda'] = cb_revenda
         
-        # Adicionando o campo Nota Fiscal como um campo comum
-        ttk.Label(parent_frame, text="Nota Fiscal:").grid(row=2, column=0, sticky="e", pady=5, padx=5)
-        
-        # CUIDADO: É importante passar o `validatecommand` com o comprimento correto.
-        # Se precisar de outro campo com outro limite, você teria que registrar outro comando.
+        # Nota Fiscal
+        ttk.Label(parent_frame, text="Nota Fiscal:").grid(row=3, column=0, sticky="e", pady=5, padx=5)
         vcmd_nf = (self.register(self._validate_numeric_input), '%P', '9')
-        
-        e_nota_fiscal = ttk.Entry(parent_frame, 
-                                  validate="key", # Valida a cada tecla pressionada
-                                  validatecommand=vcmd_nf) # Usa nosso comando registrado
-                                  
-        e_nota_fiscal.grid(row=2, column=1, pady=5, padx=5, sticky="ew")
+        e_nota_fiscal = ttk.Entry(parent_frame, validate="key", validatecommand=vcmd_nf)
+        e_nota_fiscal.grid(row=3, column=1, pady=5, padx=5, sticky="ew")
         e_nota_fiscal.insert(0, item_data.get('nota_fiscal') or '')
         e_nota_fiscal.bind("<KeyRelease>", self.on_widget_interaction)
         widgets['nota_fiscal'] = e_nota_fiscal
 
+        # --- FIM DOS CAMPOS COMUNS ---
+
         # Campos específicos
-        row_start = 3
+        row_start = 4
         if tipo == "Celular":
-            ttk.Label(parent_frame, text="Modelo:").grid(row=row_start, column=0, sticky="e", pady=5, padx=5)
-            e_model = ttk.Entry(parent_frame); e_model.grid(row=row_start, column=1, pady=5, padx=5, sticky="ew")
-            e_model.insert(0, item_data.get('model') or ''); widgets['model'] = e_model
-            e_model.bind("<KeyRelease>", self.on_widget_interaction)
             
             ttk.Label(parent_frame, text="IMEI:").grid(row=row_start + 1, column=0, sticky="e", pady=5, padx=5)
             e_identificador = ttk.Entry(parent_frame); e_identificador.grid(row=row_start + 1, column=1, pady=5, padx=5, sticky="ew")
@@ -991,7 +1108,7 @@ class App(tk.Tk):
                 widgets[key] = widget
 
         elif tipo == "Tablet":
-            fields = { 'model': ("Modelo:", ttk.Entry,{}), 'identificador': ("Nº de Série:", ttk.Entry, {}), 'storage': ("Armazenamento (GB):", ttk.Entry, {}) }
+            fields = {'identificador': ("Nº de Série:", ttk.Entry, {}), 'storage': ("Armazenamento (GB):", ttk.Entry, {}) }
             for i, (key, (label, w_class, opts)) in enumerate(fields.items()):
                 ttk.Label(parent_frame, text=label).grid(row=row_start + i, column=0, sticky="e", pady=5, padx=5)
                 widget = w_class(parent_frame, **opts); widget.grid(row=row_start + i, column=1, pady=5, padx=5, sticky="ew")
@@ -999,6 +1116,38 @@ class App(tk.Tk):
                 widget.bind("<KeyRelease>", self.on_widget_interaction)
                 widgets[key] = widget
                 
+        elif tipo == "Switch":
+            fields = {
+                'poe': ("POE:", ttk.Combobox, {"values": ["Sim", "Não"], "state": "readonly"}),
+                'quantidade_portas': ("Qtd. de Portas:", ttk.Entry, {})
+            }
+            for i, (key, (label, w_class, opts)) in enumerate(fields.items()):
+                ttk.Label(parent_frame, text=label).grid(row=row_start + i, column=0, sticky="e", pady=5, padx=5)
+                widget = w_class(parent_frame, **opts)
+                widget.grid(row=row_start + i, column=1, pady=5, padx=5, sticky="ew")
+                
+                if isinstance(widget, ttk.Combobox):
+                    widget.set(item_data.get(key) or '')
+                    widget.bind("<<ComboboxSelected>>", self.on_widget_interaction)
+                else:
+                    widget.insert(0, item_data.get(key) or '')
+                
+                widget.bind("<KeyRelease>", self.on_widget_interaction)
+                widgets[key] = widget
+
+        # --- BLOCO ADICIONADO PARA O HD ---
+        elif tipo == "HD":
+            fields = {
+                'storage': ("Armazenamento (GB):", ttk.Entry, {})
+            }
+            for i, (key, (label, w_class, opts)) in enumerate(fields.items()):
+                ttk.Label(parent_frame, text=label).grid(row=row_start + i, column=0, sticky="e", pady=5, padx=5)
+                widget = w_class(parent_frame, **opts)
+                widget.grid(row=row_start + i, column=1, pady=5, padx=5, sticky="ew")
+                widget.insert(0, item_data.get(key) or '')
+                widget.bind("<KeyRelease>", self.on_widget_interaction)
+                widgets[key] = widget
+
         return widgets
 
 
@@ -1042,6 +1191,16 @@ class App(tk.Tk):
                                "ram": "Informe a RAM.", "licenca": "Informe a licença.",
                                "anydesk": "Informe o AnyDesk."}.items():
                 if not dados.get(campo): erros.append((self.add_widgets[campo], msg))
+
+        if tipo == "Switch":
+            for campo, msg in {"model": "Informe o modelo.", "poe": "Informe se possui POE.", "quantidade_portas": "Informe a quantidade de portas."}.items():
+                if not dados.get(campo):
+                    erros.append((self.add_widgets[campo], msg))
+
+        if tipo == "HD":
+            for campo, msg in {"model": "Informe o modelo.", "storage": "Informe o armazenamento."}.items():
+                if not dados.get(campo):
+                    erros.append((self.add_widgets[campo], msg))
         
         if erros:
             for widget, _ in erros:
@@ -1072,6 +1231,107 @@ class App(tk.Tk):
         for widget in self.frm_dynamic.winfo_children():
             widget.destroy()
         self.update_all_views()
+
+
+
+    def cmd_add_peripheral(self):
+        data = {
+            "tipo": self.cb_peri_tipo.get(),
+            "brand": self.e_peri_brand.get().strip(),
+            "model": self.e_peri_model.get().strip(),
+            "identificador": self.e_peri_id.get().strip()
+        }
+        if not data["tipo"]:
+            self.lbl_peri_add.config(text="O campo 'Tipo' é obrigatório.", style="Danger.TLabel")
+            return
+            
+        ok, msg = self.inv.add_peripheral(data, self.logged_user)
+        self.lbl_peri_add.config(text=msg, style="Success.TLabel" if ok else "Danger.TLabel")
+        if ok:
+            self.cb_peri_tipo.set("")
+            self.e_peri_brand.delete(0, "end")
+            self.e_peri_model.delete(0, "end")
+            self.e_peri_id.delete(0, "end")
+            self.update_all_views()
+
+    def cmd_load_equipment_for_linking(self, event=None):
+        selection = self.cb_link_equip.get()
+        if not selection:
+            return
+        
+        equipment_id = int(selection.split(' - ')[0])
+
+        # Limpa as tabelas
+        self.tree_linked_peripherals.delete(*self.tree_linked_peripherals.get_children())
+        self.tree_available_peripherals.delete(*self.tree_available_peripherals.get_children())
+        self.lbl_link_msg.config(text="")
+
+        # Popula vinculados
+        for p in self.inv.list_peripherals_for_equipment(equipment_id):
+            self.tree_linked_peripherals.insert("", "end", values=(
+                p['link_id'], p['id'], p.get('tipo'), f"{p.get('brand','')} {p.get('model','')}", p.get('identificador')
+            ))
+        
+        # Popula disponíveis
+        for p in self.inv.list_peripherals(status_filter="Disponível"):
+            self.tree_available_peripherals.insert("", "end", values=(
+                p['id'], p.get('tipo'), f"{p.get('brand','')} {p.get('model','')}", p.get('identificador')
+            ))
+
+    def cmd_link_peripheral(self):
+        equip_selection = self.cb_link_equip.get()
+        peri_selection = self.tree_available_peripherals.selection()
+
+        if not equip_selection or not peri_selection:
+            self.lbl_link_msg.config(text="Selecione um equipamento E um periférico disponível para vincular.", style="Danger.TLabel")
+            return
+
+        equipment_id = int(equip_selection.split(' - ')[0])
+        peripheral_id = int(self.tree_available_peripherals.item(peri_selection[0])['values'][0])
+
+        ok, msg = self.inv.link_peripheral_to_equipment(equipment_id, peripheral_id, self.logged_user)
+        self.lbl_link_msg.config(text=msg, style="Success.TLabel" if ok else "Danger.TLabel")
+        if ok:
+            self.cmd_load_equipment_for_linking() # Recarrega as listas
+            self.update_stock() # Atualiza o contador na aba de estoque
+
+    def cmd_unlink_peripheral(self):
+        selection = self.tree_linked_peripherals.selection()
+        if not selection:
+            self.lbl_link_msg.config(text="Selecione um periférico vinculado para desvincular.", style="Danger.TLabel")
+            return
+
+        link_id = int(self.tree_linked_peripherals.item(selection[0])['values'][0])
+        
+        ok, msg = self.inv.unlink_peripheral_from_equipment(link_id, self.logged_user)
+        self.lbl_link_msg.config(text=msg, style="Success.TLabel" if ok else "Danger.TLabel")
+        if ok:
+            self.cmd_load_equipment_for_linking()
+            self.update_stock()
+
+    def cmd_replace_peripheral_dialog(self):
+        equip_selection = self.cb_link_equip.get()
+        old_peri_selection = self.tree_linked_peripherals.selection()
+
+        if not equip_selection or not old_peri_selection:
+            self.lbl_link_msg.config(text="Selecione um equipamento E o periférico a ser substituído.", style="Danger.TLabel")
+            return
+        
+        equipment_id = int(equip_selection.split(' - ')[0])
+        values = self.tree_linked_peripherals.item(old_peri_selection[0])['values']
+        old_peripheral_id = int(values[1])
+        peripheral_type = values[2]
+
+        # Abre a janela de diálogo para substituição
+        dialog = ReplacePeripheralDialog(self, equipment_id, old_peripheral_id, peripheral_type)
+        self.wait_window(dialog) # Pausa a janela principal até o diálogo ser fechado
+
+        if dialog.success:
+            self.lbl_link_msg.config(text="Substituição realizada com sucesso.", style="Success.TLabel")
+            self.cmd_load_equipment_for_linking() # Recarrega tudo
+            self.update_peripherals_table()
+        else:
+            self.lbl_link_msg.config(text="", style="TLabel")
 
 
     def cmd_load_item_for_edit(self):
@@ -1524,11 +1784,13 @@ class App(tk.Tk):
 
             row = (
                 p.get('id'), p.get('revenda'), p.get('tipo'), p.get('brand'), 
-                p.get('model'), p.get('status'), p.get('assigned_to'), 
+                p.get('model'), p.get('status'), p.get('peripheral_count'), p.get('assigned_to'), 
                 format_cpf(p.get('cpf')), p.get('nota_fiscal'), p.get('identificador'), p.get('dominio'), 
                 p.get('host'), p.get('endereco_fisico'), p.get('cpu'), p.get('ram'), 
                 p.get('storage'), p.get('sistema'), p.get('licenca'), p.get('anydesk'), 
-                p.get('setor'), p.get('ip'), p.get('mac'), format_date(p.get('date_registered'))
+                p.get('setor'), p.get('ip'), p.get('mac'),
+                p.get('poe'), p.get('quantidade_portas'),
+                format_date(p.get('date_registered'))
             )
             
             cleaned_row = tuple(v or '' for v in row)
@@ -1586,6 +1848,30 @@ class App(tk.Tk):
         self.cb_edit['values'] = lst
         self.cb_edit.set('')
 
+    def update_peripherals_table(self):
+        """Atualiza a tabela de periféricos."""
+        self.tree_peripherals.delete(*self.tree_peripherals.get_children())
+        for p in self.inv.list_peripherals():
+            status = p.get('status')
+            tag = ""
+            if status == "Disponível": tag = "disp"
+            elif status == "Em Uso": tag = "emuso"
+            elif status == "Com Defeito": tag = "defeito"
+
+            self.tree_peripherals.insert("", "end", values=(
+                p['id'], status, p.get('tipo'), p.get('brand'), p.get('model'), p.get('identificador')
+            ), tags=(tag,))
+
+    def update_linking_combobox(self):
+        """Atualiza o combobox de seleção de equipamento na aba de vínculos."""
+        items = self.inv.list_items()
+        # Filtra para mostrar apenas equipamentos que podem ter periféricos (ex: não celulares)
+        linkable_items = [
+            f"{i['id']} - {i.get('tipo')} {i.get('brand','')} {i.get('model','')}"
+            for i in items if i.get('tipo') in ["Desktop", "Notebook", "Switch", "Impressora"]
+        ]
+        self.cb_link_equip['values'] = linkable_items
+
     def update_history_table(self):
         self.tree_history.delete(*self.tree_history.get_children())
         search_text = self.e_search_history.get().lower().strip()
@@ -1629,6 +1915,8 @@ class App(tk.Tk):
         self.update_return_views()
         self.update_remove_cb()
         self.update_edit_cb()
+        self.update_peripherals_table()
+        self.update_linking_combobox()
         self.update_terms_table()
         self.update_history_table()
         self.cmd_generate_report()
@@ -1701,3 +1989,67 @@ class App(tk.Tk):
         
         fig.tight_layout()
         plt.show()
+
+
+
+
+
+class ReplacePeripheralDialog(tk.Toplevel):
+    def __init__(self, parent, equipment_id, old_peripheral_id, peripheral_type):
+        super().__init__(parent)
+        self.parent = parent
+        self.inv = parent.inv
+        self.equipment_id = equipment_id
+        self.old_peripheral_id = old_peripheral_id
+        self.peripheral_type = peripheral_type
+        self.success = False
+
+        self.title("Substituir Periférico")
+        self.geometry("400x300")
+        self.transient(parent)
+        self.grab_set()
+
+        frm = ttk.Frame(self, padding=15)
+        frm.pack(fill="both", expand=True)
+
+        ttk.Label(frm, text=f"Selecione um(a) novo(a) {peripheral_type} disponível:", font=FONT_BOLD).pack(anchor="w")
+        
+        # Lista de periféricos disponíveis do mesmo tipo
+        available = self.inv.list_peripherals(status_filter="Disponível", type_filter=peripheral_type)
+        self.cb_new_peripheral = ttk.Combobox(frm, state="readonly", values=[f"{p['id']} - {p.get('brand','')} {p.get('model','')}" for p in available])
+        self.cb_new_peripheral.pack(fill="x", pady=10)
+
+        ttk.Label(frm, text="Motivo da Substituição:", font=FONT_BOLD).pack(anchor="w", pady=(10,0))
+        self.e_reason = ttk.Entry(frm)
+        self.e_reason.pack(fill="x", pady=5)
+        
+        self.lbl_msg = ttk.Label(frm, text="")
+        self.lbl_msg.pack(pady=10)
+
+        btn_frm = ttk.Frame(frm)
+        btn_frm.pack(fill="x", side="bottom")
+        ttk.Button(btn_frm, text="Confirmar Substituição", command=self.confirm, style="Primary.TButton").pack(side="right")
+        ttk.Button(btn_frm, text="Cancelar", command=self.destroy).pack(side="right", padx=10)
+
+    def confirm(self):
+        new_peri_selection = self.cb_new_peripheral.get()
+        reason = self.e_reason.get().strip()
+        if not new_peri_selection:
+            self.lbl_msg.config(text="Selecione um novo periférico.", style="Danger.TLabel")
+            return
+        if not reason:
+            self.lbl_msg.config(text="O motivo é obrigatório.", style="Danger.TLabel")
+            return
+        
+        new_peripheral_id = int(new_peri_selection.split(' - ')[0])
+        
+        ok, msg = self.inv.replace_peripheral(
+            self.equipment_id, self.old_peripheral_id, new_peripheral_id,
+            reason, self.parent.logged_user
+        )
+
+        if ok:
+            self.success = True
+            self.destroy()
+        else:
+            self.lbl_msg.config(text=msg, style="Danger.TLabel")

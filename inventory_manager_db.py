@@ -14,68 +14,108 @@ class InventoryDBManager:
     def __init__(self):
         self._create_tables()
 
+
     def _create_tables(self):
         """Cria as tabelas no banco, caso ainda não existam"""
         conn = get_connection()
         cur = conn.cursor()
+        
+        # Tabela 'items' (sem alterações)
         cur.execute("""
         CREATE TABLE IF NOT EXISTS items (
             id INT AUTO_INCREMENT PRIMARY KEY,
             tipo VARCHAR(50), brand VARCHAR(100), model VARCHAR(100), identificador VARCHAR(100),
-            nota_fiscal VARCHAR(9) UNIQUE,
+            nota_fiscal VARCHAR(50) UNIQUE,
             status ENUM('Disponível','Indisponível', 'Pendente', 'Pendente Devolução') DEFAULT 'Disponível',
             assigned_to VARCHAR(100), cpf VARCHAR(20), revenda VARCHAR(100),
             dominio VARCHAR(50), host VARCHAR(100), endereco_fisico VARCHAR(150),
             cpu VARCHAR(100), ram VARCHAR(50), storage VARCHAR(50),
             sistema VARCHAR(100), licenca VARCHAR(100), anydesk VARCHAR(50),
             setor VARCHAR(100), ip VARCHAR(50), mac VARCHAR(50),
+            poe ENUM('Sim', 'Não'),
+            quantidade_portas VARCHAR(10),
             date_registered DATE NOT NULL, date_issued DATE,
-            is_active TINYINT(1) DEFAULT 1 
+            is_active TINYINT(1) DEFAULT 1
         )
         """)
-        # Aplica a alteração para bancos já existentes
-        try:
-            cur.execute("ALTER TABLE items MODIFY COLUMN status ENUM('Disponível','Indisponível', 'Pendente', 'Pendente Devolução') DEFAULT 'Disponível'")
-        except pymysql.MySQLError as e:
-            # Ignora o erro se a coluna já tiver o tipo correto
-            if e.args[0] != 1060: # 1060 is "Duplicate column name" error, not quite right but catches most cases of already existing
-                 print(f"Aviso ao alterar tabela 'items': {e}")
-                 
-
+        
+        # Tabela 'history' (ENUM de 'operation' ATUALIZADO)
         cur.execute("""
         CREATE TABLE IF NOT EXISTS history (
             id INT AUTO_INCREMENT PRIMARY KEY,
             item_id INT,
+            peripheral_id INT, -- ADICIONADO para logs de periféricos
             operador VARCHAR(100),
             usuario VARCHAR(100),
             cpf VARCHAR(20),
             cargo VARCHAR(100),
             center_cost VARCHAR(100),
             revenda VARCHAR(100),
-            data_operacao DATE,
-            operation ENUM('Cadastro','Empréstimo','Devolução', 'Edição', 'Exclusão', 'Estorno', 'Confirmação Empréstimo', 'Confirmação Devolução') DEFAULT 'Cadastro',
+            data_operacao DATETIME,
+            operation ENUM(
+                'Cadastro','Empréstimo','Devolução', 'Edição', 'Exclusão', 'Estorno',
+                'Confirmação Empréstimo', 'Confirmação Devolução',
+                'Cadastro Periférico', 'Vínculo Periférico', 'Desvínculo Periférico', 'Substituição Periférico'
+            ) DEFAULT 'Cadastro',
             is_reversed TINYINT(1) DEFAULT 0,
-            -- Campos para guardar dados do item
-            tipo VARCHAR(50),
-            brand VARCHAR(100),
-            model VARCHAR(100),
-            identificador VARCHAR(100),
-            nota_fiscal VARCHAR(9),
-            nota_fiscal_anexo VARCHAR(255) NULL,
-            termo_assinado_anexo VARCHAR(255) NULL,
+            details VARCHAR(255), -- ADICIONADO para detalhes (ex: substituição)
+            tipo VARCHAR(50), brand VARCHAR(100), model VARCHAR(100), identificador VARCHAR(100),
+            nota_fiscal VARCHAR(50), poe ENUM('Sim', 'Não'), quantidade_portas VARCHAR(10),
+            nota_fiscal_anexo VARCHAR(255) NULL, termo_assinado_anexo VARCHAR(255) NULL,
             FOREIGN KEY(item_id) REFERENCES items(id) ON DELETE SET NULL
         )
         """)
-        # Aplica a alteração para bancos já existentes
-        try:
-            cur.execute("ALTER TABLE history MODIFY COLUMN operation ENUM('Cadastro','Empréstimo','Devolução', 'Edição', 'Exclusão', 'Estorno', 'Confirmação Empréstimo', 'Confirmação Devolução') DEFAULT 'Cadastro'")
-        except pymysql.MySQLError as e:
-            if e.args[0] != 1060:
-                print(f"Aviso ao alterar tabela 'history': {e}")
+
+        # --- TABELA DE PERIFÉRICOS (NOVA) ---
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS peripherals (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            tipo VARCHAR(50) NOT NULL,
+            brand VARCHAR(100),
+            model VARCHAR(100),
+            identificador VARCHAR(100) UNIQUE,
+            status ENUM('Disponível', 'Em Uso', 'Com Defeito') DEFAULT 'Disponível',
+            date_registered DATE NOT NULL,
+            is_active TINYINT(1) DEFAULT 1
+        )
+        """)
+
+        # --- TABELA DE VÍNCULO (NOVA) ---
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS equipment_peripherals (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            equipment_id INT NOT NULL,
+            peripheral_id INT NOT NULL,
+            FOREIGN KEY(equipment_id) REFERENCES items(id) ON DELETE CASCADE,
+            FOREIGN KEY(peripheral_id) REFERENCES peripherals(id) ON DELETE CASCADE,
+            UNIQUE(equipment_id, peripheral_id)
+        )
+        """)
 
         conn.commit()
         cur.close()
         conn.close()
+
+        # Tenta aplicar as alterações de ENUM em bancos já existentes
+        try:
+            conn = get_connection()
+            cur = conn.cursor()
+            cur.execute("ALTER TABLE history ADD COLUMN peripheral_id INT NULL")
+            cur.execute("ALTER TABLE history ADD COLUMN details VARCHAR(255) NULL")
+            cur.execute("""
+                ALTER TABLE history MODIFY COLUMN operation ENUM(
+                    'Cadastro','Empréstimo','Devolução', 'Edição', 'Exclusão', 'Estorno',
+                    'Confirmação Empréstimo', 'Confirmação Devolução',
+                    'Cadastro Periférico', 'Vínculo Periférico', 'Desvínculo Periférico', 'Substituição Periférico'
+                ) DEFAULT 'Cadastro'
+            """)
+            conn.commit()
+        except pymysql.MySQLError as e:
+            if e.args[0] not in [1060, 1061]: # Ignora erro de coluna/chave duplicada
+                 print(f"Aviso ao alterar tabelas existentes: {e}")
+        finally:
+            cur.close()
+            conn.close()
 
     def add_item(self, item_data: dict, logged_user: str):
         """Adiciona novo item no estoque"""
@@ -145,10 +185,11 @@ class InventoryDBManager:
         cur = conn.cursor()
 
         cur.execute("""
-            INSERT INTO history (item_id, operador, data_operacao, operation, tipo, brand, model, identificador, nota_fiscal, nota_fiscal_anexo)
-            VALUES (%s, %s, %s, 'Exclusão', %s, %s, %s, %s, %s, %s)
+            INSERT INTO history (item_id, operador, data_operacao, operation, tipo, brand, model, identificador, nota_fiscal, nota_fiscal_anexo, poe, quantidade_portas)
+            VALUES (%s, %s, %s, 'Exclusão', %s, %s, %s, %s, %s, %s, %s, %s)
         """, (item_id, logged_user, datetime.now().strftime("%Y-%m-%d"),
-              item.get('tipo'), item.get('brand'), item.get('model'), item.get('identificador'), item.get('nota_fiscal'), destination_path))
+              item.get('tipo'), item.get('brand'), item.get('model'), item.get('identificador'), item.get('nota_fiscal'), destination_path,
+              item.get('poe'), item.get('quantidade_portas')))
 
         cur.execute("UPDATE items SET is_active = 0 WHERE id=%s", (item_id,))
         
@@ -159,9 +200,16 @@ class InventoryDBManager:
 
 
     def list_items(self):
+        """Lista os itens e conta quantos periféricos estão vinculados a cada um."""
         conn = get_connection()
         cur = conn.cursor(pymysql.cursors.DictCursor)
-        cur.execute("SELECT * FROM items WHERE is_active = 1")
+        cur.execute("""
+            SELECT i.*, COUNT(ep.peripheral_id) as peripheral_count
+            FROM items i
+            LEFT JOIN equipment_peripherals ep ON i.id = ep.equipment_id
+            WHERE i.is_active = 1
+            GROUP BY i.id
+        """)
         rows = cur.fetchall()
         cur.close()
         conn.close()
@@ -176,6 +224,142 @@ class InventoryDBManager:
         cur.close()
         conn.close()
         return row
+    
+
+    # --- NOVAS FUNÇÕES DE GERENCIAMENTO DE PERIFÉRICOS ---
+
+    def add_peripheral(self, data: dict, logged_user: str):
+        """Adiciona um novo periférico."""
+        conn = get_connection()
+        cur = conn.cursor()
+        try:
+            data['date_registered'] = datetime.now().strftime("%Y-%m-%d")
+            keys = ", ".join(data.keys())
+            placeholders = ", ".join(["%s"] * len(data))
+            sql = f"INSERT INTO peripherals ({keys}) VALUES ({placeholders})"
+            cur.execute(sql, list(data.values()))
+            p_id = cur.lastrowid
+
+            cur.execute("""
+                INSERT INTO history (peripheral_id, operador, data_operacao, operation, tipo, brand, model, identificador)
+                VALUES (%s, %s, %s, 'Cadastro Periférico', %s, %s, %s, %s)
+            """, (p_id, logged_user, datetime.now(), data.get('tipo'), data.get('brand'), data.get('model'), data.get('identificador')))
+            conn.commit()
+            return True, f"Periférico '{data.get('tipo')}' cadastrado com ID {p_id}."
+        except pymysql.MySQLError as e:
+            conn.rollback()
+            if e.args[0] == 1062: # Chave duplicada (identificador)
+                return False, "Erro: Já existe um periférico com este Identificador (Nº de Série)."
+            return False, f"Erro de banco de dados: {e}"
+        finally:
+            cur.close()
+            conn.close()
+
+    def list_peripherals(self, status_filter="", type_filter=""):
+        """Lista os periféricos com filtros opcionais."""
+        conn = get_connection()
+        cur = conn.cursor()
+        
+        query = "SELECT * FROM peripherals WHERE is_active = 1"
+        params = []
+        if status_filter:
+            query += " AND status = %s"
+            params.append(status_filter)
+        if type_filter:
+            query += " AND tipo = %s"
+            params.append(type_filter)
+        
+        cur.execute(query, params)
+        return cur.fetchall()
+
+    def list_peripherals_for_equipment(self, equipment_id: int):
+        """Lista os periféricos vinculados a um equipamento específico."""
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT p.*, ep.id as link_id
+            FROM peripherals p
+            JOIN equipment_peripherals ep ON p.id = ep.peripheral_id
+            WHERE ep.equipment_id = %s
+        """, (equipment_id,))
+        return cur.fetchall()
+
+    def link_peripheral_to_equipment(self, equipment_id: int, peripheral_id: int, logged_user: str):
+        """Cria um vínculo e atualiza o status do periférico."""
+        conn = get_connection()
+        cur = conn.cursor()
+        try:
+            
+            cur.execute("INSERT INTO equipment_peripherals (equipment_id, peripheral_id) VALUES (%s, %s)", (equipment_id, peripheral_id))
+            cur.execute("UPDATE peripherals SET status = 'Em Uso' WHERE id = %s", (peripheral_id,))
+            cur.execute("""
+                INSERT INTO history (item_id, peripheral_id, operador, data_operacao, operation)
+                VALUES (%s, %s, %s, %s, 'Vínculo Periférico')
+            """, (equipment_id, peripheral_id, logged_user, datetime.now()))
+            conn.commit()
+            return True, "Periférico vinculado com sucesso."
+        except pymysql.MySQLError as e:
+            conn.rollback()
+            return False, f"Erro ao vincular: {e}"
+        finally:
+            cur.close()
+            conn.close()
+
+    def unlink_peripheral_from_equipment(self, link_id: int, logged_user: str):
+        """Remove um vínculo e atualiza o status do periférico."""
+        conn = get_connection()
+        cur = conn.cursor()
+        try:
+            
+            # Pega os IDs antes de deletar para poder registrar no histórico
+            cur.execute("SELECT equipment_id, peripheral_id FROM equipment_peripherals WHERE id = %s", (link_id,))
+            ids = cur.fetchone()
+            if not ids:
+                return False, "Vínculo não encontrado."
+
+            cur.execute("DELETE FROM equipment_peripherals WHERE id = %s", (link_id,))
+            cur.execute("UPDATE peripherals SET status = 'Disponível' WHERE id = %s", (ids['peripheral_id'],))
+            cur.execute("""
+                INSERT INTO history (item_id, peripheral_id, operador, data_operacao, operation)
+                VALUES (%s, %s, %s, 'Desvínculo Periférico')
+            """, (ids['equipment_id'], ids['peripheral_id'], logged_user, datetime.now()))
+            conn.commit()
+            return True, "Periférico desvinculado com sucesso."
+        except pymysql.MySQLError as e:
+            conn.rollback()
+            return False, f"Erro ao desvincular: {e}"
+        finally:
+            cur.close()
+            conn.close()
+
+    def replace_peripheral(self, equipment_id: int, old_peripheral_id: int, new_peripheral_id: int, reason: str, logged_user: str):
+        """Substitui um periférico por outro."""
+        conn = get_connection()
+        cur = conn.cursor()
+        try:
+            
+            # 1. Marca o periférico antigo como "Com Defeito"
+            cur.execute("UPDATE peripherals SET status = 'Com Defeito' WHERE id = %s", (old_peripheral_id,))
+            # 2. Remove o vínculo antigo
+            cur.execute("DELETE FROM equipment_peripherals WHERE equipment_id = %s AND peripheral_id = %s", (equipment_id, old_peripheral_id))
+            # 3. Cria o novo vínculo
+            cur.execute("INSERT INTO equipment_peripherals (equipment_id, peripheral_id) VALUES (%s, %s)", (equipment_id, new_peripheral_id))
+            # 4. Marca o novo periférico como "Em Uso"
+            cur.execute("UPDATE peripherals SET status = 'Em Uso' WHERE id = %s", (new_peripheral_id,))
+            # 5. Registra a substituição no histórico
+            details_log = f"Substituído periférico ID {old_peripheral_id} por ID {new_peripheral_id}. Motivo: {reason}"
+            cur.execute("""
+                INSERT INTO history (item_id, operador, data_operacao, operation, details)
+                VALUES (%s, %s, %s, 'Substituição Periférico', %s)
+            """, (equipment_id, logged_user, datetime.now(), details_log))
+            conn.commit()
+            return True, "Substituição realizada com sucesso."
+        except pymysql.MySQLError as e:
+            conn.rollback()
+            return False, f"Erro ao substituir periférico: {e}"
+        finally:
+            cur.close()
+            conn.close()
 
 
 
@@ -218,15 +402,15 @@ class InventoryDBManager:
         conn.close()
         return True, f"Empréstimo do item {pid} para {user} iniciado. Status: Pendente."
     
+
     def confirm_loan(self, item_id: int, logged_user: str, signed_term_path: str):
         """
-        finaliza o empréstimo, anexa o termo e muda o status para Indisponível.
+        Confirma o empréstimo, anexa o termo, muda o status do item E DOS PERIFÉRICOS VINCULADOS.
         """
         item = self.find(item_id)
         if not item or item['status'] != 'Pendente':
             return False, "Apenas itens com status 'Pendente' podem ser confirmados."
 
-        # --- Lógica para copiar o anexo ---
         try:
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
             original_filename = os.path.basename(signed_term_path)
@@ -235,46 +419,53 @@ class InventoryDBManager:
             shutil.copy(signed_term_path, destination_path)
         except Exception as e:
             return False, f"Erro ao processar o termo assinado: {e}"
-        # ------------------------------------
 
         conn = get_connection()
         cur = conn.cursor(pymysql.cursors.DictCursor)
+        try:
+            
 
-        # Encontra o último registro de empréstimo para este item
-        cur.execute("""
-            SELECT id, usuario, cpf, cargo, center_cost, revenda FROM history
-            WHERE item_id = %s AND operation = 'Empréstimo' AND is_reversed = 0
-            ORDER BY data_operacao DESC, id DESC LIMIT 1
-        """, (item_id,))
-        last_loan_details = cur.fetchone()
+            #Pega os detalhes do empréstimo original no histórico
+            cur.execute("""
+                SELECT id, usuario, cpf, cargo, center_cost, revenda FROM history
+                WHERE item_id = %s AND operation = 'Empréstimo' AND is_reversed = 0
+                ORDER BY data_operacao DESC, id DESC LIMIT 1
+            """, (item_id,))
+            last_loan_details = cur.fetchone()
+            if not last_loan_details:
+                raise Exception("Registro de empréstimo original não encontrado no histórico.")
 
-        if not last_loan_details:
+            # ATUALIZA O STATUS DO ITEM PRINCIPAL
+            cur.execute("UPDATE items SET status='Indisponível' WHERE id=%s", (item_id,))
+
+            # ATUALIZA O STATUS DOS PERIFÉRICOS VINCULADOS
+            linked_peripherals = self.list_peripherals_for_equipment(item_id)
+            for p in linked_peripherals:
+                cur.execute("UPDATE peripherals SET status='Em Uso' WHERE id=%s", (p['id'],))
+
+            # Cria o novo registro de "Confirmação" no histórico
+            cur.execute("""
+                INSERT INTO history (item_id, operador, usuario, cpf, cargo, center_cost, revenda, data_operacao, operation, termo_assinado_anexo)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'Confirmação Empréstimo', %s)
+            """, (
+                item_id, logged_user,
+                last_loan_details.get('usuario'), last_loan_details.get('cpf'),
+                last_loan_details.get('cargo'), last_loan_details.get('center_cost'),
+                last_loan_details.get('revenda'),
+                datetime.now(),
+                destination_path
+            ))
+            
+            # cconfirma todas as operações no banco
+            conn.commit()
+            return True, f"Empréstimo do item {item_id} e de {len(linked_peripherals)} periférico(s) confirmado."
+        except Exception as e:
+            # Desfaz tudo se der algum erro no meio do caminho
+            conn.rollback()
+            return False, f"Erro ao confirmar empréstimo: {e}"
+        finally:
+            cur.close()
             conn.close()
-            return False, "Registro de empréstimo original não encontrado no histórico."
-
-        # Atualiza o status do item para Indisponível
-        cur.execute("UPDATE items SET status='Indisponível' WHERE id=%s", (item_id,))
-
-        # Cria o novo registro de "Confirmação" no histórico, salvando o caminho do anexo
-        cur.execute("""
-            INSERT INTO history (item_id, operador, usuario, cpf, cargo, center_cost, revenda, data_operacao, operation, termo_assinado_anexo)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'Confirmação Empréstimo', %s)
-        """, (
-            item_id,
-            logged_user,
-            last_loan_details.get('usuario'),
-            last_loan_details.get('cpf'),
-            last_loan_details.get('cargo'),
-            last_loan_details.get('center_cost'),
-            last_loan_details.get('revenda'),
-            datetime.now().strftime("%Y-%m-%d"),
-            destination_path  # Salva o caminho do termo assinado
-        ))
-
-        conn.commit()
-        cur.close()
-        conn.close()
-        return True, f"Empréstimo do item {item_id} confirmado com sucesso."
     
     
 # PROCESSO DE DEVOLUÇÃO, 2 PRÓXIMAS FUNÇÕES
@@ -346,9 +537,11 @@ class InventoryDBManager:
         # Se tudo deu certo, retorna True e o caminho do arquivo gerado
         return True, saida_path
 
+
+
     def confirm_return(self, item_id: int, logged_user: str, signed_return_term_path: str):
         """
-        Finaliza a devolução, anexa o termo e muda o status para Disponível.
+        Finaliza a devolução, anexa o termo, muda o status do item E DOS PERIFÉRICOS VINCULADOS.
         """
         item = self.find(item_id)
         if not item or item['status'] != 'Pendente Devolução':
@@ -365,28 +558,40 @@ class InventoryDBManager:
 
         conn = get_connection()
         cur = conn.cursor(pymysql.cursors.DictCursor)
+        try:
+            
 
-        # Atualiza o status do item para Disponível e limpa os dados do usuário
-        cur.execute("""
-            UPDATE items SET status='Disponível', assigned_to=NULL, cpf=NULL, date_issued=NULL 
-            WHERE id=%s
-        """, (item_id,))
+            # ATUALIZA O STATUS DO ITEM PRINCIPAL
+            cur.execute("""
+                UPDATE items SET status='Disponível', assigned_to=NULL, cpf=NULL, date_issued=NULL 
+                WHERE id=%s
+            """, (item_id,))
 
-        # Cria o novo registro de "Confirmação Devolução" no histórico
-        cur.execute("""
-            INSERT INTO history (item_id, operador, data_operacao, operation, termo_assinado_anexo)
-            VALUES (%s, %s, %s, 'Confirmação Devolução', %s)
-        """, (
-            item_id,
-            logged_user,
-            datetime.now().strftime("%Y-%m-%d"),
-            destination_path
-        ))
+            #ATUALIZA O STATUS DOS PERIFÉRICOS VINCULADOS
+            linked_peripherals = self.list_peripherals_for_equipment(item_id)
+            for p in linked_peripherals:
+                cur.execute("UPDATE peripherals SET status='Disponível' WHERE id=%s", (p['id'],))
 
-        conn.commit()
-        cur.close()
-        conn.close()
-        return True, f"Devolução do item {item_id} confirmada com sucesso."
+            # Cria o novo registro de "Confirmação Devolução" no histórico
+            cur.execute("""
+                INSERT INTO history (item_id, operador, data_operacao, operation, termo_assinado_anexo)
+                VALUES (%s, %s, %s, 'Confirmação Devolução', %s)
+            """, (
+                item_id,
+                logged_user,
+                datetime.now(), #Salva data e hora completas
+                destination_path
+            ))
+
+            conn.commit()
+            return True, f"Devolução do item {item_id} e de {len(linked_peripherals)} periférico(s) confirmada."
+        except Exception as e:
+            # Desfaz tudo se der erro
+            conn.rollback()
+            return False, f"Erro ao confirmar devolução: {e}"
+        finally:
+            cur.close()
+            conn.close()
 
 
     def list_history(self):
@@ -493,7 +698,6 @@ class InventoryDBManager:
         cur = conn.cursor(pymysql.cursors.DictCursor)
         
         try:
-            conn.start_transaction()
 
             cur.execute("SELECT * FROM history WHERE id = %s", (history_id,))
             entry_to_reverse = cur.fetchone()
@@ -568,6 +772,7 @@ class InventoryDBManager:
 
 
     def generate_term(self, item_id, user):
+        """Gera o termo de responsabilidade, incluindo a lista de periféricos vinculados."""
         item = self.find(item_id)
         if not item: 
             return False, "Equipamento não encontrado."
@@ -579,6 +784,17 @@ class InventoryDBManager:
         if item["status"] != "Pendente" or assigned_user != user_param:
             return False, "Este equipamento não está pendente de empréstimo para este usuário."
         # ----------------------------------------
+
+        # --- LÓGICA PARA BUSCAR E FORMATAR PERIFÉRICOS ---
+        linked_peripherals = self.list_peripherals_for_equipment(item_id)
+        peripherals_text = "Nenhum periférico adicional vinculado."
+        if linked_peripherals:
+            peripherals_list = [
+                f"- {p['tipo']}: {p.get('brand','')} {p.get('model','')} (S/N: {p.get('identificador', 'N/A')})"
+                for p in linked_peripherals
+            ]
+            peripherals_text = "\n".join(peripherals_list)
+        # --- FIM DA LÓGICA ---
 
         revenda = item.get("revenda")
         modelo_path = TERMO_MODELOS.get(revenda)
@@ -592,11 +808,14 @@ class InventoryDBManager:
         
         substituicoes = {
             "{{nome}}": user, "{{data_hoje}}": datetime.now().strftime("%d/%m/%Y"),
-            "{{cpf}}": format_cpf(item.get("cpf", "")), "{{data_cadastro}}": format_date(item.get("date_registered", "")),
-            "{{data_emprestimo}}": format_date(item.get("date_issued", "")), "{{marca}}": f" {item.get('brand', '')}" if item.get("brand") else "",
-            "{{modelo}}": f" {item.get('model', '')}" if item.get("model") else "", "{{tipo}}": item.get("tipo", ""),
+            "{{cpf}}": format_cpf(item.get("cpf", "")),
+            "{{data_emprestimo}}": format_date(item.get("date_issued", "")),
+            "{{tipo}}": item.get("tipo", ""),
+            "{{marca}}": f" {item.get('brand', '')}" if item.get("brand") else "",
+            "{{modelo}}": f" {item.get('model', '')}" if item.get("model") else "",
             "{{identificador}}": f" {item.get('identificador', '')}" if item.get("identificador") else "",
-            "{{nota_fiscal}}": f" {item.get('nota_fiscal', '')}" if item.get("nota_fiscal") else ""
+            "{{nota_fiscal}}": f" {item.get('nota_fiscal', '')}" if item.get("nota_fiscal") else "",
+            "{{perifericos}}": peripherals_text
         }
         
         for key, value in item.items():
