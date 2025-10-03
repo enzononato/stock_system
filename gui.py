@@ -1586,10 +1586,22 @@ class App(tk.Tk):
             # -----------------------------
             
             row_values = (
-                log.get('history_id'), log.get('item_id'), log.get('operador'), log.get('tipo'), log.get('brand'),
-                log.get('model'), log.get('nota_fiscal'), log.get('identificador'), log.get('usuario'),
-                format_cpf(log.get('cpf')), operation_display, data_inicial_display,
-                data_devolucao_display, log.get('center_cost'), log.get('cargo'), log.get('revenda')
+            log.get('history_id'),            
+            log.get('item_id'),                   
+            log.get('operador'),                  
+            log.get('revenda'),                   
+            log.get('tipo'),                      
+            log.get('brand'),                     
+            log.get('model'),                     
+            log.get('nota_fiscal'),               
+            log.get('identificador'),             
+            log.get('usuario'),                   
+            format_cpf(log.get('cpf')),           
+            operation_display,                    
+            data_inicial_display,                 
+            data_devolucao_display,               
+            log.get('center_cost'),               
+            log.get('cargo')
             )
             
             row_values_cleaned = tuple(v or '' for v in row_values)
@@ -1878,12 +1890,21 @@ class App(tk.Tk):
 
         for h in self.inv.list_history():
             row_values = (
-                h.get("item_id"), h.get("operador"), h.get("operation"), 
-                format_date(h.get("data_operacao")), h.get("tipo"), h.get("marca"), 
-                h.get("modelo"), h.get("nota_fiscal"), h.get("identificador"), h.get("usuario"), 
-                format_cpf(h.get("cpf")), h.get("cargo"), h.get("center_cost"), 
-                h.get("revenda")
-            )
+            h.get("item_id"),         
+            h.get("operador"),        
+            h.get("operation"),       
+            h.get("revenda"),         
+            format_date(h.get("data_operacao")), 
+            h.get("tipo"),            
+            h.get("marca"),         
+            h.get("modelo"),          
+            h.get("nota_fiscal"),     
+            h.get("identificador"),   
+            h.get("usuario"),         
+            format_cpf(h.get("cpf")), 
+            h.get("cargo"),           
+            h.get("center_cost")      
+        )
             cleaned_row = tuple(v or '' for v in row_values)
             
             if search_text and search_text not in " ".join(str(v).lower() for v in cleaned_row):
