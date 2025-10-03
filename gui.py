@@ -1660,7 +1660,6 @@ class App(tk.Tk):
             messagebox.showerror("Erro no Estorno", msg)
 
 
-# Em gui.py, substitua a função cmd_generate_term inteira:
 
     def cmd_generate_term(self):
         selected = self.tree_terms_pending.selection()
