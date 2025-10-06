@@ -265,6 +265,8 @@ class InventoryDBManager:
             JOIN equipment_peripherals ep ON p.id = ep.peripheral_id
             WHERE ep.equipment_id = %s
         """, (equipment_id,))
+        cur.close()
+        conn.close()
         return cur.fetchall()
 
     def link_peripheral_to_equipment(self, equipment_id: int, peripheral_id: int, logged_user: str):
@@ -384,7 +386,7 @@ class InventoryDBManager:
         cur.execute("""
             INSERT INTO history (item_id, operador, usuario, cpf, cargo, center_cost, revenda, data_operacao, operation)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'Empréstimo')
-        """, (pid, logged_user, user, cpf, cargo, center_cost, revenda, dt_issue, 'Empréstimo'))
+        """, (pid, logged_user, user, cpf, cargo, center_cost, revenda, dt_issue))
 
         conn.commit()
         cur.close()

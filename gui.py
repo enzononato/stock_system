@@ -1236,7 +1236,7 @@ class App(tk.Tk):
             return
 
         dados["tipo"] = tipo
-        dados["date_registered"] = datetime.now().strftime("%Y-%m-%d")
+        dados["date_registered"] = datetime.now()
         item_id = self.inv.add_item(dados, self.logged_user)
         
         if not item_id:
