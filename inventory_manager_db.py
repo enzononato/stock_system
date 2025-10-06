@@ -20,7 +20,7 @@ class InventoryDBManager:
         conn = get_connection()
         cur = conn.cursor()
         
-        # Tabela 'items' (sem alterações)
+        # Tabela 'items'
         cur.execute("""
         CREATE TABLE IF NOT EXISTS items (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -39,12 +39,12 @@ class InventoryDBManager:
         )
         """)
         
-        # Tabela 'history' (ENUM de 'operation' ATUALIZADO)
+        # Tabela 'history'
         cur.execute("""
         CREATE TABLE IF NOT EXISTS history (
             id INT AUTO_INCREMENT PRIMARY KEY,
             item_id INT,
-            peripheral_id INT, -- ADICIONADO para logs de periféricos
+            peripheral_id INT,
             operador VARCHAR(100),
             usuario VARCHAR(100),
             cpf VARCHAR(20),
@@ -58,7 +58,7 @@ class InventoryDBManager:
                 'Cadastro Periférico', 'Vínculo Periférico', 'Desvínculo Periférico', 'Substituição Periférico'
             ) DEFAULT 'Cadastro',
             is_reversed TINYINT(1) DEFAULT 0,
-            details VARCHAR(255), -- ADICIONADO para detalhes (ex: substituição)
+            details VARCHAR(255),
             tipo VARCHAR(50), brand VARCHAR(100), model VARCHAR(100), identificador VARCHAR(100),
             nota_fiscal VARCHAR(50), poe ENUM('Sim', 'Não'), quantidade_portas VARCHAR(10),
             nota_fiscal_anexo VARCHAR(255) NULL, termo_assinado_anexo VARCHAR(255) NULL,
@@ -66,7 +66,7 @@ class InventoryDBManager:
         )
         """)
 
-        # --- TABELA DE PERIFÉRICOS (NOVA) ---
+        # --- TABELA DE PERIFÉRICOS
         cur.execute("""
         CREATE TABLE IF NOT EXISTS peripherals (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -80,7 +80,7 @@ class InventoryDBManager:
         )
         """)
 
-        # --- TABELA DE VÍNCULO (NOVA) ---
+        # --- TABELA DE VÍNCULO
         cur.execute("""
         CREATE TABLE IF NOT EXISTS equipment_peripherals (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -96,26 +96,6 @@ class InventoryDBManager:
         cur.close()
         conn.close()
 
-        # Tenta aplicar as alterações de ENUM em bancos já existentes
-        try:
-            conn = get_connection()
-            cur = conn.cursor()
-            cur.execute("ALTER TABLE history ADD COLUMN peripheral_id INT NULL")
-            cur.execute("ALTER TABLE history ADD COLUMN details VARCHAR(255) NULL")
-            cur.execute("""
-                ALTER TABLE history MODIFY COLUMN operation ENUM(
-                    'Cadastro','Empréstimo','Devolução', 'Edição', 'Exclusão', 'Estorno',
-                    'Confirmação Empréstimo', 'Confirmação Devolução',
-                    'Cadastro Periférico', 'Vínculo Periférico', 'Desvínculo Periférico', 'Substituição Periférico'
-                ) DEFAULT 'Cadastro'
-            """)
-            conn.commit()
-        except pymysql.MySQLError as e:
-            if e.args[0] not in [1060, 1061]: # Ignora erro de coluna/chave duplicada
-                 print(f"Aviso ao alterar tabelas existentes: {e}")
-        finally:
-            cur.close()
-            conn.close()
 
     def add_item(self, item_data: dict, logged_user: str):
         """Adiciona novo item no estoque"""
