@@ -368,7 +368,7 @@ class InventoryDBManager:
         if dt_issue.date() > datetime.now().date():
             return False, "A data de empréstimo não pode ser no futuro."
 
-        if item.get('date_registered') and dt_issue.date() < item['date_registered']:
+        if item.get('date_registered') and dt_issue.date() < item['date_registered'].date():
             data_formatada = format_date(str(item['date_registered']))
             return False, f"Data de empréstimo não pode ser anterior ao cadastro ({data_formatada})."
 
