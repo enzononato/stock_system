@@ -22,7 +22,7 @@ def resource_path(relative_path):
 # Importa de nossos próprios arquivos
 from inventory_manager_db import InventoryDBManager
 from user_manager_db import UserDBManager
-from utils import format_cpf, format_date
+from utils import format_cpf, format_date, format_title_case, format_time
 from config import (
     REVENDAS_OPTIONS, CENTER_COST_OPTIONS, ADMIN_PASS, ADMIN_USER
 )
@@ -470,7 +470,6 @@ class App(tk.Tk):
         # --- Frame Superior: Cadastro ---
         frm_add = ttk.LabelFrame(tab, text=" Cadastrar Novo Periférico ", padding=15)
         frm_add.pack(fill="x", pady=(0, 15))
-        
         frm_add.grid_columnconfigure(1, weight=1)
         frm_add.grid_columnconfigure(3, weight=1)
 
@@ -503,20 +502,34 @@ class App(tk.Tk):
         frm_list = ttk.LabelFrame(tab, text=" Lista de Periféricos ", padding=15)
         frm_list.pack(fill="both", expand=True)
 
-        cols = ("ID", "Status", "Tipo", "Marca", "Modelo", "Identificador")
+        # ADICIONADO: Frame de filtros/busca
+        frm_filters = ttk.Frame(frm_list)
+        frm_filters.pack(fill="x", pady=(0, 10))
+
+        ttk.Label(frm_filters, text="Buscar:").pack(side="left", padx=(0, 5))
+        self.e_search_peripherals = ttk.Entry(frm_filters, width=30)
+        self.e_search_peripherals.pack(side="left")
+
+        ttk.Button(frm_filters, text="Buscar", command=self.update_peripherals_table, style="Primary.TButton").pack(side="left", padx=10)
+        ttk.Button(frm_filters, text="Limpar", command=self.cmd_clear_peripheral_filter, style="Secondary.TButton").pack(side="left")
+        # FIM DO FRAME DE FILTROS
+
+        cols = ("ID", "Status", "Tipo", "Marca", "Modelo", "Identificador (S/N)")
         self.tree_peripherals = ttk.Treeview(frm_list, columns=cols, show="headings")
         self.tree_peripherals.pack(fill="both", expand=True)
         
         for c in cols:
-            self.tree_peripherals.heading(c, text=c)
+            self.tree_peripherals.heading(c, text=c, command=lambda col=c: self.treeview_sort_column(self.tree_peripherals, col, False))
+        
         self.tree_peripherals.column("ID", width=50, stretch=False)
         self.tree_peripherals.column("Status", width=100, stretch=False)
 
-        # Configuração de cores por status
-        self.tree_peripherals.tag_configure("disp", background="#E8F5E9") # Verde claro
-        self.tree_peripherals.tag_configure("emuso", background="#FFF9C4") # Amarelo claro
-        self.tree_peripherals.tag_configure("defeito", background="#FFEBEE", foreground="red") # Vermelho claro
-        
+        # Configuração de cores por status (sem alterações)
+        self.tree_peripherals.tag_configure("disp", background="#7EFF9C") # Verde
+        self.tree_peripherals.tag_configure("emuso", background="#FFD966") # Amarelo
+        self.tree_peripherals.tag_configure("defeito", background="#FF7E89") # Vermelho
+
+
     def build_linking_tab(self):
         tab = self.tab_linking
 
@@ -737,8 +750,8 @@ class App(tk.Tk):
                 style="Secondary.TButton").pack(side="right", padx=5, pady=5)
 
         cols = (
-            "ID Item", "Operador", "Operação", "Revenda", "Data", "Tipo", "Marca", "Modelo", "Nota Fiscal",
-            "Identificador", "Usuário", "CPF", "Cargo", "Centro de Custo"
+            "ID Item", "Id Per.", "Operador", "Operação", "Revenda", "Data", "Hora", "Tipo", "Marca", "Modelo", "Nota Fiscal",
+            "Identificador", "Usuário", "CPF", "Cargo", "Centro de Custo", "Detalhes"
         )
         
         tree_frame = ttk.Frame(tab)
@@ -746,7 +759,7 @@ class App(tk.Tk):
         
         self.tree_history = ttk.Treeview(tree_frame, columns=cols, show="headings")
 
-        col_widths = { "ID Item": 60, "Operador": 100, "Operação": 100, "Data": 100, "CPF": 120 }
+        col_widths = { "ID Item": 30, "ID Per.": 30, "Operador": 100, "Operação": 140, "Data": 90, "Hora": 70, "CPF": 110, "Detalhes": 200 }
 
         for c in cols:
             self.tree_history.heading(c, text=c, command=lambda col=c: self.treeview_sort_column(self.tree_history, col, False))
@@ -1164,6 +1177,14 @@ class App(tk.Tk):
         for key, widget in self.add_widgets.items():
             if widget.winfo_exists():
                 dados[key] = widget.get().strip()
+
+        if 'brand' in dados:
+            dados['brand'] = format_title_case(dados['brand'])
+        if 'model' in dados:
+            dados['model'] = format_title_case(dados['model'])
+        if 'sistema' in dados:
+            dados['sistema'] = format_title_case(dados['sistema'])
+
         erros = []
         if not dados.get("brand"): erros.append((self.add_widgets['brand'], "Informe a marca."))
         if not dados.get("revenda"): erros.append((self.add_widgets['revenda'], "Informe o campo Revenda."))
@@ -1241,6 +1262,10 @@ class App(tk.Tk):
             "model": self.e_peri_model.get().strip(),
             "identificador": self.e_peri_id.get().strip()
         }
+
+        data['brand'] = format_title_case(data['brand'])
+        data['model'] = format_title_case(data['model'])
+
         if not data["tipo"]:
             self.lbl_peri_add.config(text="O campo 'Tipo' é obrigatório.", style="Danger.TLabel")
             return
@@ -1253,6 +1278,11 @@ class App(tk.Tk):
             self.e_peri_model.delete(0, "end")
             self.e_peri_id.delete(0, "end")
             self.update_all_views()
+
+    def cmd_clear_peripheral_filter(self):
+        """Limpa o campo de busca da aba de periféricos e atualiza a tabela."""
+        self.e_search_peripherals.delete(0, "end")
+        self.update_peripherals_table()
 
     def cmd_load_equipment_for_linking(self, event=None):
         selection = self.cb_link_equip.get()
@@ -1365,6 +1395,13 @@ class App(tk.Tk):
 
         new_data = {key: widget.get().strip() for key, widget in self.edit_widgets.items() if widget.winfo_exists()}
         
+        if 'brand' in new_data:
+            new_data['brand'] = format_title_case(new_data['brand'])
+        if 'model' in new_data:
+            new_data['model'] = format_title_case(new_data['model'])
+        if 'sistema' in new_data:
+            new_data['sistema'] = format_title_case(new_data['sistema'])
+
         erros = []
         if not new_data.get("brand"): erros.append((self.edit_widgets['brand'], "Informe a marca."))
         if not new_data.get("revenda"): erros.append((self.edit_widgets['revenda'], "Informe a revenda."))
@@ -1409,6 +1446,10 @@ class App(tk.Tk):
         cargo = self.e_cargo.get().strip()
         revenda = self.cb_revenda.get().strip()
         date_issue = self.e_date_issue.get().strip()
+
+        user = format_title_case(user)
+        cargo = format_title_case(cargo)
+
         erros = []
         if not sel: erros.append((self.cb_issue, "Selecione um aparelho."))
         if not user: erros.append((self.e_issue_user, "Informe o nome do funcionário."))
@@ -1821,7 +1862,7 @@ class App(tk.Tk):
 
         self.tree_stock.tag_configure("disp", background="#7EFF9C") # Verde
         self.tree_stock.tag_configure("indisp", background="#FF7E89") # Vermelho
-        self.tree_stock.tag_configure("pend", background="#FFD966") # Amarelo/Laranja
+        self.tree_stock.tag_configure("pend", background="#FFD966") # Amarelo
         self.tree_stock.tag_configure("pend_ret", background="#87CEEB") # Azul Claro
 
     def update_issue_cb(self):
@@ -1860,18 +1901,28 @@ class App(tk.Tk):
         self.cb_edit.set('')
 
     def update_peripherals_table(self):
-        """Atualiza a tabela de periféricos."""
+        """Atualiza a tabela de periféricos, aplicando o filtro de busca."""
         self.tree_peripherals.delete(*self.tree_peripherals.get_children())
+        search_text = self.e_search_peripherals.get().lower().strip() # Pega o texto da busca
+
         for p in self.inv.list_peripherals():
+            row_values = (
+                p['id'], p.get('status'), p.get('tipo'), 
+                p.get('brand'), p.get('model'), p.get('identificador')
+            )
+            
+            # Converte a linha em texto para a busca
+            row_str = " ".join(str(v or '').lower() for v in row_values)
+            if search_text and search_text not in row_str:
+                continue # Pula a linha se não corresponder à busca
+
             status = p.get('status')
             tag = ""
             if status == "Disponível": tag = "disp"
             elif status == "Em Uso": tag = "emuso"
             elif status == "Com Defeito": tag = "defeito"
 
-            self.tree_peripherals.insert("", "end", values=(
-                p['id'], status, p.get('tipo'), p.get('brand'), p.get('model'), p.get('identificador')
-            ), tags=(tag,))
+            self.tree_peripherals.insert("", "end", values=row_values, tags=(tag,))
 
     def update_linking_combobox(self):
         """Atualiza o combobox de seleção de equipamento na aba de vínculos."""
@@ -1889,11 +1940,13 @@ class App(tk.Tk):
 
         for h in self.inv.list_history():
             row_values = (
-            h.get("item_id"),         
+            h.get("item_id"),
+            h.get("peripheral_id"),        
             h.get("operador"),        
             h.get("operation"),       
             h.get("revenda"),         
             format_date(h.get("data_operacao")), 
+            format_time(h.get("data_operacao")), 
             h.get("tipo"),            
             h.get("marca"),         
             h.get("modelo"),          
@@ -1902,7 +1955,8 @@ class App(tk.Tk):
             h.get("usuario"),         
             format_cpf(h.get("cpf")), 
             h.get("cargo"),           
-            h.get("center_cost")      
+            h.get("center_cost"),
+            h.get("details")    
         )
             cleaned_row = tuple(v or '' for v in row_values)
             

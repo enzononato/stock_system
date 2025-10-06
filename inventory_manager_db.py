@@ -34,7 +34,7 @@ class InventoryDBManager:
             setor VARCHAR(100), ip VARCHAR(50), mac VARCHAR(50),
             poe ENUM('Sim', 'Não'),
             quantidade_portas VARCHAR(10),
-            date_registered DATE NOT NULL, date_issued DATE,
+            date_registered DATETIME NOT NULL, date_issued DATETIME,
             is_active TINYINT(1) DEFAULT 1
         )
         """)
@@ -75,7 +75,7 @@ class InventoryDBManager:
             model VARCHAR(100),
             identificador VARCHAR(100) UNIQUE,
             status ENUM('Disponível', 'Em Uso', 'Com Defeito') DEFAULT 'Disponível',
-            date_registered DATE NOT NULL,
+            date_registered DATETIME NOT NULL,
             is_active TINYINT(1) DEFAULT 1
         )
         """)
@@ -132,7 +132,7 @@ class InventoryDBManager:
         cur.execute("""
             INSERT INTO history (item_id, operador, data_operacao, operation)
             VALUES (%s, %s, %s, 'Cadastro')
-        """, (item_id, logged_user, datetime.now().strftime("%Y-%m-%d")))
+        """, (item_id, logged_user, datetime.now()))
         
         conn.commit()
         cur.close()
@@ -153,7 +153,7 @@ class InventoryDBManager:
         cur.execute("""
             INSERT INTO history (item_id, operador, data_operacao, operation)
             VALUES (%s, %s, %s, 'Edição')
-        """, (item_id, logged_user, datetime.now().strftime("%Y-%m-%d")))
+        """, (item_id, logged_user, datetime.now()))
 
         conn.commit()
         cur.close()
@@ -187,7 +187,7 @@ class InventoryDBManager:
         cur.execute("""
             INSERT INTO history (item_id, operador, data_operacao, operation, tipo, brand, model, identificador, nota_fiscal, nota_fiscal_anexo, poe, quantidade_portas)
             VALUES (%s, %s, %s, 'Exclusão', %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (item_id, logged_user, datetime.now().strftime("%Y-%m-%d"),
+        """, (item_id, logged_user, datetime.now(),
               item.get('tipo'), item.get('brand'), item.get('model'), item.get('identificador'), item.get('nota_fiscal'), destination_path,
               item.get('poe'), item.get('quantidade_portas')))
 
@@ -228,12 +228,15 @@ class InventoryDBManager:
 
     # --- NOVAS FUNÇÕES DE GERENCIAMENTO DE PERIFÉRICOS ---
 
+# Em inventory_manager_db.py
+
     def add_peripheral(self, data: dict, logged_user: str):
         """Adiciona um novo periférico."""
         conn = get_connection()
         cur = conn.cursor()
         try:
-            data['date_registered'] = datetime.now().strftime("%Y-%m-%d")
+            
+            data['date_registered'] = datetime.now() 
             keys = ", ".join(data.keys())
             placeholders = ", ".join(["%s"] * len(data))
             sql = f"INSERT INTO peripherals ({keys}) VALUES ({placeholders})"
@@ -248,7 +251,7 @@ class InventoryDBManager:
             return True, f"Periférico '{data.get('tipo')}' cadastrado com ID {p_id}."
         except pymysql.MySQLError as e:
             conn.rollback()
-            if e.args[0] == 1062: # Chave duplicada (identificador)
+            if e.args[0] == 1062:
                 return False, "Erro: Já existe um periférico com este Identificador (Nº de Série)."
             return False, f"Erro de banco de dados: {e}"
         finally:
@@ -256,10 +259,10 @@ class InventoryDBManager:
             conn.close()
 
     def list_peripherals(self, status_filter="", type_filter=""):
-        """Lista os periféricos com filtros opcionais."""
+        """Lista os periféricos ATIVOS com filtros opcionais."""
         conn = get_connection()
-        cur = conn.cursor()
-        
+        cur = conn.cursor(pymysql.cursors.DictCursor)
+
         query = "SELECT * FROM peripherals WHERE is_active = 1"
         params = []
         if status_filter:
@@ -321,8 +324,8 @@ class InventoryDBManager:
             cur.execute("UPDATE peripherals SET status = 'Disponível' WHERE id = %s", (ids['peripheral_id'],))
             cur.execute("""
                 INSERT INTO history (item_id, peripheral_id, operador, data_operacao, operation)
-                VALUES (%s, %s, %s, 'Desvínculo Periférico')
-            """, (ids['equipment_id'], ids['peripheral_id'], logged_user, datetime.now()))
+                VALUES (%s, %s, %s, %s, %s)
+            """, (ids['equipment_id'], ids['peripheral_id'], logged_user, datetime.now(), 'Desvínculo Periférico'))
             conn.commit()
             return True, "Periférico desvinculado com sucesso."
         except pymysql.MySQLError as e:
@@ -332,14 +335,15 @@ class InventoryDBManager:
             cur.close()
             conn.close()
 
+
     def replace_peripheral(self, equipment_id: int, old_peripheral_id: int, new_peripheral_id: int, reason: str, logged_user: str):
         """Substitui um periférico por outro."""
         conn = get_connection()
         cur = conn.cursor()
         try:
+            # 1. Marca o periférico antigo como "Com Defeito" E INATIVO
+            cur.execute("UPDATE peripherals SET status = 'Com Defeito', is_active = 0 WHERE id = %s", (old_peripheral_id,))
             
-            # 1. Marca o periférico antigo como "Com Defeito"
-            cur.execute("UPDATE peripherals SET status = 'Com Defeito' WHERE id = %s", (old_peripheral_id,))
             # 2. Remove o vínculo antigo
             cur.execute("DELETE FROM equipment_peripherals WHERE equipment_id = %s AND peripheral_id = %s", (equipment_id, old_peripheral_id))
             # 3. Cria o novo vínculo
@@ -362,7 +366,6 @@ class InventoryDBManager:
             conn.close()
 
 
-
     def issue(self, pid, user, cpf, center_cost, cargo, revenda, date_issue, logged_user: str):
         item = self.find(pid)
         if not item:
@@ -373,6 +376,12 @@ class InventoryDBManager:
         
         try:
             dt_issue = datetime.strptime(date_issue, "%d/%m/%Y")
+            # Mantém a hora atual
+            dt_issue = dt_issue.replace(
+            hour=datetime.now().hour,
+            minute=datetime.now().minute,
+            second=datetime.now().second
+        )
         except ValueError:
             return False, "Data de empréstimo inválida (use dd/mm/aaaa)."
         
@@ -385,17 +394,17 @@ class InventoryDBManager:
 
         conn = get_connection()
         cur = conn.cursor()
-        # ALTERAÇÃO AQUI: O status agora é 'Pendente'
+        #  O status agora é 'Pendente'
         cur.execute("""
             UPDATE items 
             SET status='Pendente', assigned_to=%s, cpf=%s, date_issued=%s, revenda=%s 
             WHERE id=%s
-        """, (user, cpf, dt_issue.strftime("%Y-%m-%d"), revenda, pid))
+        """, (user, cpf, dt_issue, revenda, pid))
 
         cur.execute("""
             INSERT INTO history (item_id, operador, usuario, cpf, cargo, center_cost, revenda, data_operacao, operation)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'Empréstimo')
-        """, (pid, logged_user, user, cpf, cargo, center_cost, revenda, dt_issue.strftime("%Y-%m-%d")))
+        """, (pid, logged_user, user, cpf, cargo, center_cost, revenda, dt_issue, 'Empréstimo'))
 
         conn.commit()
         cur.close()
@@ -528,7 +537,7 @@ class InventoryDBManager:
         cur.execute("""
             INSERT INTO history (item_id, operador, data_operacao, operation)
             VALUES (%s, %s, %s, 'Devolução')
-        """, (item_id, logged_user, datetime.now().strftime("%Y-%m-%d")))
+        """, (item_id, logged_user, datetime.now()))
 
         conn.commit()
         cur.close()
@@ -601,7 +610,9 @@ class InventoryDBManager:
         # ALTERADO: Adicionado filtro para não mostrar operações estornadas
         cur.execute("""
             SELECT
-                h.id, h.item_id, h.operador,
+                h.id, h.item_id, h.operador, h.peripheral_id, h.details,
+                    
+                -- Usa COALESCE para pegar dados do item ou do histórico, se o item foi excluído
                 COALESCE(i.tipo, h.tipo) as tipo,
                 COALESCE(i.brand, h.brand) as marca,
                 COALESCE(i.model, h.model) as modelo,
