@@ -479,7 +479,7 @@ class App(tk.Tk):
 
         # Linha 1
         ttk.Label(frm_add, text="Tipo:").grid(row=0, column=0, sticky="e", padx=5, pady=5)
-        self.cb_peri_tipo = ttk.Combobox(frm_add, state="readonly", values=["Mouse", "Teclado", "Monitor", "Headset", "Webcam", "Adaptador", "Outro"])
+        self.cb_peri_tipo = ttk.Combobox(frm_add, state="readonly", values=["Mouse", "Teclado", "Monitor", "Mousepad", "Suporte", "Estabilizador", "Mochila", "Fone", "Webcam", "Adaptador", "Outro"])
         self.cb_peri_tipo.grid(row=0, column=1, sticky="ew", padx=5, pady=5)
         
         ttk.Label(frm_add, text="Marca:").grid(row=0, column=2, sticky="e", padx=5, pady=5)
@@ -506,7 +506,7 @@ class App(tk.Tk):
         frm_list = ttk.LabelFrame(tab, text=" Lista de Periféricos ", padding=15)
         frm_list.pack(fill="both", expand=True)
 
-        # ADICIONADO: Frame de filtros/busca
+        # Frame de filtros/busca
         frm_filters = ttk.Frame(frm_list)
         frm_filters.pack(fill="x", pady=(0, 10))
 
@@ -516,7 +516,6 @@ class App(tk.Tk):
 
         ttk.Button(frm_filters, text="Buscar", command=self.update_peripherals_table, style="Primary.TButton").pack(side="left", padx=10)
         ttk.Button(frm_filters, text="Limpar", command=self.cmd_clear_peripheral_filter, style="Secondary.TButton").pack(side="left")
-        # FIM DO FRAME DE FILTROS
 
         cols = ("ID", "Status", "Tipo", "Marca", "Modelo", "Identificador (S/N)")
         self.tree_peripherals = ttk.Treeview(frm_list, columns=cols, show="headings")
@@ -528,7 +527,7 @@ class App(tk.Tk):
         self.tree_peripherals.column("ID", width=50, stretch=False)
         self.tree_peripherals.column("Status", width=100, stretch=False)
 
-        # Configuração de cores por status (sem alterações)
+        # Configuração de cores por status
         self.tree_peripherals.tag_configure("disp", background="#7EFF9C") # Verde
         self.tree_peripherals.tag_configure("emuso", background="#FFD966") # Amarelo
         self.tree_peripherals.tag_configure("defeito", background="#FF7E89") # Vermelho
@@ -1260,11 +1259,14 @@ class App(tk.Tk):
 
 
     def cmd_add_peripheral(self):
+    
+        identificador_str = self.e_peri_id.get().strip()
+
         data = {
             "tipo": self.cb_peri_tipo.get(),
             "brand": self.e_peri_brand.get().strip(),
             "model": self.e_peri_model.get().strip(),
-            "identificador": self.e_peri_id.get().strip()
+            "identificador": identificador_str if identificador_str else None
         }
 
         data['brand'] = format_title_case(data['brand'])

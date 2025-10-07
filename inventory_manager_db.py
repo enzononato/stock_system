@@ -475,24 +475,37 @@ class InventoryDBManager:
         if not user:
             return False, "Não foi possível encontrar o usuário associado a este empréstimo."
 
-        # --- Parte 1: Gerar o Termo (lógica de generate_return_term) ---
+        # --- Parte 1: Gerar o Termo ---
         revenda = item.get("revenda")
         modelo_path = TERMO_DEVOLUCAO_MODELOS.get(revenda)
         if not modelo_path or not os.path.exists(modelo_path):
             return False, f"Modelo de termo de devolução não encontrado para {revenda}."
+
+        # ---LÓGICA PARA BUSCAR E FORMATAR PERIFÉRICOS ---
+        linked_peripherals = self.list_peripherals_for_equipment(item_id)
+        peripherals_text = "Nenhum periférico adicional vinculado."
+        if linked_peripherals:
+            peripherals_list = [
+                f"- {p['tipo']}: {p.get('brand','')} {p.get('model','')} (S/N: {p.get('identificador') or 'N/A'})"
+                for p in linked_peripherals
+            ]
+            peripherals_text = "\n".join(peripherals_list)
+        # --- FIM DA LOGICA ---
 
         safe_user_name = user.replace(" ", "_")
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         saida_path = os.path.join(RETURN_TERMS_DIR, f"termo_devolucao_{item_id}_{safe_user_name}_{revenda}_{timestamp}.docx")
         doc = Document(modelo_path)
         
+
         substituicoes = {
             "{{nome}}": user, "{{data_hoje}}": datetime.now().strftime("%d/%m/%Y"),
             "{{cpf}}": format_cpf(item.get("cpf", "")),
             "{{data_emprestimo}}": format_date(item.get("date_issued", "")), "{{marca}}": f" {item.get('brand', '')}" if item.get("brand") else "",
             "{{modelo}}": f" {item.get('model', '')}" if item.get("model") else "", "{{tipo}}": item.get("tipo", ""),
             "{{identificador}}": f" {item.get('identificador', '')}" if item.get("identificador") else "",
-            "{{nota_fiscal}}": f" {item.get('nota_fiscal', '')}" if item.get("nota_fiscal") else ""
+            "{{nota_fiscal}}": f" {item.get('nota_fiscal', '')}" if item.get("nota_fiscal") else "",
+            "{{perifericos}}": peripherals_text
         }
         
         try:
@@ -510,7 +523,7 @@ class InventoryDBManager:
         except Exception as e:
             return False, f"Erro ao salvar o documento do termo: {e}"
 
-        # --- Parte 2: Iniciar a Devolução (lógica de initiate_return) ---
+        # --- Parte 2: Iniciar a Devolução (sem alterações) ---
         conn = get_connection()
         cur = conn.cursor()
         
@@ -527,7 +540,6 @@ class InventoryDBManager:
         
         # Se tudo deu certo, retorna True e o caminho do arquivo gerado
         return True, saida_path
-
 
 
     def confirm_return(self, item_id: int, logged_user: str, signed_return_term_path: str):
@@ -783,7 +795,7 @@ class InventoryDBManager:
         peripherals_text = "Nenhum periférico adicional vinculado."
         if linked_peripherals:
             peripherals_list = [
-                f"- {p['tipo']}: {p.get('brand','')} {p.get('model','')} (S/N: {p.get('identificador', 'N/A')})"
+                f"- {p['tipo']}: {p.get('brand','')} {p.get('model','')} (S/N: {p.get('identificador') or 'N/A'})"
                 for p in linked_peripherals
             ]
             peripherals_text = "\n".join(peripherals_list)
