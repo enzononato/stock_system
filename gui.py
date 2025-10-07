@@ -276,6 +276,10 @@ class App(tk.Tk):
             notebook.hide(self.tab_users)
             if self.role == "Jovem Aprendiz":
                 notebook.hide(self.tab_history)
+                notebook.hide(self.tab_issue)
+                notebook.hide(self.tab_return)
+                notebook.hide(self.tab_edit)
+                notebook.hide(self.tab_report)
 
 
         self.update_all_views()
@@ -1188,6 +1192,7 @@ class App(tk.Tk):
         erros = []
         if not dados.get("brand"): erros.append((self.add_widgets['brand'], "Informe a marca."))
         if not dados.get("revenda"): erros.append((self.add_widgets['revenda'], "Informe o campo Revenda."))
+        if not dados.get("model"): erros.append((self.add_widgets['model'], "Informe o modelo."))
         nota_fiscal = dados.get("nota_fiscal")
         if not nota_fiscal:
             erros.append((self.add_widgets['nota_fiscal'], "Informe a Nota Fiscal."))
@@ -1195,7 +1200,6 @@ class App(tk.Tk):
             erros.append((self.add_widgets['nota_fiscal'], "A Nota Fiscal deve conter exatamente 9 números."))
             
         if tipo in ["Celular", "Tablet"]:
-            if not dados.get("model"): erros.append((self.add_widgets['model'], "Informe o modelo."))
             if not dados.get("identificador"): erros.append((self.add_widgets['identificador'], "Informe o Identificador (IMEI/Nº de Série)."))
         
         if tipo == "Tablet" and not dados.get("storage"): erros.append((self.add_widgets['storage'], "Informe o armazenamento."))
@@ -1214,12 +1218,12 @@ class App(tk.Tk):
                 if not dados.get(campo): erros.append((self.add_widgets[campo], msg))
 
         if tipo == "Switch":
-            for campo, msg in {"model": "Informe o modelo.", "poe": "Informe se possui POE.", "quantidade_portas": "Informe a quantidade de portas."}.items():
+            for campo, msg in {"poe": "Informe se possui POE.", "quantidade_portas": "Informe a quantidade de portas."}.items():
                 if not dados.get(campo):
                     erros.append((self.add_widgets[campo], msg))
 
         if tipo == "HD":
-            for campo, msg in {"model": "Informe o modelo.", "storage": "Informe o armazenamento."}.items():
+            for campo, msg in {"storage": "Informe o armazenamento."}.items():
                 if not dados.get(campo):
                     erros.append((self.add_widgets[campo], msg))
         
