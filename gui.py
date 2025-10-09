@@ -24,7 +24,7 @@ from inventory_manager_db import InventoryDBManager
 from user_manager_db import UserDBManager
 from utils import format_cpf, format_date, format_title_case, format_time
 from config import (
-    REVENDAS_OPTIONS, CENTER_COST_OPTIONS, ADMIN_PASS, ADMIN_USER
+    REVENDAS_OPTIONS, CENTER_COST_OPTIONS, ADMIN_PASS, ADMIN_USER, SETORES_OPTIONS
 )
 
 # --- Paleta de Cores e Fontes (você pode alterar aqui para mudar o app inteiro) ---
@@ -88,16 +88,23 @@ class ScrollableFrame(ttk.Frame):
         canvas.configure(yscrollcommand=scrollbar.set)
 
         # --- Ativa a rolagem com o mouse ---
-        self.bind_all("<MouseWheel>", lambda e: self._on_mouse_wheel(e, canvas), add="+")
+        canvas.bind("<Enter>", lambda e: self._bind_mouse_scroll(e, canvas))
+        canvas.bind("<Leave>", lambda e: self._unbind_mouse_scroll(e, canvas))
 
         # Empacota os componentes
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
     def _on_mouse_wheel(self, event, canvas):
-        # Verifica se o cursor está sobre o canvas ou um de seus filhos antes de rolar
-        if (str(event.widget).startswith(str(canvas))):
-            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+    def _bind_mouse_scroll(self, event, canvas):
+        # Vincula a rolagem quando o mouse entra no canvas
+        canvas.bind_all("<MouseWheel>", lambda e: self._on_mouse_wheel(e, canvas))
+
+    def _unbind_mouse_scroll(self, event, canvas):
+        # Desvincula a rolagem quando o mouse sai do canvas
+        canvas.unbind_all("<MouseWheel>")
 
 
 class App(tk.Tk):
@@ -375,7 +382,7 @@ class App(tk.Tk):
 
         for col in cols:
             self.tree_stock.heading(col, text=col, command=lambda c=col: self.treeview_sort_column(self.tree_stock, c, False))
-            self.tree_stock.column(col, width=col_widths.get(col, 120), anchor="w", stretch=False)
+            self.tree_stock.column(col, width=col_widths.get(col, 120), anchor="center", stretch=False)
 
         vsb = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree_stock.yview)
         vsb.pack(side="right", fill="y")
@@ -523,14 +530,15 @@ class App(tk.Tk):
         
         for c in cols:
             self.tree_peripherals.heading(c, text=c, command=lambda col=c: self.treeview_sort_column(self.tree_peripherals, col, False))
+            self.tree_peripherals.column(c, anchor="center")
         
+        # Define larguras específicas
         self.tree_peripherals.column("ID", width=50, stretch=False)
         self.tree_peripherals.column("Status", width=100, stretch=False)
 
-        # Configuração de cores por status
-        self.tree_peripherals.tag_configure("disp", background="#7EFF9C") # Verde
-        self.tree_peripherals.tag_configure("emuso", background="#FFD966") # Amarelo
-        self.tree_peripherals.tag_configure("defeito", background="#FF7E89") # Vermelho
+        self.tree_peripherals.tag_configure("disp", background="#7EFF9C")
+        self.tree_peripherals.tag_configure("emuso", background="#FFD966")
+        self.tree_peripherals.tag_configure("defeito", background="#FF7E89")
 
 
     def build_linking_tab(self):
@@ -559,8 +567,10 @@ class App(tk.Tk):
         cols_linked = ("ID Vínculo", "ID Per.", "Tipo", "Marca/Modelo", "Identificador")
         self.tree_linked_peripherals = ttk.Treeview(frm_linked, columns=cols_linked, show="headings")
         self.tree_linked_peripherals.pack(fill="both", expand=True)
-        for c in cols_linked: self.tree_linked_peripherals.heading(c, text=c)
-        self.tree_linked_peripherals.column("ID Vínculo", width=0, stretch=False) # Oculta ID do Vínculo
+        for c in cols_linked:
+            self.tree_linked_peripherals.heading(c, text=c)
+            self.tree_linked_peripherals.column(c, anchor="center")
+        self.tree_linked_peripherals.column("ID Vínculo", width=0, stretch=False) # Oculta a coluna ID Vínculo
         self.tree_linked_peripherals.column("ID Per.", width=60, stretch=False)
 
         # Frame Central: Botões de Ação
@@ -578,7 +588,9 @@ class App(tk.Tk):
         cols_avail = ("ID", "Tipo", "Marca/Modelo", "Identificador")
         self.tree_available_peripherals = ttk.Treeview(frm_available, columns=cols_avail, show="headings")
         self.tree_available_peripherals.pack(fill="both", expand=True)
-        for c in cols_avail: self.tree_available_peripherals.heading(c, text=c)
+        for c in cols_avail:
+            self.tree_available_peripherals.heading(c, text=c)
+            self.tree_available_peripherals.column(c, anchor="center")
         self.tree_available_peripherals.column("ID", width=60, stretch=False)
 
         # Label de Mensagens
@@ -600,6 +612,7 @@ class App(tk.Tk):
             ("Funcionário:", 'e_issue_user', ttk.Entry, {}),
             ("CPF:", 'e_issue_cpf', ttk.Entry, {}),
             ("Centro de Custo:", 'cb_center', ttk.Combobox, {'state': 'readonly', 'values': CENTER_COST_OPTIONS}),
+            ("Setor:", 'cb_setor', ttk.Combobox, {'state': 'readonly', 'values': SETORES_OPTIONS}),
             ("Cargo:", 'e_cargo', ttk.Entry, {}),
             ("Revenda:", 'cb_revenda', ttk.Combobox, {'state': 'readonly', 'values': REVENDAS_OPTIONS}),
             ("Data Empréstimo (dd/mm/aaaa):", 'e_date_issue', ttk.Entry, {})
@@ -615,6 +628,7 @@ class App(tk.Tk):
         self.cb_issue.bind("<<ComboboxSelected>>", self.on_widget_interaction)
         self.e_issue_user.bind("<KeyRelease>", self.on_widget_interaction)
         self.cb_center.bind("<<ComboboxSelected>>", self.on_widget_interaction)
+        self.cb_setor.bind("<<ComboboxSelected>>", self.on_widget_interaction)
         self.e_cargo.bind("<KeyRelease>", self.on_widget_interaction)
         self.cb_revenda.bind("<<ComboboxSelected>>", self.on_widget_interaction)
         
@@ -646,7 +660,7 @@ class App(tk.Tk):
         self.tree_return_active = ttk.Treeview(frm_active, columns=cols_active, show="headings", height=8)
         self.tree_return_active.pack(fill="x", expand=True)
         for c in cols_active:
-            self.tree_return_active.heading(c, text=c, anchor="w")
+            self.tree_return_active.heading(c, text=c, anchor="center")
         self.tree_return_active.column("ID", width=50, stretch=False)
         self.tree_return_active.column("Usuário", width=200)
 
@@ -663,7 +677,7 @@ class App(tk.Tk):
         self.tree_return_pending = ttk.Treeview(frm_pending, columns=cols_pending, show="headings", height=8)
         self.tree_return_pending.pack(fill="both", expand=True)
         for c in cols_pending:
-            self.tree_return_pending.heading(c, text=c, anchor="w")
+            self.tree_return_pending.heading(c, text=c, anchor="center")
         self.tree_return_pending.column("ID", width=50, stretch=False)
         self.tree_return_pending.column("Usuário", width=200)
         
@@ -754,7 +768,7 @@ class App(tk.Tk):
 
         cols = (
             "ID Item", "Id Per.", "Operador", "Operação", "Revenda", "Data", "Hora", "Tipo", "Marca", "Modelo", "Nota Fiscal",
-            "Identificador", "Usuário", "CPF", "Cargo", "Centro de Custo", "Detalhes"
+            "Identificador", "Usuário", "CPF", "Cargo", "Centro de Custo", "Setor", "Detalhes"
         )
         
         tree_frame = ttk.Frame(tab)
@@ -762,11 +776,11 @@ class App(tk.Tk):
         
         self.tree_history = ttk.Treeview(tree_frame, columns=cols, show="headings")
 
-        col_widths = { "ID Item": 30, "ID Per.": 30, "Operador": 100, "Operação": 140, "Data": 90, "Hora": 70, "CPF": 110, "Detalhes": 200 }
+        col_widths = { "ID Item": 30, "ID Per.": 30, "Operador": 100, "Operação": 140, "Data": 90, "Hora": 70, "CPF": 110, "Detalhes": 200, "Setor": 100}
 
         for c in cols:
             self.tree_history.heading(c, text=c, command=lambda col=c: self.treeview_sort_column(self.tree_history, col, False))
-            self.tree_history.column(c, width=col_widths.get(c, 120), anchor="w", stretch=False)
+            self.tree_history.column(c, width=col_widths.get(c, 120), anchor="center", stretch=False)
 
         ysb = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree_history.yview)
         xsb = ttk.Scrollbar(tab, orient="horizontal", command=self.tree_history.xview)
@@ -811,8 +825,8 @@ class App(tk.Tk):
         ttk.Button(action_frm, text="Exportar CSV", command=lambda: self.exportar_csv(self.tree_report, "Exportar Relatório", "relatório"), style="Secondary.TButton").pack(side="left")
         ttk.Button(action_frm, text="Estornar Lançamento", command=self.cmd_delete_report_entry, style="Danger.TButton").pack(side="left", padx=10)
         
-        # ALTERADO: Adicionada a coluna "ID Histórico" que ficará oculta
-        cols = ("ID Histórico", "ID Item", "Operador", "Revenda", "Tipo", "Marca", "Modelo", "Nota Fiscal", "Identificador", "Usuário", "CPF", "Operação", "Data Empréstimo", "Data Devolução", "Centro de Custo", "Cargo")
+        # adicionado a coluna "ID Histórico" que ficará oculta
+        cols = ("ID Histórico", "ID Item", "Operador", "Revenda", "Tipo", "Marca", "Modelo", "Nota Fiscal", "Identificador", "Usuário", "CPF", "Operação", "Data Empréstimo", "Data Devolução", "Centro de Custo", "Setor", "Cargo")
         
         tree_frame = ttk.Frame(frm)
         tree_frame.pack(fill="both", expand=True)
@@ -823,7 +837,7 @@ class App(tk.Tk):
 
         for c in cols:
             self.tree_report.heading(c, text=c, command=lambda col=c: self.treeview_sort_column(self.tree_report, col, False))
-            self.tree_report.column(c, width=col_widths.get(c, 120), anchor='w', stretch=False)
+            self.tree_report.column(c, width=col_widths.get(c, 120), anchor='center', stretch=False)
         
         # OCULTA a coluna ID Histórico
         self.tree_report.column("ID Histórico", width=0, stretch=False)
@@ -966,7 +980,7 @@ class App(tk.Tk):
         frm_left = ttk.Frame(tab, padding=10)
         frm_left.pack(side="left", fill="both", expand=True, padx=(0, 5))
 
-        ttk.Label(frm_left, text="Usuários Cadastrados", style="Title.TLabel").pack(pady=(0, 10), anchor="w")
+        ttk.Label(frm_left, text="Usuários Cadastrados", style="Title.TLabel").pack(pady=(0, 10), anchor="center")
 
         cols = ("ID", "Usuário", "Função")
         self.tree_users = ttk.Treeview(frm_left, columns=cols, show="headings")
@@ -1050,7 +1064,7 @@ class App(tk.Tk):
         
         widgets = {}
         
-        # --- CAMPOS COMUNS REORGANIZADOS ---
+        # --- CAMPOS COMUNS ---
         # Marca
         ttk.Label(parent_frame, text="Marca:").grid(row=0, column=0, sticky="e", pady=5, padx=5)
         e_brand = ttk.Entry(parent_frame)
@@ -1059,7 +1073,7 @@ class App(tk.Tk):
         e_brand.bind("<KeyRelease>", self.on_widget_interaction)
         widgets['brand'] = e_brand
 
-        # Modelo (ADICIONADO AOS CAMPOS COMUNS)
+        # Modelo
         ttk.Label(parent_frame, text="Modelo:").grid(row=1, column=0, sticky="e", pady=5, padx=5)
         e_model = ttk.Entry(parent_frame)
         e_model.grid(row=1, column=1, pady=5, padx=5, sticky="ew")
@@ -1085,10 +1099,27 @@ class App(tk.Tk):
         e_nota_fiscal.bind("<KeyRelease>", self.on_widget_interaction)
         widgets['nota_fiscal'] = e_nota_fiscal
 
+
+        # DATA DE CADASTRO
+        ttk.Label(parent_frame, text="Data de Cadastro:").grid(row=4, column=0, sticky="e", pady=5, padx=5)
+        e_date_registered = ttk.Entry(parent_frame)
+        e_date_registered.grid(row=4, column=1, pady=5, padx=5, sticky="ew")
+        widgets['date_registered'] = e_date_registered
+        
+        if item_data: # Se estamos editando um item...
+            # Formata a data que vem do banco e insere no campo
+            e_date_registered.insert(0, format_date(item_data.get('date_registered')))
+            # Bloqueia a edição da data de cadastro original
+            e_date_registered.config(state="readonly")
+        else: # Se estamos cadastrando um novo item...
+            # Aplica a máscara de data dd/mm/aaaa
+            e_date_registered.bind("<KeyRelease>", lambda e: self.on_date_entry(e, e_date_registered))
+            e_date_registered.bind("<KeyRelease>", self.on_widget_interaction, add="+")
+
         # --- FIM DOS CAMPOS COMUNS ---
 
         # Campos específicos
-        row_start = 4
+        row_start = 5
         if tipo == "Celular":
             
             ttk.Label(parent_frame, text="IMEI:").grid(row=row_start + 1, column=0, sticky="e", pady=5, padx=5)
@@ -1197,6 +1228,19 @@ class App(tk.Tk):
             erros.append((self.add_widgets['nota_fiscal'], "Informe a Nota Fiscal."))
         elif not nota_fiscal.isdigit() or len(nota_fiscal) != 9:
             erros.append((self.add_widgets['nota_fiscal'], "A Nota Fiscal deve conter exatamente 9 números."))
+
+        date_str = dados.get("date_registered")
+        if not date_str:
+            erros.append((self.add_widgets['date_registered'], "Informe a data de cadastro."))
+        else:
+            try:
+                # Tenta converter a data para garantir que o formato está correto
+                # e já a armazena no formato que o banco de dados entende
+                dt_obj = datetime.strptime(date_str, "%d/%m/%Y")
+                dados['date_registered'] = dt_obj
+            except ValueError:
+                erros.append((self.add_widgets['date_registered'], "Formato de data inválido. Use dd/mm/aaaa."))
+
             
         if tipo in ["Celular", "Tablet"]:
             if not dados.get("identificador"): erros.append((self.add_widgets['identificador'], "Informe o Identificador (IMEI/Nº de Série)."))
@@ -1239,16 +1283,21 @@ class App(tk.Tk):
             return
 
         dados["tipo"] = tipo
-        dados["date_registered"] = datetime.now()
-        item_id = self.inv.add_item(dados, self.logged_user)
+
+        ok, result = self.inv.add_item(dados, self.logged_user)
         
-        if not item_id:
-            self.lbl_add.config(text="Erro ao cadastrar item.", style="Danger.TLabel")
+        if not ok:
+            # Se 'ok' for False, 'result' é a mensagem de erro do backend
+            self.lbl_add.config(text=result, style="Danger.TLabel")
             return
+        
+        # Se 'ok' for True, 'result' é o item_id
+        item_id = result
         
         for widget in self.add_widgets.values():
             style_name = str(widget.cget('style')).replace('Error.', '')
             widget.configure(style=style_name)
+
         self.lbl_add.config(text=f"{tipo} ID {item_id} cadastrado com sucesso!", style="Success.TLabel")
         self.cb_tipo.set("")
         
@@ -1303,12 +1352,16 @@ class App(tk.Tk):
         self.lbl_link_msg.config(text="")
 
         # Popula vinculados
+        linked_peripherals = self.inv.list_peripherals_for_equipment(equipment_id)
+        linked_peripherals.sort(key=lambda p: p['tipo'])  # Ordena por tipo de periférico
         for p in self.inv.list_peripherals_for_equipment(equipment_id):
             self.tree_linked_peripherals.insert("", "end", values=(
                 p['link_id'], p['id'], p.get('tipo'), f"{p.get('brand','')} {p.get('model','')}", p.get('identificador')
             ))
         
         # Popula disponíveis
+        available_peripherals = self.inv.list_peripherals(status_filter="Disponível")
+        available_peripherals.sort(key=lambda p: p['tipo']) # <-- Ordena por tipo
         for p in self.inv.list_peripherals(status_filter="Disponível"):
             self.tree_available_peripherals.insert("", "end", values=(
                 p['id'], p.get('tipo'), f"{p.get('brand','')} {p.get('model','')}", p.get('identificador')
@@ -1449,6 +1502,7 @@ class App(tk.Tk):
         user = self.e_issue_user.get().strip()
         cpf = self.e_issue_cpf.get().strip()
         cc = self.cb_center.get().strip()
+        setor = self.cb_setor.get().strip()
         cargo = self.e_cargo.get().strip()
         revenda = self.cb_revenda.get().strip()
         date_issue = self.e_date_issue.get().strip()
@@ -1460,6 +1514,7 @@ class App(tk.Tk):
         if not sel: erros.append((self.cb_issue, "Selecione um aparelho."))
         if not user: erros.append((self.e_issue_user, "Informe o nome do funcionário."))
         if not cc: erros.append((self.cb_center, "Selecione o centro de custo."))
+        if not setor: erros.append((self.cb_setor, "Selecione o setor."))
         if not cargo: erros.append((self.e_cargo, "Informe o cargo."))
         if not revenda: erros.append((self.cb_revenda, "Selecione a revenda."))
         if not date_issue: erros.append((self.e_date_issue, "Informe a data do empréstimo."))
@@ -1482,13 +1537,14 @@ class App(tk.Tk):
             return
 
         pid = int(sel.split(' - ', 1)[0])
-        ok, msg = self.inv.issue(pid, user, cpf, cc, cargo, revenda, date_issue, self.logged_user)
+        ok, msg = self.inv.issue(pid, user, cpf, cc, setor, cargo, revenda, date_issue, self.logged_user)
         self.lbl_issue.config(text=msg, style='Success.TLabel' if ok else 'Danger.TLabel')
         if ok:
             self.cb_issue.set('')
             self.e_issue_user.delete(0, 'end')
             self.e_issue_cpf.delete(0, 'end')
             self.cb_center.set('')
+            self.cb_setor.set('')
             self.e_cargo.delete(0, 'end')
             self.cb_revenda.set('')
             self.e_date_issue.delete(0, 'end')
@@ -1647,7 +1703,8 @@ class App(tk.Tk):
             operation_display,                    
             data_inicial_display,                 
             data_devolucao_display,               
-            log.get('center_cost'),               
+            log.get('center_cost'),
+            log.get('setor'),             
             log.get('cargo')
             )
             
@@ -1962,6 +2019,7 @@ class App(tk.Tk):
             format_cpf(h.get("cpf")), 
             h.get("cargo"),           
             h.get("center_cost"),
+            h.get("setor"),
             h.get("details")    
         )
             cleaned_row = tuple(v or '' for v in row_values)

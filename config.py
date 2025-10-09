@@ -76,3 +76,25 @@ TERMO_DEVOLUCAO_MODELOS = {
     "Revalle Alagoinhas": resource_path("modelos/devolucao/termo_devolucao_alagoinhas.docx"),
     "Revalle Serrinha": resource_path("modelos/devolucao/termo_devolucao_serrinha.docx"),
 }
+
+
+SETORES_OPTIONS = [
+    "Contabilidade",
+    "Financeiro",
+    "Departamento pessoal",
+    "Cultura",
+    "Gente",
+    "Armazém",
+    "Distribuição",
+    "Segurança",
+    "Compras",
+    "TI",
+    "CME",
+    "Vendas",
+    "Puxada",
+    "Faturamento",
+    "Portaria",
+    "Auditório",
+    "Caixa",
+    "Diretoria"
+]

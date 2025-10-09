@@ -25,7 +25,7 @@ class InventoryDBManager:
         CREATE TABLE IF NOT EXISTS items (
             id INT AUTO_INCREMENT PRIMARY KEY,
             tipo VARCHAR(50), brand VARCHAR(100), model VARCHAR(100), identificador VARCHAR(100),
-            nota_fiscal VARCHAR(50) UNIQUE,
+            nota_fiscal VARCHAR(50),
             status ENUM('Disponível','Indisponível', 'Pendente', 'Pendente Devolução') DEFAULT 'Disponível',
             assigned_to VARCHAR(100), cpf VARCHAR(20), revenda VARCHAR(100),
             dominio VARCHAR(50), host VARCHAR(100), endereco_fisico VARCHAR(150),
@@ -50,6 +50,7 @@ class InventoryDBManager:
             cpf VARCHAR(20),
             cargo VARCHAR(100),
             center_cost VARCHAR(100),
+            setor VARCHAR(100),
             revenda VARCHAR(100),
             data_operacao DATETIME,
             operation ENUM(
@@ -259,15 +260,17 @@ class InventoryDBManager:
         """Lista os periféricos vinculados a um equipamento específico."""
         conn = get_connection()
         cur = conn.cursor()
-        cur.execute("""
-            SELECT p.*, ep.id as link_id
-            FROM peripherals p
-            JOIN equipment_peripherals ep ON p.id = ep.peripheral_id
-            WHERE ep.equipment_id = %s
-        """, (equipment_id,))
-        cur.close()
-        conn.close()
-        return cur.fetchall()
+        try:
+            cur.execute("""
+                SELECT p.*, ep.id as link_id
+                FROM peripherals p
+                JOIN equipment_peripherals ep ON p.id = ep.peripheral_id
+                WHERE ep.equipment_id = %s
+            """, (equipment_id,))
+            return cur.fetchall()
+        finally:
+            cur.close()
+            conn.close()
 
     def link_peripheral_to_equipment(self, equipment_id: int, peripheral_id: int, logged_user: str):
         """Cria um vínculo e atualiza o status do periférico."""
@@ -348,7 +351,7 @@ class InventoryDBManager:
             conn.close()
 
 
-    def issue(self, pid, user, cpf, center_cost, cargo, revenda, date_issue, logged_user: str):
+    def issue(self, pid, user, cpf, center_cost, cargo, setor, revenda, date_issue, logged_user: str):
         item = self.find(pid)
         if not item:
             return False, "Item não encontrado."
@@ -384,9 +387,9 @@ class InventoryDBManager:
         """, (user, cpf, dt_issue, revenda, pid))
 
         cur.execute("""
-            INSERT INTO history (item_id, operador, usuario, cpf, cargo, center_cost, revenda, data_operacao, operation)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'Empréstimo')
-        """, (pid, logged_user, user, cpf, cargo, center_cost, revenda, dt_issue))
+            INSERT INTO history (item_id, operador, usuario, cpf, cargo, center_cost, setor, revenda, data_operacao, operation)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'Empréstimo')
+        """, (pid, logged_user, user, cpf, cargo, center_cost, setor, revenda, dt_issue, 'Empréstimo'))
 
         conn.commit()
         cur.close()
@@ -612,7 +615,7 @@ class InventoryDBManager:
                 COALESCE(i.model, h.model) as modelo,
                 COALESCE(i.identificador, h.identificador) as identificador,
                 COALESCE(i.nota_fiscal, h.nota_fiscal) as nota_fiscal,
-                h.usuario, h.cpf, h.cargo, h.center_cost, h.revenda,
+                h.usuario, h.cpf, h.cargo, h.center_cost, h.setor, h.revenda,
                 h.data_operacao, h.operation
             FROM history h
             LEFT JOIN items i ON i.id = h.item_id
@@ -637,7 +640,7 @@ class InventoryDBManager:
             WITH EmprestimosDoMes AS (
                 SELECT
                     h.id AS history_id,
-                    h.item_id, h.operador, h.usuario, h.cpf, h.cargo, h.center_cost, h.revenda,
+                    h.item_id, h.operador, h.usuario, h.cpf, h.cargo, h.center_cost, h.setor, h.revenda,
                     h.data_operacao AS data_emprestimo,
                     
                     (SELECT MIN(hc.data_operacao) FROM history hc 
@@ -669,7 +672,7 @@ class InventoryDBManager:
             UNION ALL
 
             SELECT
-                cad.id as history_id, cad.item_id, cad.operador, NULL, NULL, NULL, NULL, i.revenda,
+                cad.id as history_id, cad.item_id, cad.operador, NULL, NULL, NULL, NULL, NULL, i.revenda,
                 cad.data_operacao AS data_emprestimo,
                 NULL AS data_confirmacao,
                 NULL AS data_devolucao,
@@ -823,25 +826,21 @@ class InventoryDBManager:
             "{{perifericos}}": peripherals_text
         }
         
-        for key, value in item.items():
-            placeholder = f"{{{{{key}}}}}"
-            str_value = str(value) if value not in [None, ""] else ""
-            if str_value: str_value = " " + str_value
-            substituicoes[placeholder] = str_value
-        
-        for p in doc.paragraphs:
-            for chave, valor in substituicoes.items():
-                if chave in p.text: p.text = p.text.replace(chave, str(valor))
-        
-        for tabela in doc.tables:
-            for linha in tabela.rows:
-                for celula in linha.cells:
-                    for p in celula.paragraphs:
-                        for chave, valor in substituicoes.items():
-                            if chave in p.text: p.text = p.text.replace(chave, str(valor))
-                            
-        doc.save(saida_path)
-        return True, saida_path
+        try:
+            for p in doc.paragraphs:
+                for chave, valor in substituicoes.items():
+                    if chave in p.text: p.text = p.text.replace(chave, str(valor))
+            
+            for tabela in doc.tables:
+                for linha in tabela.rows:
+                    for celula in linha.cells:
+                        for p in celula.paragraphs:
+                            for chave, valor in substituicoes.items():
+                                if chave in p.text: p.text = p.text.replace(chave, str(valor))
+            doc.save(saida_path)
+            return True, saida_path
+        except Exception as e:
+            return False, f"Erro ao gerar documento: {e}"
 
     # --- NOVAS FUNÇÕES PARA GRÁFICOS ---
     def get_issue_return_counts(self, year, month):
