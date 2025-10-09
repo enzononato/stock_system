@@ -32,6 +32,7 @@ class InventoryDBManager:
             cpu VARCHAR(100), ram VARCHAR(50), storage VARCHAR(50),
             sistema VARCHAR(100), licenca VARCHAR(100), anydesk VARCHAR(50),
             setor VARCHAR(100), ip VARCHAR(50), mac VARCHAR(50),
+            fornecedor VARCHAR(150),
             poe ENUM('Sim', 'Não'),
             quantidade_portas VARCHAR(10),
             date_registered DATETIME NOT NULL, date_issued DATETIME,
@@ -51,6 +52,7 @@ class InventoryDBManager:
             cargo VARCHAR(100),
             center_cost VARCHAR(100),
             setor VARCHAR(100),
+            fornecedor VARCHAR(150),
             revenda VARCHAR(100),
             data_operacao DATETIME,
             operation ENUM(
@@ -75,6 +77,8 @@ class InventoryDBManager:
             brand VARCHAR(100),
             model VARCHAR(100),
             identificador VARCHAR(100) UNIQUE,
+            nota_fiscal VARCHAR(50),
+            fornecedor VARCHAR(150),
             status ENUM('Disponível', 'Em Uso', 'Com Defeito') DEFAULT 'Disponível',
             date_registered DATETIME NOT NULL,
             is_active TINYINT(1) DEFAULT 1
@@ -99,7 +103,7 @@ class InventoryDBManager:
 
 
     def add_item(self, item_data: dict, logged_user: str):
-        """Adiciona novo item no estoque"""
+        """Adiciona novo item no estoque com tratamento de erro e retorno padronizado."""
         keys = ", ".join(item_data.keys())
         placeholders = ", ".join(["%s"] * len(item_data))
         values = list(item_data.values())
@@ -107,18 +111,27 @@ class InventoryDBManager:
         
         conn = get_connection()
         cur = conn.cursor()
-        cur.execute(sql, values)
-        item_id = cur.lastrowid
+        try:
+            cur.execute(sql, values)
+            item_id = cur.lastrowid
 
-        cur.execute("""
-            INSERT INTO history (item_id, operador, data_operacao, operation)
-            VALUES (%s, %s, %s, 'Cadastro')
-        """, (item_id, logged_user, datetime.now()))
-        
-        conn.commit()
-        cur.close()
-        conn.close()
-        return item_id
+            cur.execute("""
+                INSERT INTO history (item_id, operador, data_operacao, operation)
+                VALUES (%s, %s, %s, 'Cadastro')
+            """, (item_id, logged_user, datetime.now()))
+            
+            conn.commit()
+            # CORRIGIDO: Retorna uma tupla com (True, ID do item) em caso de sucesso
+            return True, item_id
+            
+        except pymysql.MySQLError as e:
+            conn.rollback()
+            # CORRIGIDO: Retorna uma tupla com (False, mensagem de erro) em caso de falha
+            return False, f"Erro de banco de dados: {e}"
+            
+        finally:
+            cur.close()
+            conn.close()
 
     def update_item(self, item_id: int, item_data: dict, logged_user: str):
         """Atualiza os dados de um item e LOGA A AÇÃO"""
@@ -166,11 +179,11 @@ class InventoryDBManager:
         cur = conn.cursor()
 
         cur.execute("""
-            INSERT INTO history (item_id, operador, data_operacao, operation, tipo, brand, model, identificador, nota_fiscal, nota_fiscal_anexo, poe, quantidade_portas)
-            VALUES (%s, %s, %s, 'Exclusão', %s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO history (item_id, operador, data_operacao, operation, tipo, brand, model, identificador, nota_fiscal, fornecedor, nota_fiscal_anexo, poe, quantidade_portas)
+            VALUES (%s, %s, %s, 'Exclusão', %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (item_id, logged_user, datetime.now(),
-              item.get('tipo'), item.get('brand'), item.get('model'), item.get('identificador'), item.get('nota_fiscal'), destination_path,
-              item.get('poe'), item.get('quantidade_portas')))
+              item.get('tipo'), item.get('brand'), item.get('model'), item.get('identificador'), item.get('nota_fiscal'), item.get('fornecedor'),
+              destination_path, item.get('poe'), item.get('quantidade_portas')))
 
         cur.execute("UPDATE items SET is_active = 0 WHERE id=%s", (item_id,))
         
@@ -209,7 +222,6 @@ class InventoryDBManager:
 
     # --- NOVAS FUNÇÕES DE GERENCIAMENTO DE PERIFÉRICOS ---
 
-# Em inventory_manager_db.py
 
     def add_peripheral(self, data: dict, logged_user: str):
         """Adiciona um novo periférico."""
@@ -615,6 +627,7 @@ class InventoryDBManager:
                 COALESCE(i.model, h.model) as modelo,
                 COALESCE(i.identificador, h.identificador) as identificador,
                 COALESCE(i.nota_fiscal, h.nota_fiscal) as nota_fiscal,
+                COALESCE(i.fornecedor, h.fornecedor) as fornecedor,
                 h.usuario, h.cpf, h.cargo, h.center_cost, h.setor, h.revenda,
                 h.data_operacao, h.operation
             FROM history h

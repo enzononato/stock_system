@@ -97,7 +97,7 @@ class ScrollableFrame(ttk.Frame):
 
     def _on_mouse_wheel(self, event, canvas):
         canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-        
+
     def _bind_mouse_scroll(self, event, canvas):
         # Vincula a rolagem quando o mouse entra no canvas
         canvas.bind_all("<MouseWheel>", lambda e: self._on_mouse_wheel(e, canvas))
@@ -360,7 +360,7 @@ class App(tk.Tk):
         ttk.Button(frm_filters, text="Exportar CSV", command=lambda: self.exportar_csv(self.tree_stock, "Exportar Estoque", "estoque"), style="Secondary.TButton").grid(row=0, column=10, padx=5, pady=5, sticky="e")
 
         cols = [
-            "ID", "Revenda", "Tipo", "Marca", "Modelo", "Status", "Periféricos (Qtd)", "Usuário", "CPF", "Nota Fiscal",
+            "ID", "Revenda", "Tipo", "Marca", "Modelo", "Status", "Periféricos (Qtd)", "Usuário", "CPF", "Nota Fiscal", "Fornecedor",
             "Identificador", "Domínio", "Host", "Endereço Físico", "CPU",
             "RAM", "Storage", "Sistema", "Licença", "AnyDesk",
             "Setor", "IP", "MAC",
@@ -377,7 +377,7 @@ class App(tk.Tk):
         col_widths = {
             "ID": 40, "Revenda": 130, "Tipo": 100, "Marca": 100, "Modelo": 120, "Status": 100,
             "Periféricos (Qtd)": 110, "PoE": 60, "Qtd. Portas": 90,
-            "Usuário": 140, "CPF": 110, "Identificador": 140, "Nota Fiscal": 100,
+            "Usuário": 140, "CPF": 110, "Identificador": 140, "Nota Fiscal": 100, "Fornecedor": 140,
         }
 
         for col in cols:
@@ -502,9 +502,18 @@ class App(tk.Tk):
         self.e_peri_id = ttk.Entry(frm_add)
         self.e_peri_id.grid(row=1, column=3, sticky="ew", padx=5, pady=5)
 
+        # Linha 3
+        ttk.Label(frm_add, text="Nota Fiscal:").grid(row=2, column=0, sticky="e", padx=5, pady=5)
+        self.e_peri_nf = ttk.Entry(frm_add)
+        self.e_peri_nf.grid(row=2, column=1, sticky="ew", padx=5, pady=5)
+
+        ttk.Label(frm_add, text="Fornecedor:").grid(row=2, column=2, sticky="e", padx=5, pady=5)
+        self.e_peri_fornecedor = ttk.Entry(frm_add)
+        self.e_peri_fornecedor.grid(row=2, column=3, sticky="ew", padx=5, pady=5)
+
         # Ações
         frm_add_actions = ttk.Frame(frm_add)
-        frm_add_actions.grid(row=2, column=0, columnspan=4, pady=(10,0))
+        frm_add_actions.grid(row=3, column=0, columnspan=4, pady=(10,0))
         ttk.Button(frm_add_actions, text="Cadastrar Periférico", command=self.cmd_add_peripheral, style="Primary.TButton").pack(side="left")
         self.lbl_peri_add = ttk.Label(frm_add_actions, text="")
         self.lbl_peri_add.pack(side="left", padx=15)
@@ -524,7 +533,7 @@ class App(tk.Tk):
         ttk.Button(frm_filters, text="Buscar", command=self.update_peripherals_table, style="Primary.TButton").pack(side="left", padx=10)
         ttk.Button(frm_filters, text="Limpar", command=self.cmd_clear_peripheral_filter, style="Secondary.TButton").pack(side="left")
 
-        cols = ("ID", "Status", "Tipo", "Marca", "Modelo", "Identificador (S/N)")
+        cols = ("ID", "Status", "Tipo", "Marca", "Modelo", "Fornecedor", "Nota Fiscal", "Identificador (S/N)")
         self.tree_peripherals = ttk.Treeview(frm_list, columns=cols, show="headings")
         self.tree_peripherals.pack(fill="both", expand=True)
         
@@ -767,7 +776,7 @@ class App(tk.Tk):
                 style="Secondary.TButton").pack(side="right", padx=5, pady=5)
 
         cols = (
-            "ID Item", "Id Per.", "Operador", "Operação", "Revenda", "Data", "Hora", "Tipo", "Marca", "Modelo", "Nota Fiscal",
+            "ID Item", "Id Per.", "Operador", "Operação", "Revenda", "Data", "Hora", "Tipo", "Marca", "Modelo", "Nota Fiscal", "Fornecedor",
             "Identificador", "Usuário", "CPF", "Cargo", "Centro de Custo", "Setor", "Detalhes"
         )
         
@@ -826,7 +835,7 @@ class App(tk.Tk):
         ttk.Button(action_frm, text="Estornar Lançamento", command=self.cmd_delete_report_entry, style="Danger.TButton").pack(side="left", padx=10)
         
         # adicionado a coluna "ID Histórico" que ficará oculta
-        cols = ("ID Histórico", "ID Item", "Operador", "Revenda", "Tipo", "Marca", "Modelo", "Nota Fiscal", "Identificador", "Usuário", "CPF", "Operação", "Data Empréstimo", "Data Devolução", "Centro de Custo", "Setor", "Cargo")
+        cols = ("ID Histórico", "ID Item", "Operador", "Revenda", "Tipo", "Marca", "Modelo", "Nota Fiscal", "Fornecedor", "Identificador", "Usuário", "CPF", "Operação", "Data Empréstimo", "Data Devolução", "Centro de Custo", "Setor", "Cargo")
         
         tree_frame = ttk.Frame(frm)
         tree_frame.pack(fill="both", expand=True)
@@ -1099,11 +1108,18 @@ class App(tk.Tk):
         e_nota_fiscal.bind("<KeyRelease>", self.on_widget_interaction)
         widgets['nota_fiscal'] = e_nota_fiscal
 
+        # Fornecedor
+        ttk.Label(parent_frame, text="Fornecedor:").grid(row=4, column=0, sticky="e", pady=5, padx=5)
+        e_fornecedor = ttk.Entry(parent_frame)
+        e_fornecedor.grid(row=4, column=1, pady=5, padx=5, sticky="ew")
+        e_fornecedor.insert(0, item_data.get('fornecedor') or '')
+        e_fornecedor.bind("<KeyRelease>", self.on_widget_interaction)
+        widgets['fornecedor'] = e_fornecedor
 
         # DATA DE CADASTRO
-        ttk.Label(parent_frame, text="Data de Cadastro:").grid(row=4, column=0, sticky="e", pady=5, padx=5)
+        ttk.Label(parent_frame, text="Data de Cadastro:").grid(row=5, column=0, sticky="e", pady=5, padx=5)
         e_date_registered = ttk.Entry(parent_frame)
-        e_date_registered.grid(row=4, column=1, pady=5, padx=5, sticky="ew")
+        e_date_registered.grid(row=5, column=1, pady=5, padx=5, sticky="ew")
         widgets['date_registered'] = e_date_registered
         
         if item_data: # Se estamos editando um item...
@@ -1119,7 +1135,7 @@ class App(tk.Tk):
         # --- FIM DOS CAMPOS COMUNS ---
 
         # Campos específicos
-        row_start = 5
+        row_start = 6
         if tipo == "Celular":
             
             ttk.Label(parent_frame, text="IMEI:").grid(row=row_start + 1, column=0, sticky="e", pady=5, padx=5)
@@ -1216,6 +1232,8 @@ class App(tk.Tk):
             dados['brand'] = format_title_case(dados['brand'])
         if 'model' in dados:
             dados['model'] = format_title_case(dados['model'])
+        if 'fornecedor' in dados:
+            dados['fornecedor'] = format_title_case(dados['fornecedor'])
         if 'sistema' in dados:
             dados['sistema'] = format_title_case(dados['sistema'])
 
@@ -1223,6 +1241,7 @@ class App(tk.Tk):
         if not dados.get("brand"): erros.append((self.add_widgets['brand'], "Informe a marca."))
         if not dados.get("revenda"): erros.append((self.add_widgets['revenda'], "Informe o campo Revenda."))
         if not dados.get("model"): erros.append((self.add_widgets['model'], "Informe o modelo."))
+        if not dados.get("fornecedor"): erros.append((self.add_widgets['fornecedor'], "Informe o fornecedor."))
         nota_fiscal = dados.get("nota_fiscal")
         if not nota_fiscal:
             erros.append((self.add_widgets['nota_fiscal'], "Informe a Nota Fiscal."))
@@ -1284,6 +1303,18 @@ class App(tk.Tk):
 
         dados["tipo"] = tipo
 
+        # A função add_item retorna apenas o ID ou None/False em caso de erro.
+        item_id = self.inv.add_item(dados, self.logged_user)
+        
+        # Se o backend retornar um ID válido (um número), o cadastro deu certo.
+        if isinstance(item_id, int):
+            ok = True
+            result = item_id
+        else:
+            # Se não, item_id contém a mensagem de erro (que é uma string)
+            ok = False
+            result = item_id
+
         ok, result = self.inv.add_item(dados, self.logged_user)
         
         if not ok:
@@ -1315,14 +1346,27 @@ class App(tk.Tk):
             "tipo": self.cb_peri_tipo.get(),
             "brand": self.e_peri_brand.get().strip(),
             "model": self.e_peri_model.get().strip(),
+            "nota_fiscal": self.e_peri_nf.get().strip(),
+            "fornecedor": self.e_peri_fornecedor.get(),
             "identificador": identificador_str if identificador_str else None
         }
 
         data['brand'] = format_title_case(data['brand'])
         data['model'] = format_title_case(data['model'])
+        data['fornecedor'] = format_title_case(data['fornecedor'])
+
 
         if not data["tipo"]:
             self.lbl_peri_add.config(text="O campo 'Tipo' é obrigatório.", style="Danger.TLabel")
+            return
+        if not data["nota_fiscal"]:
+            self.lbl_peri_add.config(text="O campo 'Nota Fiscal' é obrigatório.", style="Danger.TLabel")
+            return
+        if not data["fornecedor"]:
+            self.lbl_peri_add.config(text="O campo 'Fornecedor' é obrigatório.", style="Danger.TLabel")
+            return
+        if not data["identificador"]:
+            self.lbl_peri_add.config(text="O campo 'Identificador' é obrigatório.", style="Danger.TLabel")
             return
             
         ok, msg = self.inv.add_peripheral(data, self.logged_user)
@@ -1332,12 +1376,15 @@ class App(tk.Tk):
             self.e_peri_brand.delete(0, "end")
             self.e_peri_model.delete(0, "end")
             self.e_peri_id.delete(0, "end")
+            self.e_peri_nf.delete(0, "end")
+            self.e_peri_fornecedor.delete(0, "end")
             self.update_all_views()
 
     def cmd_clear_peripheral_filter(self):
         """Limpa o campo de busca da aba de periféricos e atualiza a tabela."""
         self.e_search_peripherals.delete(0, "end")
         self.update_peripherals_table()
+
 
     def cmd_load_equipment_for_linking(self, event=None):
         selection = self.cb_link_equip.get()
@@ -1346,23 +1393,21 @@ class App(tk.Tk):
         
         equipment_id = int(selection.split(' - ')[0])
 
-        # Limpa as tabelas
         self.tree_linked_peripherals.delete(*self.tree_linked_peripherals.get_children())
         self.tree_available_peripherals.delete(*self.tree_available_peripherals.get_children())
         self.lbl_link_msg.config(text="")
 
-        # Popula vinculados
-        linked_peripherals = self.inv.list_peripherals_for_equipment(equipment_id)
-        linked_peripherals.sort(key=lambda p: p['tipo'])  # Ordena por tipo de periférico
-        for p in self.inv.list_peripherals_for_equipment(equipment_id):
+
+        linked_peripherals = list(self.inv.list_peripherals_for_equipment(equipment_id))
+        linked_peripherals.sort(key=lambda p: p['tipo']) 
+        for p in linked_peripherals: 
             self.tree_linked_peripherals.insert("", "end", values=(
                 p['link_id'], p['id'], p.get('tipo'), f"{p.get('brand','')} {p.get('model','')}", p.get('identificador')
             ))
         
-        # Popula disponíveis
-        available_peripherals = self.inv.list_peripherals(status_filter="Disponível")
-        available_peripherals.sort(key=lambda p: p['tipo']) # <-- Ordena por tipo
-        for p in self.inv.list_peripherals(status_filter="Disponível"):
+        available_peripherals = list(self.inv.list_peripherals(status_filter="Disponível"))
+        available_peripherals.sort(key=lambda p: p['tipo']) 
+        for p in available_peripherals:
             self.tree_available_peripherals.insert("", "end", values=(
                 p['id'], p.get('tipo'), f"{p.get('brand','')} {p.get('model','')}", p.get('identificador')
             ))
@@ -1452,7 +1497,11 @@ class App(tk.Tk):
             style_name = str(widget.cget('style')).replace('Error.', '')
             widget.configure(style=style_name)
 
-        new_data = {key: widget.get().strip() for key, widget in self.edit_widgets.items() if widget.winfo_exists()}
+        new_data = {
+            key: widget.get().strip()
+            for key, widget in self.edit_widgets.items()
+            if widget.winfo_exists() and key != 'date_registered'
+        }
         
         if 'brand' in new_data:
             new_data['brand'] = format_title_case(new_data['brand'])
@@ -1696,7 +1745,8 @@ class App(tk.Tk):
             log.get('tipo'),                      
             log.get('brand'),                     
             log.get('model'),                     
-            log.get('nota_fiscal'),               
+            log.get('nota_fiscal'),
+            log.get('fornecedor'),             
             log.get('identificador'),             
             log.get('usuario'),                   
             format_cpf(log.get('cpf')),           
@@ -1900,7 +1950,7 @@ class App(tk.Tk):
             row = (
                 p.get('id'), p.get('revenda'), p.get('tipo'), p.get('brand'), 
                 p.get('model'), p.get('status'), p.get('peripheral_count'), p.get('assigned_to'), 
-                format_cpf(p.get('cpf')), p.get('nota_fiscal'), p.get('identificador'), p.get('dominio'), 
+                format_cpf(p.get('cpf')), p.get('nota_fiscal'), p.get('fornecedor'), p.get('identificador'), p.get('dominio'), 
                 p.get('host'), p.get('endereco_fisico'), p.get('cpu'), p.get('ram'), 
                 p.get('storage'), p.get('sistema'), p.get('licenca'), p.get('anydesk'), 
                 p.get('setor'), p.get('ip'), p.get('mac'),
@@ -1971,7 +2021,9 @@ class App(tk.Tk):
         for p in self.inv.list_peripherals():
             row_values = (
                 p['id'], p.get('status'), p.get('tipo'), 
-                p.get('brand'), p.get('model'), p.get('identificador')
+                p.get('brand'), p.get('model'),
+                p.get('fornecedor'), p.get('nota_fiscal'),
+                p.get('identificador')
             )
             
             # Converte a linha em texto para a busca
@@ -2013,7 +2065,8 @@ class App(tk.Tk):
             h.get("tipo"),            
             h.get("marca"),         
             h.get("modelo"),          
-            h.get("nota_fiscal"),     
+            h.get("nota_fiscal"),
+            h.get("fornecedor"),
             h.get("identificador"),   
             h.get("usuario"),         
             format_cpf(h.get("cpf")), 
