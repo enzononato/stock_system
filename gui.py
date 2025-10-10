@@ -24,7 +24,7 @@ from inventory_manager_db import InventoryDBManager
 from user_manager_db import UserDBManager
 from utils import format_cpf, format_date, format_title_case, format_time
 from config import (
-    REVENDAS_OPTIONS, CENTER_COST_OPTIONS, ADMIN_PASS, ADMIN_USER, SETORES_OPTIONS
+    REVENDAS_OPTIONS, CENTER_COST_OPTIONS, ADMIN_PASS, ADMIN_USER, SETORES_OPTIONS, REMOVAL_REASONS
 )
 
 # --- Paleta de Cores e Fontes (você pode alterar aqui para mudar o app inteiro) ---
@@ -533,10 +533,23 @@ class App(tk.Tk):
         ttk.Button(frm_filters, text="Buscar", command=self.update_peripherals_table, style="Primary.TButton").pack(side="left", padx=10)
         ttk.Button(frm_filters, text="Limpar", command=self.cmd_clear_peripheral_filter, style="Secondary.TButton").pack(side="left")
 
-        cols = ("ID", "Status", "Tipo", "Marca", "Modelo", "Fornecedor", "Nota Fiscal", "Identificador (S/N)")
-        self.tree_peripherals = ttk.Treeview(frm_list, columns=cols, show="headings")
-        self.tree_peripherals.pack(fill="both", expand=True)
+        # Frame da Treeview e barra de rolagem vertical
+        tree_frame = ttk.Frame(frm_list)
+        tree_frame.pack(fill='both', expand=True)
+
+        cols = ("ID", "Status", "Tipo", "Marca", "Modelo", "Fornecedor", "Nota Fiscal", "Identificador (S/N)", "Motivo", "Data Cadastro")
+        self.tree_peripherals = ttk.Treeview(tree_frame, columns=cols, show="headings")
         
+        # Barras de Rolagem ---
+        ysb = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree_peripherals.yview)
+        xsb = ttk.Scrollbar(frm_list, orient="horizontal", command=self.tree_peripherals.xview)
+        self.tree_peripherals.configure(yscrollcommand=ysb.set, xscrollcommand=xsb.set)
+
+        self.tree_peripherals.pack(side="left", fill="both", expand=True)
+        ysb.pack(side="right", fill="y")
+        xsb.pack(side="bottom", fill="x")
+        # ---
+
         for c in cols:
             self.tree_peripherals.heading(c, text=c, command=lambda col=c: self.treeview_sort_column(self.tree_peripherals, col, False))
             self.tree_peripherals.column(c, anchor="center")
@@ -544,11 +557,17 @@ class App(tk.Tk):
         # Define larguras específicas
         self.tree_peripherals.column("ID", width=50, stretch=False)
         self.tree_peripherals.column("Status", width=100, stretch=False)
+        self.tree_peripherals.column("Motivo", width=200)
+
 
         self.tree_peripherals.tag_configure("disp", background="#7EFF9C")
         self.tree_peripherals.tag_configure("emuso", background="#FFD966")
-        self.tree_peripherals.tag_configure("defeito", background="#FF7E89")
+        self.tree_peripherals.tag_configure("substituido", background="#FF7E89")
 
+        
+
+
+    # Em gui.py
 
     def build_linking_tab(self):
         tab = self.tab_linking
@@ -567,19 +586,32 @@ class App(tk.Tk):
         frm_main = ttk.Frame(tab)
         frm_main.pack(fill="both", expand=True)
         frm_main.grid_columnconfigure(0, weight=1)
-        frm_main.grid_columnconfigure(2, weight=1) # Faz as colunas das tabelas terem o mesmo peso
+        frm_main.grid_columnconfigure(2, weight=1)
 
         # Frame Esquerdo: Vinculados
         frm_linked = ttk.LabelFrame(frm_main, text=" Periféricos Vinculados a este Equipamento ", padding=10)
         frm_linked.grid(row=0, column=0, sticky="nsew", padx=(0,5))
         
+        # Frame para a Treeview e rolagem ---
+        tree_linked_frame = ttk.Frame(frm_linked)
+        tree_linked_frame.pack(fill='both', expand=True)
+        
         cols_linked = ("ID Vínculo", "ID Per.", "Tipo", "Marca/Modelo", "Identificador")
-        self.tree_linked_peripherals = ttk.Treeview(frm_linked, columns=cols_linked, show="headings")
-        self.tree_linked_peripherals.pack(fill="both", expand=True)
+        self.tree_linked_peripherals = ttk.Treeview(tree_linked_frame, columns=cols_linked, show="headings")
+
+        ysb_linked = ttk.Scrollbar(tree_linked_frame, orient="vertical", command=self.tree_linked_peripherals.yview)
+        xsb_linked = ttk.Scrollbar(frm_linked, orient="horizontal", command=self.tree_linked_peripherals.xview)
+        self.tree_linked_peripherals.configure(yscrollcommand=ysb_linked.set, xscrollcommand=xsb_linked.set)
+        
+        self.tree_linked_peripherals.pack(side='left', fill='both', expand=True)
+        ysb_linked.pack(side='right', fill='y')
+        xsb_linked.pack(side='bottom', fill='x')
+        # ---
+
         for c in cols_linked:
             self.tree_linked_peripherals.heading(c, text=c)
             self.tree_linked_peripherals.column(c, anchor="center")
-        self.tree_linked_peripherals.column("ID Vínculo", width=0, stretch=False) # Oculta a coluna ID Vínculo
+        self.tree_linked_peripherals.column("ID Vínculo", width=0, stretch=False)
         self.tree_linked_peripherals.column("ID Per.", width=60, stretch=False)
 
         # Frame Central: Botões de Ação
@@ -593,10 +625,23 @@ class App(tk.Tk):
         # Frame Direito: Disponíveis
         frm_available = ttk.LabelFrame(frm_main, text=" Periféricos Disponíveis ", padding=10)
         frm_available.grid(row=0, column=2, sticky="nsew", padx=(5,0))
+
+        # Frame para a Treeview e rolagem ---
+        tree_avail_frame = ttk.Frame(frm_available)
+        tree_avail_frame.pack(fill='both', expand=True)
         
         cols_avail = ("ID", "Tipo", "Marca/Modelo", "Identificador")
-        self.tree_available_peripherals = ttk.Treeview(frm_available, columns=cols_avail, show="headings")
-        self.tree_available_peripherals.pack(fill="both", expand=True)
+        self.tree_available_peripherals = ttk.Treeview(tree_avail_frame, columns=cols_avail, show="headings")
+
+        ysb_avail = ttk.Scrollbar(tree_avail_frame, orient="vertical", command=self.tree_available_peripherals.yview)
+        xsb_avail = ttk.Scrollbar(frm_available, orient="horizontal", command=self.tree_available_peripherals.xview)
+        self.tree_available_peripherals.configure(yscrollcommand=ysb_avail.set, xscrollcommand=xsb_avail.set)
+
+        self.tree_available_peripherals.pack(side='left', fill='both', expand=True)
+        ysb_avail.pack(side='right', fill='y')
+        xsb_avail.pack(side='bottom', fill='x')
+        # ---
+
         for c in cols_avail:
             self.tree_available_peripherals.heading(c, text=c)
             self.tree_available_peripherals.column(c, anchor="center")
@@ -705,6 +750,8 @@ class App(tk.Tk):
         self.lbl_ret.pack(pady=5, fill="x")
 
     def build_remove_tab(self):
+        self.remove_attachment_path = None
+
         container = ttk.Frame(self.tab_remove)
         container.pack(anchor="n", pady=20)
         
@@ -717,27 +764,44 @@ class App(tk.Tk):
         self.cb_remove = ttk.Combobox(frm, state='readonly')
         self.cb_remove.grid(row=0, column=1, pady=5, padx=5, sticky="ew")
         
-        # --- Campo de Anexo ---
-        ttk.Label(frm, text="Anexar Nota (PDF):").grid(row=1, column=0, sticky='e', padx=5, pady=8)
+        # --- NOVO CAMPO DE MOTIVO ---
+        ttk.Label(frm, text="Motivo da Remoção:").grid(row=1, column=0, sticky='e', padx=5, pady=8)
+        self.cb_remove_reason = ttk.Combobox(frm, values=list(REMOVAL_REASONS.keys()), state='readonly')
+        self.cb_remove_reason.grid(row=1, column=1, sticky="ew", padx=5, pady=8)
+        self.cb_remove_reason.bind("<<ComboboxSelected>>", self._on_removal_reason_selected)
         
-        frm_anexo = ttk.Frame(frm)
-        frm_anexo.grid(row=1, column=1, sticky="ew", padx=5, pady=8)
-        frm_anexo.grid_columnconfigure(1, weight=1) 
+        # --- NOVO FRAME DE ANEXO (DINÂMICO) ---
+        self.frm_remove_anexo = ttk.Frame(frm)
+        self.frm_remove_anexo.grid(row=2, column=0, columnspan=2, sticky="ew", padx=5, pady=8)
+        self.frm_remove_anexo.grid_columnconfigure(1, weight=1)
         
-        self.btn_anexo = ttk.Button(frm_anexo, text="Selecionar Arquivo...", command=self.select_removal_attachment)
-        # Coloca o botão na primeira coluna (coluna 0)
-        self.btn_anexo.grid(row=0, column=0, sticky='w') 
+        ttk.Label(self.frm_remove_anexo, text="Anexar Comprovante:").grid(row=0, column=0, sticky='e')
         
-        self.lbl_remove_attachment = ttk.Label(frm_anexo, text=" Nenhum arquivo selecionado.", anchor="w")
-        # Coloca o label na segunda coluna (coluna 1), fazendo-o esticar (sticky='ew')
-        self.lbl_remove_attachment.grid(row=0, column=1, sticky='ew', padx=(10, 0)) 
+        self.btn_anexo_remove = ttk.Button(self.frm_remove_anexo, text="Selecionar Arquivo...", command=self.select_removal_attachment)
+        self.btn_anexo_remove.grid(row=0, column=1, sticky='w', padx=10)
         
-        self.remove_attachment_path = None
+        self.lbl_remove_attachment = ttk.Label(self.frm_remove_anexo, text=" Nenhum arquivo selecionado.", anchor="w")
+        self.lbl_remove_attachment.grid(row=0, column=2, sticky='ew', padx=(10, 0))
+        
+        # Esconde o frame de anexo inicialmente
+        self.frm_remove_anexo.grid_forget()
 
+        # Mensagens e Botão
         self.lbl_rem = ttk.Label(frm, text="", anchor="center")
-        self.lbl_rem.grid(row=2, column=0, columnspan=2, pady=10, sticky="ew")
+        self.lbl_rem.grid(row=3, column=0, columnspan=2, pady=10, sticky="ew")
 
-        ttk.Button(frm, text="Remover", command=self.cmd_remove, style="Danger.TButton").grid(row=3, column=0, columnspan=2, pady=10)
+        ttk.Button(frm, text="Remover", command=self.cmd_remove, style="Danger.TButton").grid(row=4, column=0, columnspan=2, pady=10)
+
+
+    def _on_removal_reason_selected(self, event=None):
+        """Mostra ou esconde o campo de anexo com base no motivo selecionado."""
+        reason = self.cb_remove_reason.get()
+        if REMOVAL_REASONS.get(reason):
+            self.frm_remove_anexo.grid(row=2, column=0, columnspan=2, sticky="ew", padx=5, pady=8)
+        else:
+            self.frm_remove_anexo.grid_forget()
+            self.remove_attachment_path = None
+            self.lbl_remove_attachment.config(text=" Nenhum arquivo selecionado.")
 
     def select_removal_attachment(self): 
         # =======================================
@@ -785,7 +849,7 @@ class App(tk.Tk):
         
         self.tree_history = ttk.Treeview(tree_frame, columns=cols, show="headings")
 
-        col_widths = { "ID Item": 30, "ID Per.": 30, "Operador": 100, "Operação": 140, "Data": 90, "Hora": 70, "CPF": 110, "Detalhes": 200, "Setor": 100}
+        col_widths = { "ID Item": 30, "ID Per.": 30, "Operador": 100, "Operação": 140, "Data": 90, "Hora": 70, "CPF": 110, "Detalhes": 350, "Setor": 100}
 
         for c in cols:
             self.tree_history.heading(c, text=c, command=lambda col=c: self.treeview_sort_column(self.tree_history, col, False))
@@ -835,14 +899,14 @@ class App(tk.Tk):
         ttk.Button(action_frm, text="Estornar Lançamento", command=self.cmd_delete_report_entry, style="Danger.TButton").pack(side="left", padx=10)
         
         # adicionado a coluna "ID Histórico" que ficará oculta
-        cols = ("ID Histórico", "ID Item", "Operador", "Revenda", "Tipo", "Marca", "Modelo", "Nota Fiscal", "Fornecedor", "Identificador", "Usuário", "CPF", "Operação", "Data Empréstimo", "Data Devolução", "Centro de Custo", "Setor", "Cargo")
+        cols = ("ID Histórico", "ID Item", "ID Per.", "Operador", "Revenda", "Tipo", "Marca", "Modelo", "Nota Fiscal", "Fornecedor", "Identificador", "Usuário", "CPF", "Operação", "Data Empréstimo", "Data Devolução", "Centro de Custo", "Setor", "Cargo")
         
         tree_frame = ttk.Frame(frm)
         tree_frame.pack(fill="both", expand=True)
 
         self.tree_report = ttk.Treeview(tree_frame, columns=cols, show='headings')
 
-        col_widths = {"ID Item": 60, "Operador": 100, "Operação": 110, "CPF": 120}
+        col_widths = {"ID Item": 50, "ID Per.": 50, "Operador": 100, "Operação": 110, "CPF": 120}
 
         for c in cols:
             self.tree_report.heading(c, text=c, command=lambda col=c: self.treeview_sort_column(self.tree_report, col, False))
@@ -865,21 +929,32 @@ class App(tk.Tk):
 
 
     def build_terms_tab(self):
-        # Variável para guardar o caminho do termo assinado selecionado
         self.signed_term_path = None
-        
         tab = self.tab_terms
         
         # --- Frame Superior: Empréstimos Pendentes ---
         frm_pending = ttk.LabelFrame(tab, text=" Empréstimos Pendentes (Aguardando Termo Assinado) ", padding=10)
         frm_pending.pack(fill="x", expand=False, padx=10, pady=(10, 5))
 
-        # Tabela de pendentes
+        # Frame para a Treeview e rolagem ---
+        tree_pending_frame = ttk.Frame(frm_pending)
+        tree_pending_frame.pack(fill='x', expand=True)
+
         cols_pending = ("ID", "Tipo", "Marca", "Usuário", "CPF", "Data Empréstimo", "Revenda")
-        self.tree_terms_pending = ttk.Treeview(frm_pending, columns=cols_pending, show="headings", height=8)
-        self.tree_terms_pending.pack(fill="x", expand=True)
+        self.tree_terms_pending = ttk.Treeview(tree_pending_frame, columns=cols_pending, show="headings", height=8)
+
+        ysb_pending = ttk.Scrollbar(tree_pending_frame, orient="vertical", command=self.tree_terms_pending.yview)
+        xsb_pending = ttk.Scrollbar(frm_pending, orient="horizontal", command=self.tree_terms_pending.xview)
+        self.tree_terms_pending.configure(yscrollcommand=ysb_pending.set, xscrollcommand=xsb_pending.set)
+
+        self.tree_terms_pending.pack(side='left', fill='x', expand=True)
+        ysb_pending.pack(side='right', fill='y')
+        xsb_pending.pack(side='bottom', fill='x')
+        # ----
+
         for c in cols_pending:
-            self.tree_terms_pending.heading(c, text=c, anchor="w")
+            self.tree_terms_pending.heading(c, text=c, anchor="center")
+            self.tree_terms_pending.column(c, anchor="center")
         self.tree_terms_pending.column("ID", width=50, stretch=False)
         self.tree_terms_pending.column("Usuário", width=200)
 
@@ -888,13 +963,10 @@ class App(tk.Tk):
         frm_pending_actions.pack(fill="x", pady=(10, 0))
         
         ttk.Button(frm_pending_actions, text="Gerar Termo de Responsabilidade", command=self.cmd_generate_term, style="Primary.TButton").pack(side="left")
-        
         ttk.Separator(frm_pending_actions, orient="vertical").pack(side="left", fill="y", padx=20, pady=5)
-        
         ttk.Button(frm_pending_actions, text="Anexar Termo Assinado (PDF)...", command=self.select_signed_term_attachment).pack(side="left")
         self.lbl_signed_term = ttk.Label(frm_pending_actions, text=" Nenhum arquivo selecionado.", width=40)
         self.lbl_signed_term.pack(side="left", padx=10)
-
         ttk.Button(frm_pending_actions, text="Confirmar Empréstimo", command=self.cmd_confirm_loan, style="Success.TButton").pack(side="left", padx=(10,0))
 
 
@@ -902,20 +974,27 @@ class App(tk.Tk):
         frm_active = ttk.LabelFrame(tab, text=" Empréstimos Ativos (Termo OK) ", padding=10)
         frm_active.pack(fill="both", expand=True, padx=10, pady=(5, 10))
         
+        # Frame para a Treeview e rolagem ---
+        tree_active_frame = ttk.Frame(frm_active)
+        tree_active_frame.pack(fill='both', expand=True)
+        
         cols_active = ("ID", "Tipo", "Marca", "Usuário", "CPF", "Data Empréstimo", "Revenda")
-        tree_frame = ttk.Frame(frm_active)
-        tree_frame.pack(fill="both", expand=True)
+        self.tree_terms_active = ttk.Treeview(tree_active_frame, columns=cols_active, show="headings")
 
-        self.tree_terms_active = ttk.Treeview(tree_frame, columns=cols_active, show="headings")
+        ysb_active = ttk.Scrollbar(tree_active_frame, orient="vertical", command=self.tree_terms_active.yview)
+        xsb_active = ttk.Scrollbar(frm_active, orient="horizontal", command=self.tree_terms_active.xview)
+        self.tree_terms_active.configure(yscrollcommand=ysb_active.set, xscrollcommand=xsb_active.set)
+
         self.tree_terms_active.pack(side="left", fill="both", expand=True)
+        ysb_active.pack(side="right", fill="y")
+        xsb_active.pack(side="bottom", fill="x")
+        # ---
+
         for c in cols_active:
-            self.tree_terms_active.heading(c, text=c, anchor="w")
+            self.tree_terms_active.heading(c, text=c, anchor="center")
+            self.tree_terms_active.column(c, anchor="center")
         self.tree_terms_active.column("ID", width=50, stretch=False)
         self.tree_terms_active.column("Usuário", width=200)
-        
-        ysb = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree_terms_active.yview)
-        ysb.pack(side="right", fill="y")
-        self.tree_terms_active.configure(yscrollcommand=ysb.set)
         
         # Label para mensagens
         self.lbl_terms = ttk.Label(tab, text="", anchor="center")
@@ -1303,26 +1382,14 @@ class App(tk.Tk):
 
         dados["tipo"] = tipo
 
-        # A função add_item retorna apenas o ID ou None/False em caso de erro.
-        item_id = self.inv.add_item(dados, self.logged_user)
-        
-        # Se o backend retornar um ID válido (um número), o cadastro deu certo.
-        if isinstance(item_id, int):
-            ok = True
-            result = item_id
-        else:
-            # Se não, item_id contém a mensagem de erro (que é uma string)
-            ok = False
-            result = item_id
-
         ok, result = self.inv.add_item(dados, self.logged_user)
         
         if not ok:
-            # Se 'ok' for False, 'result' é a mensagem de erro do backend
+            # Se 'ok' for False, 'result' é a mensagem de erro do backend.
             self.lbl_add.config(text=result, style="Danger.TLabel")
             return
         
-        # Se 'ok' for True, 'result' é o item_id
+        # Se 'ok' for True, 'result' é o item_id.
         item_id = result
         
         for widget in self.add_widgets.values():
@@ -1666,14 +1733,19 @@ class App(tk.Tk):
 
     def cmd_remove(self, event=None):
         sel = self.cb_remove.get()
+        reason = self.cb_remove_reason.get()
+
+        # Validações
         if not sel:
             self.lbl_rem.config(text="Selecione um aparelho para remover.", style="Danger.TLabel"); return
+        if not reason:
+            self.lbl_rem.config(text="Selecione o motivo da remoção.", style="Danger.TLabel"); return
         
-        # --- NOVA VERIFICAÇÃO ---
-        if not self.remove_attachment_path:
-            self.lbl_rem.config(text="É obrigatório anexar a nota fiscal (PDF) para remover.", style="Danger.TLabel")
+
+        # Validação de anexo
+        if REMOVAL_REASONS.get(reason) and not self.remove_attachment_path:
+            self.lbl_rem.config(text=f"Para o motivo '{reason}', é obrigatório anexar um comprovante.", style="Danger.TLabel")
             return
-        # ------------------------
 
         pid = int(sel.split(' - ', 1)[0])
         item = self.inv.find(pid)
@@ -1689,13 +1761,15 @@ class App(tk.Tk):
             self.lbl_rem.config(text="Senha incorreta. Ação não autorizada.", style='Danger.TLabel'); return
             
         # Passe o caminho do anexo para a função 'remove'
-        ok, msg = self.inv.remove(pid, self.logged_user, self.remove_attachment_path)
+        ok, msg = self.inv.remove(pid, self.logged_user, reason, self.remove_attachment_path)
         self.lbl_rem.config(text=msg, style='Success.TLabel' if ok else 'Danger.TLabel')
         
         if ok:
             # Limpa os campos após o sucesso
             self.remove_attachment_path = None
             self.lbl_remove_attachment.config(text=" Nenhum arquivo selecionado.")
+            self.cb_remove_reason.set('')
+            self.frm_remove_anexo.grid_forget()
             self.update_all_views()
 
 
@@ -1733,13 +1807,14 @@ class App(tk.Tk):
                     operation_display = "Confirmado"
                 else:
                     operation_display = "Pendente"
-            elif op_type == 'Cadastro':
-                operation_display = "Cadastro"
+            else:
+                operation_display = op_type
             # -----------------------------
             
             row_values = (
             log.get('history_id'),            
-            log.get('item_id'),                   
+            log.get('item_id'),   
+            log.get('peripheral_id'),                
             log.get('operador'),                  
             log.get('revenda'),                   
             log.get('tipo'),                      
@@ -2023,7 +2098,8 @@ class App(tk.Tk):
                 p['id'], p.get('status'), p.get('tipo'), 
                 p.get('brand'), p.get('model'),
                 p.get('fornecedor'), p.get('nota_fiscal'),
-                p.get('identificador')
+                p.get('identificador'), p.get('motivo_substituicao'),
+                p.get('date_registered')
             )
             
             # Converte a linha em texto para a busca
@@ -2035,7 +2111,7 @@ class App(tk.Tk):
             tag = ""
             if status == "Disponível": tag = "disp"
             elif status == "Em Uso": tag = "emuso"
-            elif status == "Com Defeito": tag = "defeito"
+            elif status == "Substituido": tag = "substituido"
 
             self.tree_peripherals.insert("", "end", values=row_values, tags=(tag,))
 
@@ -2194,9 +2270,10 @@ class ReplacePeripheralDialog(tk.Toplevel):
         self.old_peripheral_id = old_peripheral_id
         self.peripheral_type = peripheral_type
         self.success = False
+        self.attachment_path = None
 
         self.title("Substituir Periférico")
-        self.geometry("400x300")
+        self.geometry("450x400")
         self.transient(parent)
         self.grab_set()
 
@@ -2205,14 +2282,22 @@ class ReplacePeripheralDialog(tk.Toplevel):
 
         ttk.Label(frm, text=f"Selecione um(a) novo(a) {peripheral_type} disponível:", font=FONT_BOLD).pack(anchor="w")
         
-        # Lista de periféricos disponíveis do mesmo tipo
         available = self.inv.list_peripherals(status_filter="Disponível", type_filter=peripheral_type)
         self.cb_new_peripheral = ttk.Combobox(frm, state="readonly", values=[f"{p['id']} - {p.get('brand','')} {p.get('model','')}" for p in available])
         self.cb_new_peripheral.pack(fill="x", pady=10)
 
+        # Motivo como Combobox
         ttk.Label(frm, text="Motivo da Substituição:", font=FONT_BOLD).pack(anchor="w", pady=(10,0))
-        self.e_reason = ttk.Entry(frm)
-        self.e_reason.pack(fill="x", pady=5)
+        self.cb_reason = ttk.Combobox(frm, values=list(REMOVAL_REASONS.keys()), state="readonly")
+        self.cb_reason.pack(fill="x", pady=5)
+        self.cb_reason.bind("<<ComboboxSelected>>", self._on_reason_selected)
+        
+        # Frame de anexo dinâmico
+        self.frm_anexo = ttk.Frame(frm)
+        self.frm_anexo.pack(fill="x", pady=5)
+
+        self.btn_anexo = ttk.Button(self.frm_anexo, text="Anexar Comprovante...", command=self._select_attachment)
+        self.lbl_anexo = ttk.Label(self.frm_anexo, text="Nenhum arquivo.")
         
         self.lbl_msg = ttk.Label(frm, text="")
         self.lbl_msg.pack(pady=10)
@@ -2221,22 +2306,44 @@ class ReplacePeripheralDialog(tk.Toplevel):
         btn_frm.pack(fill="x", side="bottom")
         ttk.Button(btn_frm, text="Confirmar Substituição", command=self.confirm, style="Primary.TButton").pack(side="right")
         ttk.Button(btn_frm, text="Cancelar", command=self.destroy).pack(side="right", padx=10)
+        
+        # Esconde o frame de anexo
+        self.frm_anexo.pack_forget()
+
+    def _on_reason_selected(self, event=None):
+        reason = self.cb_reason.get()
+        if REMOVAL_REASONS.get(reason):
+            self.btn_anexo.pack(side="left")
+            self.lbl_anexo.pack(side="left", padx=10)
+            self.frm_anexo.pack(fill="x", pady=5)
+        else:
+            self.frm_anexo.pack_forget()
+            self.attachment_path = None
+            self.lbl_anexo.config(text="Nenhum arquivo.")
+
+    def _select_attachment(self):
+        file_path = filedialog.askopenfilename(title="Selecione o Comprovante", filetypes=[("Arquivos PDF", "*.pdf"), ("Imagens", "*.jpg *.png")])
+        if file_path:
+            self.attachment_path = file_path
+            self.lbl_anexo.config(text=os.path.basename(file_path))
 
     def confirm(self):
         new_peri_selection = self.cb_new_peripheral.get()
-        reason = self.e_reason.get().strip()
-        if not new_peri_selection:
-            self.lbl_msg.config(text="Selecione um novo periférico.", style="Danger.TLabel")
-            return
-        if not reason:
-            self.lbl_msg.config(text="O motivo é obrigatório.", style="Danger.TLabel")
-            return
+        reason = self.cb_reason.get()
         
+        if not new_peri_selection:
+            self.lbl_msg.config(text="Selecione um novo periférico.", style="Danger.TLabel"); return
+        if not reason:
+            self.lbl_msg.config(text="O motivo é obrigatório.", style="Danger.TLabel"); return
+        
+        if REMOVAL_REASONS.get(reason) and not self.attachment_path:
+            self.lbl_msg.config(text="Para este motivo, o anexo é obrigatório.", style="Danger.TLabel"); return
+
         new_peripheral_id = int(new_peri_selection.split(' - ')[0])
         
         ok, msg = self.inv.replace_peripheral(
             self.equipment_id, self.old_peripheral_id, new_peripheral_id,
-            reason, self.parent.logged_user
+            reason, self.parent.logged_user, self.attachment_path
         )
 
         if ok:

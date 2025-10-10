@@ -98,3 +98,12 @@ SETORES_OPTIONS = [
     "Caixa",
     "Diretoria"
 ]
+
+# Dicionário com os motivos de remoção/substituição e se exigem anexo
+REMOVAL_REASONS = {
+    "Roubo": True,          # True = anexo obrigatório
+    "Perda": False,         # False = anexo não obrigatório
+    "Obsolescência": False,
+    "Doação": True,
+    "Venda": True
+}

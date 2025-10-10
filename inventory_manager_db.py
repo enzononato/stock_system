@@ -64,7 +64,7 @@ class InventoryDBManager:
             details VARCHAR(255),
             tipo VARCHAR(50), brand VARCHAR(100), model VARCHAR(100), identificador VARCHAR(100),
             nota_fiscal VARCHAR(50), poe ENUM('Sim', 'Não'), quantidade_portas VARCHAR(10),
-            nota_fiscal_anexo VARCHAR(255) NULL, termo_assinado_anexo VARCHAR(255) NULL,
+            operacao_anexo VARCHAR(255) NULL, termo_assinado_anexo VARCHAR(255) NULL,
             FOREIGN KEY(item_id) REFERENCES items(id) ON DELETE SET NULL
         )
         """)
@@ -79,7 +79,8 @@ class InventoryDBManager:
             identificador VARCHAR(100) UNIQUE,
             nota_fiscal VARCHAR(50),
             fornecedor VARCHAR(150),
-            status ENUM('Disponível', 'Em Uso', 'Com Defeito') DEFAULT 'Disponível',
+            status ENUM('Disponível', 'Em Uso', 'Substituido') DEFAULT 'Disponível',
+            motivo_substituicao VARCHAR(255),
             date_registered DATETIME NOT NULL,
             is_active TINYINT(1) DEFAULT 1
         )
@@ -155,42 +156,44 @@ class InventoryDBManager:
         return True, f"Item {item_id} atualizado com sucesso."
 
 
-    def remove(self, item_id: int, logged_user: str, attachment_path: str):
-        """"Remove" (desativa) item do estoque, salvando seus dados no histórico."""
+    def remove(self, item_id: int, logged_user: str, reason: str, attachment_path: str = None):
+        """Desativa um item do estoque, salvando o motivo e o anexo (se houver) no histórico."""
         item = self.find(item_id)
         if not item: return False, "ID não encontrado."
         if item["status"] != "Disponível": return False, "Não é possível remover produto emprestado."
         
-        # --- Lógica para copiar o anexo ---
-        try:
-            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-            original_filename = os.path.basename(attachment_path)
-            # Cria um nome de arquivo seguro e único
-            new_filename = f"remocao_{item_id}_{timestamp}_{original_filename}"
-            destination_path = os.path.join(REMOVAL_NOTES_DIR, new_filename)
-            
-            # Copia o arquivo para a pasta de notas
-            shutil.copy(attachment_path, destination_path)
-        except Exception as e:
-            return False, f"Erro ao processar o anexo: {e}"
-        # ------------------------------------
+        destination_path = None
+        if attachment_path:
+            try: # Lógica para copiar o anexo
+                timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+                original_filename = os.path.basename(attachment_path)
+                new_filename = f"remocao_{item_id}_{timestamp}_{original_filename}" # Copia o arquivo com um nome único
+                destination_path = os.path.join(REMOVAL_NOTES_DIR, new_filename)
+                shutil.copy(attachment_path, destination_path)
+            except Exception as e:
+                return False, f"Erro ao processar o anexo: {e}"
 
         conn = get_connection()
         cur = conn.cursor()
-
-        cur.execute("""
-            INSERT INTO history (item_id, operador, data_operacao, operation, tipo, brand, model, identificador, nota_fiscal, fornecedor, nota_fiscal_anexo, poe, quantidade_portas)
-            VALUES (%s, %s, %s, 'Exclusão', %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (item_id, logged_user, datetime.now(),
-              item.get('tipo'), item.get('brand'), item.get('model'), item.get('identificador'), item.get('nota_fiscal'), item.get('fornecedor'),
-              destination_path, item.get('poe'), item.get('quantidade_portas')))
-
-        cur.execute("UPDATE items SET is_active = 0 WHERE id=%s", (item_id,))
-        
-        conn.commit()
-        cur.close()
-        conn.close()
-        return True, f"Aparelho {item_id} removido do estoque."
+        try:
+            cur.execute("UPDATE items SET is_active = 0 WHERE id=%s", (item_id,))
+            
+            cur.execute("""
+                INSERT INTO history (item_id, operador, data_operacao, operation, details, tipo, brand, model, identificador, nota_fiscal, fornecedor, operacao_anexo, poe, quantidade_portas)
+                VALUES (%s, %s, %s, 'Exclusão', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (item_id, logged_user, datetime.now(), reason,
+                  item.get('tipo'), item.get('brand'), item.get('model'), item.get('identificador'), 
+                  item.get('nota_fiscal'), item.get('fornecedor'), destination_path, 
+                  item.get('poe'), item.get('quantidade_portas')))
+            
+            conn.commit()
+            return True, f"Aparelho {item_id} removido do estoque."
+        except pymysql.MySQLError as e:
+            conn.rollback()
+            return False, f"Erro de banco de dados: {e}"
+        finally:
+            cur.close()
+            conn.close()
 
 
     def list_items(self):
@@ -333,26 +336,33 @@ class InventoryDBManager:
             conn.close()
 
 
-    def replace_peripheral(self, equipment_id: int, old_peripheral_id: int, new_peripheral_id: int, reason: str, logged_user: str):
-        """Substitui um periférico por outro."""
+    def replace_peripheral(self, equipment_id: int, old_peripheral_id: int, new_peripheral_id: int, reason: str, logged_user: str, attachment_path: str = None):
+        """Substitui um periférico por outro, salvando o motivo e o anexo (se houver)."""
+        destination_path = None
+        if attachment_path:
+            try:
+                timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+                original_filename = os.path.basename(attachment_path)
+                new_filename = f"substituicao_{old_peripheral_id}_{timestamp}_{original_filename}"
+                destination_path = os.path.join(REMOVAL_NOTES_DIR, new_filename)
+                shutil.copy(attachment_path, destination_path)
+            except Exception as e:
+                return False, f"Erro ao processar o anexo: {e}"
+
         conn = get_connection()
         cur = conn.cursor()
         try:
-            # 1. Marca o periférico antigo como "Com Defeito" E INATIVO
-            cur.execute("UPDATE peripherals SET status = 'Com Defeito', is_active = 0 WHERE id = %s", (old_peripheral_id,))
-            
-            # 2. Remove o vínculo antigo
+            cur.execute("UPDATE peripherals SET status = 'Substituido', is_active = 0, motivo_substituicao = %s WHERE id = %s", (reason, old_peripheral_id,))
             cur.execute("DELETE FROM equipment_peripherals WHERE equipment_id = %s AND peripheral_id = %s", (equipment_id, old_peripheral_id))
-            # 3. Cria o novo vínculo
             cur.execute("INSERT INTO equipment_peripherals (equipment_id, peripheral_id) VALUES (%s, %s)", (equipment_id, new_peripheral_id))
-            # 4. Marca o novo periférico como "Em Uso"
             cur.execute("UPDATE peripherals SET status = 'Em Uso' WHERE id = %s", (new_peripheral_id,))
-            # 5. Registra a substituição no histórico
+            
             details_log = f"Substituído periférico ID {old_peripheral_id} por ID {new_peripheral_id}. Motivo: {reason}"
             cur.execute("""
-                INSERT INTO history (item_id, operador, data_operacao, operation, details)
-                VALUES (%s, %s, %s, 'Substituição Periférico', %s)
-            """, (equipment_id, logged_user, datetime.now(), details_log))
+                INSERT INTO history (item_id, peripheral_id, operador, data_operacao, operation, details, operacao_anexo)
+                VALUES (%s, %s, %s, %s, 'Substituição Periférico', %s, %s)
+            """, (equipment_id, old_peripheral_id, logged_user, datetime.now(), details_log, destination_path))
+            
             conn.commit()
             return True, "Substituição realizada com sucesso."
         except pymysql.MySQLError as e:
@@ -642,36 +652,32 @@ class InventoryDBManager:
 
 
 
+    # Em inventory_manager_db.py
+
+    # Em inventory_manager_db.py
+
     def generate_monthly_report(self, ano, mes):
         """Relatório consolidado de um mês, que agora diferencia empréstimos pendentes, confirmados e devolvidos."""
         conn = get_connection()
         cur = conn.cursor(pymysql.cursors.DictCursor)
         
-        # A nova query usa subconsultas para encontrar as datas de confirmação e devolução
-        # associadas a cada registro de empréstimo.
+        # --- QUERY SQL CORRIGIDA E ALINHADA ---
         sql = """
+            -- Bloco 1: Empréstimos de Equipamentos
             WITH EmprestimosDoMes AS (
                 SELECT
-                    h.id AS history_id,
-                    h.item_id, h.operador, h.usuario, h.cpf, h.cargo, h.center_cost, h.setor, h.revenda,
+                    h.id AS history_id, h.item_id, h.peripheral_id, h.operador, h.usuario, h.cpf, h.cargo,
+                    h.center_cost, h.setor, h.fornecedor, h.revenda,
                     h.data_operacao AS data_emprestimo,
-                    
-                    (SELECT MIN(hc.data_operacao) FROM history hc 
-                     WHERE hc.item_id = h.item_id AND hc.operation = 'Confirmação Empréstimo' 
-                     AND hc.id > h.id AND hc.is_reversed = 0) AS data_confirmacao,
-                     
-                    (SELECT MIN(hd.data_operacao) FROM history hd 
-                     WHERE hd.item_id = h.item_id AND hd.operation = 'Devolução' 
-                     AND hd.id > h.id AND hd.is_reversed = 0) AS data_devolucao
-                FROM
-                    history h
-                WHERE
-                    h.operation = 'Empréstimo'
-                    AND h.is_reversed = 0
-                    AND YEAR(h.data_operacao) = %s AND MONTH(h.data_operacao) = %s
+                    (SELECT MIN(hc.data_operacao) FROM history hc WHERE hc.item_id = h.item_id AND hc.operation = 'Confirmação Empréstimo' AND hc.id > h.id AND hc.is_reversed = 0) AS data_confirmacao,
+                    (SELECT MIN(hd.data_operacao) FROM history hd WHERE hd.item_id = h.item_id AND hd.operation = 'Devolução' AND hd.id > h.id AND hd.is_reversed = 0) AS data_devolucao
+                FROM history h
+                WHERE h.operation = 'Empréstimo' AND h.is_reversed = 0 AND YEAR(h.data_operacao) = %s AND MONTH(h.data_operacao) = %s
             )
             SELECT
-                em.*,
+                em.history_id, em.item_id, em.peripheral_id, em.operador, em.usuario, em.cpf, em.cargo, 
+                em.center_cost, em.setor, em.fornecedor, em.revenda,
+                em.data_emprestimo, em.data_confirmacao, em.data_devolucao,
                 'Empréstimo' AS operation_type,
                 COALESCE(i.tipo, h_item.tipo) AS tipo,
                 COALESCE(i.brand, h_item.brand) AS brand,
@@ -684,26 +690,34 @@ class InventoryDBManager:
 
             UNION ALL
 
+            -- Bloco 2: Cadastros de Equipamentos
             SELECT
-                cad.id as history_id, cad.item_id, cad.operador, NULL, NULL, NULL, NULL, NULL, i.revenda,
-                cad.data_operacao AS data_emprestimo,
-                NULL AS data_confirmacao,
-                NULL AS data_devolucao,
+                cad.id, cad.item_id, NULL, cad.operador, NULL, NULL, NULL, NULL, NULL, i.fornecedor, i.revenda,
+                cad.data_operacao, NULL, NULL,
                 'Cadastro' AS operation_type,
-                COALESCE(i.tipo, cad.tipo) AS tipo,
-                COALESCE(i.brand, cad.brand) AS brand,
-                COALESCE(i.model, cad.model) AS model,
-                COALESCE(i.identificador, cad.identificador) AS identificador,
+                COALESCE(i.tipo, cad.tipo) AS tipo, COALESCE(i.brand, cad.brand) AS brand,
+                COALESCE(i.model, cad.model) AS model, COALESCE(i.identificador, cad.identificador) AS identificador,
                 COALESCE(i.nota_fiscal, cad.nota_fiscal) AS nota_fiscal
             FROM history cad
             LEFT JOIN items i ON i.id = cad.item_id
-            WHERE cad.operation = 'Cadastro'
-            AND cad.is_reversed = 0
-            AND YEAR(cad.data_operacao) = %s AND MONTH(cad.data_operacao) = %s
+            WHERE cad.operation = 'Cadastro' AND cad.is_reversed = 0 AND YEAR(cad.data_operacao) = %s AND MONTH(cad.data_operacao) = %s
+            
+            UNION ALL
+
+            -- Bloco 3: Operações de Periféricos
+            SELECT
+                h.id, h.item_id, h.peripheral_id, h.operador, NULL, NULL, NULL, NULL, NULL, p.fornecedor, NULL,
+                h.data_operacao, NULL, NULL,
+                h.operation AS operation_type,
+                p.tipo, p.brand, p.model, p.identificador, p.nota_fiscal
+            FROM history h
+            LEFT JOIN peripherals p ON h.peripheral_id = p.id
+            WHERE h.operation IN ('Cadastro Periférico', 'Vínculo Periférico', 'Desvínculo Periférico', 'Substituição Periférico')
+            AND h.is_reversed = 0 AND YEAR(h.data_operacao) = %s AND MONTH(h.data_operacao) = %s
             
             ORDER BY data_emprestimo, item_id;
         """
-        cur.execute(sql, (ano, mes, ano, mes))
+        cur.execute(sql, (ano, mes, ano, mes, ano, mes))
         rows = cur.fetchall()
         cur.close()
         conn.close()
