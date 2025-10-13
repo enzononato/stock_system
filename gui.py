@@ -312,20 +312,26 @@ class App(tk.Tk):
     # ==========================================================
     # Helper: ordenar colunas da treeview
     # ==========================================================
+
     def treeview_sort_column(self, tv, col, reverse):
+        # Pega os valores da coluna. Eles vêm como strings da Treeview.
         items = [(tv.set(k, col), k) for k in tv.get_children("")]
         
         try:
-            # Tenta ordenar como número, removendo pontos e traços
-            items.sort(key=lambda t: int(str(t[0]).replace('.', '').replace('-', '').replace('/', '')), reverse=reverse)
+            # Tenta ordenar como números.
+            # (t[0] or 0) trata strings vazias como o número 0
+            # Também removemos os caracteres de formatação de data/cpf para a conversão.
+            items.sort(key=lambda t: int(str(t[0] or 0).replace('.', '').replace('-', '').replace('/', '')), reverse=reverse)
         except (ValueError, IndexError):
-            # Se falhar (ex: texto), ordena como string
+            # Se a conversão para int falhar (ex: coluna com texto como "Disponível"), 
+            # ordena como string, ignorando maiúsculas/minúsculas.
             items.sort(key=lambda t: str(t[0]).lower(), reverse=reverse)
 
-
+        # Reorganiza os itens na Treeview com a nova ordem
         for index, (val, k) in enumerate(items):
             tv.move(k, "", index)
             
+        # Atualiza o comando do cabeçalho para inverter a ordenação no próximo clique
         tv.heading(col, command=lambda: self.treeview_sort_column(tv, col, not reverse))
         
     # ==========================================================
@@ -342,7 +348,7 @@ class App(tk.Tk):
         self.cb_status_filter.grid(row=0, column=1, padx=5, pady=5)
 
         ttk.Label(frm_filters, text="Tipo:").grid(row=0, column=2, padx=(15, 5), pady=5, sticky="e")
-        self.cb_tipo_filter = ttk.Combobox(frm_filters, values=["", "Celular", "Notebook", "Desktop", "Impressora", "Tablet"], state="readonly", width=15)
+        self.cb_tipo_filter = ttk.Combobox(frm_filters, values=["", "Celular", "Notebook", "Desktop", "Impressora", "Tablet", "Switch", "HD", "Nobreak", "Access Point"], state="readonly", width=15)
         self.cb_tipo_filter.grid(row=0, column=3, padx=5, pady=5)
 
         ttk.Label(frm_filters, text="Revenda:").grid(row=0, column=4, padx=(15, 5), pady=5, sticky="e")
@@ -415,7 +421,7 @@ class App(tk.Tk):
         frm.grid_columnconfigure(1, weight=1)
 
         ttk.Label(frm, text="Tipo de Equipamento:", font=FONT_BOLD).grid(row=0, column=0, sticky="e", padx=5, pady=(0, 10))
-        self.cb_tipo = ttk.Combobox(frm, values=["Celular", "Notebook", "Desktop", "Impressora", "Tablet", "Switch", "HD"], state="readonly")
+        self.cb_tipo = ttk.Combobox(frm, values=["Celular", "Notebook", "Desktop", "Impressora", "Tablet", "Switch", "HD", "Nobreak", "Access Point"], state="readonly")
         self.cb_tipo.grid(row=0, column=1, sticky="ew", padx=5, pady=(0, 10))
         self.cb_tipo.bind("<<ComboboxSelected>>", self.on_tipo_selected)
 
@@ -532,6 +538,15 @@ class App(tk.Tk):
 
         ttk.Button(frm_filters, text="Buscar", command=self.update_peripherals_table, style="Primary.TButton").pack(side="left", padx=10)
         ttk.Button(frm_filters, text="Limpar", command=self.cmd_clear_peripheral_filter, style="Secondary.TButton").pack(side="left")
+        
+        self.var_include_inactive = tk.BooleanVar()
+        chk_inactive = ttk.Checkbutton(
+            frm_filters,
+            text="Incluir Substituídos/Inativos",
+            variable=self.var_include_inactive,
+            command=self.update_peripherals_table # Atualiza a tabela ao clicar
+        )
+        chk_inactive.pack(side="left", padx=20)
 
         # Frame da Treeview e barra de rolagem vertical
         tree_frame = ttk.Frame(frm_list)
@@ -565,9 +580,6 @@ class App(tk.Tk):
         self.tree_peripherals.tag_configure("substituido", background="#FF7E89")
 
         
-
-
-    # Em gui.py
 
     def build_linking_tab(self):
         tab = self.tab_linking
@@ -1290,6 +1302,23 @@ class App(tk.Tk):
                 widget.bind("<KeyRelease>", self.on_widget_interaction)
                 widgets[key] = widget
 
+        # --- BLOCO ADICIONADO PARA O ACCESS POINT ---
+        elif tipo == "Access Point":
+            # Reutiliza os mesmos campos da Impressora
+            fields = {
+                'setor': ("Setor:", ttk.Entry, {}),
+                'mac': ("MAC:", ttk.Entry, {}),
+                'ip': ("IP:", ttk.Entry, {})
+            }
+            for i, (key, (label, w_class, opts)) in enumerate(fields.items()):
+                ttk.Label(parent_frame, text=label).grid(row=row_start + i, column=0, sticky="e", pady=5, padx=5)
+                widget = w_class(parent_frame, **opts)
+                widget.grid(row=row_start + i, column=1, pady=5, padx=5, sticky="ew")
+                widget.insert(0, item_data.get(key) or '')
+                widget.bind("<KeyRelease>", self.on_widget_interaction)
+                widgets[key] = widget
+
+
         return widgets
 
 
@@ -1365,6 +1394,11 @@ class App(tk.Tk):
 
         if tipo == "HD":
             for campo, msg in {"storage": "Informe o armazenamento."}.items():
+                if not dados.get(campo):
+                    erros.append((self.add_widgets[campo], msg))
+
+        if tipo == "Access Point":
+            for campo, msg in {"setor": "Informe o setor.", "mac": "Informe o MAC.", "ip": "Informe o IP."}.items():
                 if not dados.get(campo):
                     erros.append((self.add_widgets[campo], msg))
         
@@ -2089,24 +2123,28 @@ class App(tk.Tk):
         self.cb_edit['values'] = lst
         self.cb_edit.set('')
 
-    def update_peripherals_table(self):
-        """Atualiza a tabela de periféricos, aplicando o filtro de busca."""
-        self.tree_peripherals.delete(*self.tree_peripherals.get_children())
-        search_text = self.e_search_peripherals.get().lower().strip() # Pega o texto da busca
 
-        for p in self.inv.list_peripherals():
+    def update_peripherals_table(self):
+        """Atualiza a tabela de periféricos, aplicando o filtro de busca e o de inativos."""
+        self.tree_peripherals.delete(*self.tree_peripherals.get_children())
+        search_text = self.e_search_peripherals.get().lower().strip()
+        
+        include_inactive = self.var_include_inactive.get()
+        
+        # Passa o novo parâmetro para a função do backend
+        for p in self.inv.list_peripherals(include_inactive=include_inactive):
             row_values = (
                 p['id'], p.get('status'), p.get('tipo'), 
                 p.get('brand'), p.get('model'),
                 p.get('fornecedor'), p.get('nota_fiscal'),
                 p.get('identificador'), p.get('motivo_substituicao'),
-                p.get('date_registered')
+                format_date(p.get('date_registered')) # <-- Data formatada
             )
             
             # Converte a linha em texto para a busca
             row_str = " ".join(str(v or '').lower() for v in row_values)
             if search_text and search_text not in row_str:
-                continue # Pula a linha se não corresponder à busca
+                continue
 
             status = p.get('status')
             tag = ""

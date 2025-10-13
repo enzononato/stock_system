@@ -254,22 +254,36 @@ class InventoryDBManager:
             cur.close()
             conn.close()
 
-    def list_peripherals(self, status_filter="", type_filter=""):
-        """Lista os periféricos ATIVOS com filtros opcionais."""
+
+    def list_peripherals(self, status_filter="", type_filter="", include_inactive=False):
+        """Lista os periféricos com filtros opcionais e opção para incluir inativos."""
         conn = get_connection()
         cur = conn.cursor(pymysql.cursors.DictCursor)
 
-        query = "SELECT * FROM peripherals WHERE is_active = 1"
+        query = "SELECT * FROM peripherals"
         params = []
+        
+        # Adiciona cláusulas WHERE dinamicamente
+        where_clauses = []
+        if not include_inactive:
+            where_clauses.append("is_active = 1")
+        
         if status_filter:
-            query += " AND status = %s"
+            where_clauses.append("status = %s")
             params.append(status_filter)
+        
         if type_filter:
-            query += " AND tipo = %s"
+            where_clauses.append("tipo = %s")
             params.append(type_filter)
+
+        if where_clauses:
+            query += " WHERE " + " AND ".join(where_clauses)
         
         cur.execute(query, params)
-        return cur.fetchall()
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return rows
 
     def list_peripherals_for_equipment(self, equipment_id: int):
         """Lista os periféricos vinculados a um equipamento específico."""
@@ -409,9 +423,9 @@ class InventoryDBManager:
         """, (user, cpf, dt_issue, revenda, pid))
 
         cur.execute("""
-            INSERT INTO history (item_id, operador, usuario, cpf, cargo, center_cost, setor, revenda, data_operacao, operation)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'Empréstimo')
-        """, (pid, logged_user, user, cpf, cargo, center_cost, setor, revenda, dt_issue, 'Empréstimo'))
+            INSERT INTO history (item_id, operador, usuario, cpf, cargo, center_cost, setor, revenda, fornecedor, data_operacao, operation)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'Empréstimo')
+        """, (pid, logged_user, user, cpf, cargo, center_cost, setor, revenda, item.get('fornecedor'), dt_issue))
 
         conn.commit()
         cur.close()
@@ -622,26 +636,29 @@ class InventoryDBManager:
             conn.close()
 
 
+
     def list_history(self):
-        """Lista histórico de TODAS as operações, tratando itens excluídos."""
+        """Lista histórico de TODAS as operações, tratando itens excluídos e buscando o fornecedor correto."""
         conn = get_connection()
         cur = conn.cursor(pymysql.cursors.DictCursor)
-        # ALTERADO: Adicionado filtro para não mostrar operações estornadas
+        
+        # --- QUERY SQL COMPLETA ---
         cur.execute("""
             SELECT
                 h.id, h.item_id, h.operador, h.peripheral_id, h.details,
                     
-                -- Usa COALESCE para pegar dados do item ou do histórico, se o item foi excluído
-                COALESCE(i.tipo, h.tipo) as tipo,
-                COALESCE(i.brand, h.brand) as marca,
-                COALESCE(i.model, h.model) as modelo,
-                COALESCE(i.identificador, h.identificador) as identificador,
-                COALESCE(i.nota_fiscal, h.nota_fiscal) as nota_fiscal,
-                COALESCE(i.fornecedor, h.fornecedor) as fornecedor,
+                -- Usa COALESCE para pegar dados do item, do periférico ou do histórico
+                COALESCE(i.tipo, p.tipo, h.tipo) as tipo,
+                COALESCE(i.brand, p.brand, h.brand) as marca,
+                COALESCE(i.model, p.model, h.model) as modelo,
+                COALESCE(i.identificador, p.identificador, h.identificador) as identificador,
+                COALESCE(i.nota_fiscal, p.nota_fiscal, h.nota_fiscal) as nota_fiscal,
+                COALESCE(i.fornecedor, p.fornecedor, h.fornecedor) as fornecedor,
                 h.usuario, h.cpf, h.cargo, h.center_cost, h.setor, h.revenda,
                 h.data_operacao, h.operation
             FROM history h
             LEFT JOIN items i ON i.id = h.item_id
+            LEFT JOIN peripherals p ON p.id = h.peripheral_id
             WHERE h.is_reversed = 0
             ORDER BY h.data_operacao DESC, h.id DESC
         """)
@@ -649,8 +666,6 @@ class InventoryDBManager:
         cur.close()
         conn.close()
         return rows
-
-
 
 
     def generate_monthly_report(self, ano, mes):
@@ -663,7 +678,9 @@ class InventoryDBManager:
             -- Bloco 1: Empréstimos de Equipamentos
             (SELECT
                 h.id AS history_id, h.item_id, h.peripheral_id, h.operador, h.usuario, h.cpf, h.cargo, 
-                h.center_cost, h.setor, h.fornecedor, h.revenda, h.details,
+                h.center_cost, h.setor,
+                COALESCE(i.fornecedor, h.fornecedor) AS fornecedor,
+                h.revenda, h.details,
                 h.data_operacao AS data_emprestimo,
                 (SELECT MIN(hc.data_operacao) FROM history hc WHERE hc.item_id = h.item_id AND hc.operation = 'Confirmação Empréstimo' AND hc.id > h.id AND hc.is_reversed = 0) AS data_confirmacao,
                 (SELECT MIN(hd.data_operacao) FROM history hd WHERE hd.item_id = h.item_id AND hd.operation = 'Devolução' AND hd.id > h.id AND hd.is_reversed = 0) AS data_devolucao,
