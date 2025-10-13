@@ -899,14 +899,14 @@ class App(tk.Tk):
         ttk.Button(action_frm, text="Estornar Lançamento", command=self.cmd_delete_report_entry, style="Danger.TButton").pack(side="left", padx=10)
         
         # adicionado a coluna "ID Histórico" que ficará oculta
-        cols = ("ID Histórico", "ID Item", "ID Per.", "Operador", "Revenda", "Tipo", "Marca", "Modelo", "Nota Fiscal", "Fornecedor", "Identificador", "Usuário", "CPF", "Operação", "Data Empréstimo", "Data Devolução", "Centro de Custo", "Setor", "Cargo")
+        cols = ("ID Histórico", "ID Item", "ID Per.", "Operador", "Revenda", "Tipo", "Marca", "Modelo", "Nota Fiscal", "Fornecedor", "Identificador", "Usuário", "CPF", "Operação", "Data Empréstimo", "Data Devolução", "Centro de Custo", "Setor", "Cargo", "Detalhes")
         
         tree_frame = ttk.Frame(frm)
         tree_frame.pack(fill="both", expand=True)
 
         self.tree_report = ttk.Treeview(tree_frame, columns=cols, show='headings')
 
-        col_widths = {"ID Item": 50, "ID Per.": 50, "Operador": 100, "Operação": 110, "CPF": 120}
+        col_widths = {"ID Item": 50, "ID Per.": 50, "Operador": 100, "Operação": 110, "CPF": 120, "Detalhes": 350}
 
         for c in cols:
             self.tree_report.heading(c, text=c, command=lambda col=c: self.treeview_sort_column(self.tree_report, col, False))
@@ -1830,7 +1830,8 @@ class App(tk.Tk):
             data_devolucao_display,               
             log.get('center_cost'),
             log.get('setor'),             
-            log.get('cargo')
+            log.get('cargo'),
+            log.get('details')
             )
             
             row_values_cleaned = tuple(v or '' for v in row_values)
