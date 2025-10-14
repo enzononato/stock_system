@@ -371,6 +371,8 @@ class App(tk.Tk):
             "RAM", "Storage", "Sistema", "Licença", "AnyDesk",
             "Setor", "IP", "MAC",
             "POE", "Qtd. Portas",
+            "Potência Nominal", "Autonomia Estimada", "IP (SNMP)", "Código Patrimonial",
+            "Responsável", "Local da Instalação",
             "Data Cadastro"
         ]
 
@@ -384,6 +386,7 @@ class App(tk.Tk):
             "ID": 40, "Revenda": 130, "Tipo": 100, "Marca": 100, "Modelo": 120, "Status": 100,
             "Periféricos (Qtd)": 110, "PoE": 60, "Qtd. Portas": 90,
             "Usuário": 140, "CPF": 110, "Identificador": 140, "Nota Fiscal": 100, "Fornecedor": 140,
+            "Código Patrimonial": 100, "Responsável": 100, "Local da Instalação": 150,
         }
 
         for col in cols:
@@ -1302,13 +1305,34 @@ class App(tk.Tk):
                 widget.bind("<KeyRelease>", self.on_widget_interaction)
                 widgets[key] = widget
 
-        # --- BLOCO ADICIONADO PARA O ACCESS POINT ---
-        elif tipo == "Access Point":
-            # Reutiliza os mesmos campos da Impressora
+        # BLOCO PARA NOBREAK
+        elif tipo == "Nobreak":
             fields = {
+                'identificador': ("Número de Série:", ttk.Entry, {}),
+                'codigo_patrimonial': ("Código Patrimonial:", ttk.Entry, {}),
+                'responsavel': ("Responsável:", ttk.Entry, {}),
+                'potencia_nominal': ("Potência Nominal:", ttk.Entry, {}),
+                'autonomia_estimada': ("Autonomia Estimada (min):", ttk.Entry, {}),
+                'ip_snmp': ("IP Placa de Rede (SNMP):", ttk.Entry, {})
+            }
+            for i, (key, (label, w_class, opts)) in enumerate(fields.items()):
+                ttk.Label(parent_frame, text=label).grid(row=row_start + i, column=0, sticky="e", pady=5, padx=5)
+                widget = w_class(parent_frame, **opts)
+                widget.grid(row=row_start + i, column=1, pady=5, padx=5, sticky="ew")
+                widget.insert(0, item_data.get(key) or '')
+                widget.bind("<KeyRelease>", self.on_widget_interaction)
+                widgets[key] = widget
+
+        # BLOCO PARA ACCESS POINT
+        elif tipo == "Access Point":
+
+            fields = {
+                'identificador': ("Número de Série:", ttk.Entry, {}),
+                'codigo_patrimonial': ("Código Patrimonial:", ttk.Entry, {}),
+                'local_instalacao': ("Local da Instalação:", ttk.Entry, {}),
                 'setor': ("Setor:", ttk.Entry, {}),
-                'mac': ("MAC:", ttk.Entry, {}),
-                'ip': ("IP:", ttk.Entry, {})
+                'ip': ("IP:", ttk.Entry, {}),
+                'mac': ("MAC:", ttk.Entry, {})
             }
             for i, (key, (label, w_class, opts)) in enumerate(fields.items()):
                 ttk.Label(parent_frame, text=label).grid(row=row_start + i, column=0, sticky="e", pady=5, padx=5)
@@ -1397,8 +1421,25 @@ class App(tk.Tk):
                 if not dados.get(campo):
                     erros.append((self.add_widgets[campo], msg))
 
+        if tipo == "Nobreak":
+            for campo, msg in {
+                "identificador": "Informe o Número de Série.",
+                "codigo_patrimonial": "Informe o Código Patrimonial.",
+                "responsavel": "Informe o Responsável.",
+                "potencia_nominal": "Informe a Potência Nominal.",
+                "autonomia_estimada": "Informe a Autonomia Estimada."
+            }.items():
+                if not dados.get(campo):
+                    erros.append((self.add_widgets[campo], msg))
+
+        # BLOCO DE VALIDAÇÃO ALTERADO PARA ACCESS POINT
         if tipo == "Access Point":
-            for campo, msg in {"setor": "Informe o setor.", "mac": "Informe o MAC.", "ip": "Informe o IP."}.items():
+            for campo, msg in {
+                "identificador": "Informe o Número de Série.",
+                "codigo_patrimonial": "Informe o Código Patrimonial.",
+                "local_instalacao": "Informe o Local da Instalação.",
+                "ip": "Informe o IP.", "setor": "Informe o setor.", "mac": "Informe o MAC."
+            }.items():
                 if not dados.get(campo):
                     erros.append((self.add_widgets[campo], msg))
         
@@ -1612,6 +1653,7 @@ class App(tk.Tk):
             new_data['sistema'] = format_title_case(new_data['sistema'])
 
         erros = []
+        # Validações comuns
         if not new_data.get("brand"): erros.append((self.edit_widgets['brand'], "Informe a marca."))
         if not new_data.get("revenda"): erros.append((self.edit_widgets['revenda'], "Informe a revenda."))
         
@@ -1621,6 +1663,63 @@ class App(tk.Tk):
         elif not nota_fiscal.isdigit() or len(nota_fiscal) != 9:
             erros.append((self.edit_widgets['nota_fiscal'], "A Nota Fiscal deve conter exatamente 9 números."))
 
+        # --- INÍCIO DO BLOCO DE VALIDAÇÃO COMPLETO POR TIPO ---
+        # Busca o tipo do item para aplicar a validação correta
+        item_atual = self.inv.find(self.current_edit_id)
+        tipo = item_atual.get('tipo')
+
+        if tipo in ["Celular", "Tablet"] and not new_data.get("identificador"):
+            erros.append((self.edit_widgets['identificador'], "Informe o Identificador (IMEI/Nº de Série)."))
+
+        if tipo == "Tablet" and not new_data.get("storage"):
+            erros.append((self.edit_widgets['storage'], "Informe o armazenamento."))
+            
+        if tipo == "Impressora":
+            for campo, msg in {"ip": "Informe o IP.", "setor": "Informe o setor.", "mac": "Informe o MAC."}.items():
+                if not new_data.get(campo): erros.append((self.edit_widgets[campo], msg))
+        
+        if tipo in ["Desktop", "Notebook"]:
+            for campo, msg in {"dominio": "Informe o domínio.", "host": "Informe o host.",
+                               "endereco_fisico": "Informe o endereço físico.",
+                               "storage": "Informe o armazenamento.",
+                               "sistema": "Informe o sistema operacional.", "cpu": "Informe o processador.",
+                               "ram": "Informe a RAM.", "licenca": "Informe a licença.",
+                               "anydesk": "Informe o AnyDesk."}.items():
+                if not new_data.get(campo): erros.append((self.edit_widgets[campo], msg))
+
+        if tipo == "Switch":
+            for campo, msg in {"poe": "Informe se possui POE.", "quantidade_portas": "Informe a quantidade de portas."}.items():
+                if not new_data.get(campo):
+                    erros.append((self.edit_widgets[campo], msg))
+
+        if tipo == "HD":
+            if not new_data.get("storage"):
+                erros.append((self.edit_widgets['storage'], "Informe o armazenamento."))
+
+        if tipo == "Nobreak":
+            for campo, msg in {
+                "identificador": "Informe o Número de Série.",
+                "codigo_patrimonial": "Informe o Código Patrimonial.",
+                "responsavel": "Informe o Responsável.",
+                "potencia_nominal": "Informe a Potência Nominal.",
+                "autonomia_estimada": "Informe a Autonomia Estimada."
+            }.items():
+                if not new_data.get(campo):
+                    erros.append((self.edit_widgets[campo], msg))
+
+        if tipo == "Access Point":
+            for campo, msg in {
+                "identificador": "Informe o Número de Série.",
+                "codigo_patrimonial": "Informe o Código Patrimonial.",
+                "local_instalacao": "Informe o Local da Instalação.",
+                "ip": "Informe o IP.", 
+                "setor": "Informe o setor.", 
+                "mac": "Informe o MAC."
+            }.items():
+                if not new_data.get(campo):
+                    erros.append((self.edit_widgets[campo], msg))
+        # --- FIM DO BLOCO DE VALIDAÇÃO ---
+
         if erros:
             for widget, _ in erros:
                 widget_class = str(widget.winfo_class())
@@ -1629,7 +1728,6 @@ class App(tk.Tk):
             
             self.lbl_edit.config(text=erros[0][1], style="Danger.TLabel") # Mostra o primeiro erro
             return
-
 
         ok, msg = self.inv.update_item(self.current_edit_id, new_data, self.logged_user)
         self.lbl_edit.config(text=msg, style="Success.TLabel" if ok else "Danger.TLabel")
@@ -2065,6 +2163,8 @@ class App(tk.Tk):
                 p.get('storage'), p.get('sistema'), p.get('licenca'), p.get('anydesk'), 
                 p.get('setor'), p.get('ip'), p.get('mac'),
                 p.get('poe'), p.get('quantidade_portas'),
+                p.get('potencia_nominal'), p.get('autonomia_estimada'), p.get('ip_snmp'),
+                p.get('codigo_patrimonial'), p.get('responsavel'), p.get('local_instalacao'),
                 format_date(p.get('date_registered'))
             )
             
