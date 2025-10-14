@@ -515,43 +515,57 @@ class InventoryDBManager:
         if not item or item['status'] != 'Indisponível':
             return False, "Apenas itens com status 'Indisponível' podem ter um termo de devolução gerado."
 
-        # Pega o nome do usuário que está com o item
         user = item.get("assigned_to")
         if not user:
             return False, "Não foi possível encontrar o usuário associado a este empréstimo."
 
-        # --- Parte 1: Gerar o Termo ---
         revenda = item.get("revenda")
         modelo_path = TERMO_DEVOLUCAO_MODELOS.get(revenda)
         if not modelo_path or not os.path.exists(modelo_path):
             return False, f"Modelo de termo de devolução não encontrado para {revenda}."
 
-        # ---LÓGICA PARA BUSCAR E FORMATAR PERIFÉRICOS ---
         linked_peripherals = self.list_peripherals_for_equipment(item_id)
-        peripherals_text = "Nenhum periférico adicional vinculado."
+        peripherals_text = "Nenhum periférico adicional devolvido."
         if linked_peripherals:
             peripherals_list = [
                 f"- {p['tipo']}: {p.get('brand','')} {p.get('model','')} (S/N: {p.get('identificador') or 'N/A'})"
                 for p in linked_peripherals
             ]
             peripherals_text = "\n".join(peripherals_list)
-        # --- FIM DA LOGICA ---
 
         safe_user_name = user.replace(" ", "_")
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         saida_path = os.path.join(RETURN_TERMS_DIR, f"termo_devolucao_{item_id}_{safe_user_name}_{revenda}_{timestamp}.docx")
         doc = Document(modelo_path)
         
+        # --- LÓGICA DE DETALHES ATUALIZADA  ---
+        detalhes_parts = [
+            f"{item.get('tipo', '')} {item.get('brand', '')} {item.get('model', '')}".strip()
+        ]
+        campos_opcionais = {
+            'identificador': 'S/N', 'cpu': 'CPU', 'ram': 'RAM',
+            'storage': 'Armazenamento', 'setor': 'Setor', 'ip': 'IP', 'mac': 'MAC'
+        }
+        for key, label in campos_opcionais.items():
+            value = item.get(key)
+            if value:
+                detalhes_parts.append(f"{label}: {value}")
+        detalhes_finais = " - ".join(detalhes_parts)
+
 
         substituicoes = {
             "{{nome}}": user, "{{data_hoje}}": datetime.now().strftime("%d/%m/%Y"),
             "{{cpf}}": format_cpf(item.get("cpf", "")),
-            "{{data_emprestimo}}": format_date(item.get("date_issued", "")), "{{marca}}": f" {item.get('brand', '')}" if item.get("brand") else "",
-            "{{modelo}}": f" {item.get('model', '')}" if item.get("model") else "", "{{tipo}}": item.get("tipo", ""),
-            "{{identificador}}": f" {item.get('identificador', '')}" if item.get("identificador") else "",
-            "{{nota_fiscal}}": f" {item.get('nota_fiscal', '')}" if item.get("nota_fiscal") else "",
+            "{{data_emprestimo}}": format_date(item.get("date_issued", "")),
+            "{{tipo}}": item.get("tipo", ""),
+            "{{detalhes_equipamento}}": detalhes_finais, 
             "{{perifericos}}": peripherals_text
         }
+        
+        # Remove placeholders que não foram preenchidos
+        for key in list(substituicoes.keys()):
+            if substituicoes[key] is None:
+                substituicoes[key] = ""
         
         try:
             for p in doc.paragraphs:
@@ -568,12 +582,9 @@ class InventoryDBManager:
         except Exception as e:
             return False, f"Erro ao salvar o documento do termo: {e}"
 
-        # --- Parte 2: Iniciar a Devolução (sem alterações) ---
         conn = get_connection()
         cur = conn.cursor()
-        
         cur.execute("UPDATE items SET status='Pendente Devolução' WHERE id=%s", (item_id,))
-        
         cur.execute("""
             INSERT INTO history (item_id, operador, data_operacao, operation)
             VALUES (%s, %s, %s, 'Devolução')
@@ -583,7 +594,6 @@ class InventoryDBManager:
         cur.close()
         conn.close()
         
-        # Se tudo deu certo, retorna True e o caminho do arquivo gerado
         return True, saida_path
 
 
@@ -834,13 +844,11 @@ class InventoryDBManager:
         if not item: 
             return False, "Equipamento não encontrado."
         
-
         # Verifica por "Pendente", que é o estado correto para gerar um termo.
         assigned_user = str(item.get("assigned_to", "")).strip()
         user_param = str(user).strip()
         if item["status"] != "Pendente" or assigned_user != user_param:
             return False, "Este equipamento não está pendente de empréstimo para este usuário."
-        # ----------------------------------------
 
         # --- LÓGICA PARA BUSCAR E FORMATAR PERIFÉRICOS ---
         linked_peripherals = self.list_peripherals_for_equipment(item_id)
@@ -851,7 +859,6 @@ class InventoryDBManager:
                 for p in linked_peripherals
             ]
             peripherals_text = "\n".join(peripherals_list)
-        # --- FIM DA LÓGICA ---
 
         revenda = item.get("revenda")
         modelo_path = TERMO_MODELOS.get(revenda)
@@ -863,17 +870,35 @@ class InventoryDBManager:
         saida_path = os.path.join(TERMS_DIR, f"termo_{item_id}_{safe_user_name}_{revenda}_{timestamp}.docx")
         doc = Document(modelo_path)
         
+        # --- LÓGICA PARA CONSTRUIR A LINHA DE DETALHES DINAMICAMENTE ---
+        detalhes_parts = [
+            f"{item.get('tipo', '')} {item.get('brand', '')} {item.get('model', '')}".strip()
+        ]
+        campos_opcionais = {
+            'identificador': 'S/N', 'cpu': 'CPU', 'ram': 'RAM',
+            'storage': 'Armazenamento', 'setor': 'Setor', 'ip': 'IP', 'mac': 'MAC'
+        }
+        for key, label in campos_opcionais.items():
+            value = item.get(key)
+            if value:
+                detalhes_parts.append(f"{label}: {value}")
+        detalhes_finais = " - ".join(detalhes_parts)
+        # --- FIM DA LÓGICA DE DETALHES ---
+        
         substituicoes = {
             "{{nome}}": user, "{{data_hoje}}": datetime.now().strftime("%d/%m/%Y"),
             "{{cpf}}": format_cpf(item.get("cpf", "")),
             "{{data_emprestimo}}": format_date(item.get("date_issued", "")),
-            "{{tipo}}": item.get("tipo", ""),
-            "{{marca}}": f" {item.get('brand', '')}" if item.get("brand") else "",
-            "{{modelo}}": f" {item.get('model', '')}" if item.get("model") else "",
-            "{{identificador}}": f" {item.get('identificador', '')}" if item.get("identificador") else "",
-            "{{nota_fiscal}}": f" {item.get('nota_fiscal', '')}" if item.get("nota_fiscal") else "",
+            # NOVO PLACEHOLDER ÚNICO PARA OS DETALHES
+            "{{detalhes_equipamento}}": detalhes_finais,
             "{{perifericos}}": peripherals_text
         }
+        
+        # Remove placeholders que não foram preenchidos (para evitar erros)
+        # Isso também remove os placeholders antigos como {{tipo}}, {{marca}}, etc.
+        for key in list(substituicoes.keys()):
+            if substituicoes[key] is None:
+                substituicoes[key] = ""
         
         try:
             for p in doc.paragraphs:
