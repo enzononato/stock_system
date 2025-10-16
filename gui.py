@@ -511,18 +511,10 @@ class App(tk.Tk):
         self.e_peri_id = ttk.Entry(frm_add)
         self.e_peri_id.grid(row=1, column=3, sticky="ew", padx=5, pady=5)
 
-        # Linha 3
-        ttk.Label(frm_add, text="Nota Fiscal:").grid(row=2, column=0, sticky="e", padx=5, pady=5)
-        self.e_peri_nf = ttk.Entry(frm_add)
-        self.e_peri_nf.grid(row=2, column=1, sticky="ew", padx=5, pady=5)
-
-        ttk.Label(frm_add, text="Fornecedor:").grid(row=2, column=2, sticky="e", padx=5, pady=5)
-        self.e_peri_fornecedor = ttk.Entry(frm_add)
-        self.e_peri_fornecedor.grid(row=2, column=3, sticky="ew", padx=5, pady=5)
 
         # Ações
         frm_add_actions = ttk.Frame(frm_add)
-        frm_add_actions.grid(row=3, column=0, columnspan=4, pady=(10,0))
+        frm_add_actions.grid(row=2, column=0, columnspan=4, pady=(10,0))
         ttk.Button(frm_add_actions, text="Cadastrar Periférico", command=self.cmd_add_peripheral, style="Primary.TButton").pack(side="left")
         self.lbl_peri_add = ttk.Label(frm_add_actions, text="")
         self.lbl_peri_add.pack(side="left", padx=15)
@@ -555,7 +547,7 @@ class App(tk.Tk):
         tree_frame = ttk.Frame(frm_list)
         tree_frame.pack(fill='both', expand=True)
 
-        cols = ("ID", "Status", "Tipo", "Marca", "Modelo", "Fornecedor", "Nota Fiscal", "Identificador (S/N)", "Motivo", "Data Cadastro")
+        cols = ("ID", "Status", "Tipo", "Marca", "Modelo", "Identificador (S/N)", "Motivo", "Data Cadastro")
         self.tree_peripherals = ttk.Treeview(tree_frame, columns=cols, show="headings")
         
         # Barras de Rolagem ---
@@ -1488,24 +1480,14 @@ class App(tk.Tk):
             "tipo": self.cb_peri_tipo.get(),
             "brand": self.e_peri_brand.get().strip(),
             "model": self.e_peri_model.get().strip(),
-            "nota_fiscal": self.e_peri_nf.get().strip(),
-            "fornecedor": self.e_peri_fornecedor.get(),
             "identificador": identificador_str if identificador_str else None
         }
 
         data['brand'] = format_title_case(data['brand'])
         data['model'] = format_title_case(data['model'])
-        data['fornecedor'] = format_title_case(data['fornecedor'])
-
 
         if not data["tipo"]:
             self.lbl_peri_add.config(text="O campo 'Tipo' é obrigatório.", style="Danger.TLabel")
-            return
-        if not data["nota_fiscal"]:
-            self.lbl_peri_add.config(text="O campo 'Nota Fiscal' é obrigatório.", style="Danger.TLabel")
-            return
-        if not data["fornecedor"]:
-            self.lbl_peri_add.config(text="O campo 'Fornecedor' é obrigatório.", style="Danger.TLabel")
             return
         if not data["identificador"]:
             self.lbl_peri_add.config(text="O campo 'Identificador' é obrigatório.", style="Danger.TLabel")
@@ -1518,8 +1500,6 @@ class App(tk.Tk):
             self.e_peri_brand.delete(0, "end")
             self.e_peri_model.delete(0, "end")
             self.e_peri_id.delete(0, "end")
-            self.e_peri_nf.delete(0, "end")
-            self.e_peri_fornecedor.delete(0, "end")
             self.update_all_views()
 
     def cmd_clear_peripheral_filter(self):
@@ -2236,7 +2216,6 @@ class App(tk.Tk):
             row_values = (
                 p['id'], p.get('status'), p.get('tipo'), 
                 p.get('brand'), p.get('model'),
-                p.get('fornecedor'), p.get('nota_fiscal'),
                 p.get('identificador'), p.get('motivo_substituicao'),
                 format_date(p.get('date_registered')) # <-- Data formatada
             )

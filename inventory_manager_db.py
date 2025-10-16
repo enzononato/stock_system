@@ -83,8 +83,6 @@ class InventoryDBManager:
             brand VARCHAR(100),
             model VARCHAR(100),
             identificador VARCHAR(100) UNIQUE,
-            nota_fiscal VARCHAR(50),
-            fornecedor VARCHAR(150),
             status ENUM('Disponível', 'Em Uso', 'Substituido') DEFAULT 'Disponível',
             motivo_substituicao VARCHAR(255),
             date_registered DATETIME NOT NULL,
@@ -668,8 +666,8 @@ class InventoryDBManager:
                 COALESCE(i.brand, p.brand, h.brand) as marca,
                 COALESCE(i.model, p.model, h.model) as modelo,
                 COALESCE(i.identificador, p.identificador, h.identificador) as identificador,
-                COALESCE(i.nota_fiscal, p.nota_fiscal, h.nota_fiscal) as nota_fiscal,
-                COALESCE(i.fornecedor, p.fornecedor, h.fornecedor) as fornecedor,
+                COALESCE(i.nota_fiscal, h.nota_fiscal) as nota_fiscal,
+                COALESCE(i.fornecedor, h.fornecedor) as fornecedor,
                 h.usuario, h.cpf, h.cargo, h.center_cost, h.setor, h.revenda,
                 h.data_operacao, h.operation
             FROM history h
@@ -689,20 +687,29 @@ class InventoryDBManager:
         conn = get_connection()
         cur = conn.cursor(pymysql.cursors.DictCursor)
         
-        # --- QUERY SQL COMPLETA ---
         sql = """
             -- Bloco 1: Empréstimos de Equipamentos
             (SELECT
-                h.id AS history_id, h.item_id, h.peripheral_id, h.operador, h.usuario, h.cpf, h.cargo, 
-                h.center_cost, h.setor,
+                h.id AS history_id,
+                h.item_id,
+                h.peripheral_id,
+                h.operador,
+                h.usuario,
+                h.cpf,
+                h.cargo,
+                h.center_cost,
+                h.setor,
                 COALESCE(i.fornecedor, h.fornecedor) AS fornecedor,
-                h.revenda, h.details,
+                h.revenda,
+                h.details,
                 h.data_operacao AS data_emprestimo,
                 (SELECT MIN(hc.data_operacao) FROM history hc WHERE hc.item_id = h.item_id AND hc.operation = 'Confirmação Empréstimo' AND hc.id > h.id AND hc.is_reversed = 0) AS data_confirmacao,
                 (SELECT MIN(hd.data_operacao) FROM history hd WHERE hd.item_id = h.item_id AND hd.operation = 'Devolução' AND hd.id > h.id AND hd.is_reversed = 0) AS data_devolucao,
                 'Empréstimo' AS operation_type,
-                COALESCE(i.tipo, h.tipo) AS tipo, COALESCE(i.brand, h.brand) AS brand,
-                COALESCE(i.model, h.model) AS model, COALESCE(i.identificador, h.identificador) AS identificador,
+                COALESCE(i.tipo, h.tipo) AS tipo,
+                COALESCE(i.brand, h.brand) AS brand,
+                COALESCE(i.model, h.model) AS model,
+                COALESCE(i.identificador, h.identificador) AS identificador,
                 COALESCE(i.nota_fiscal, h.nota_fiscal) AS nota_fiscal
             FROM history h
             LEFT JOIN items i ON i.id = h.item_id
@@ -712,31 +719,63 @@ class InventoryDBManager:
 
             -- Bloco 2: Cadastros de Equipamentos
             (SELECT
-                h.id, h.item_id, NULL, h.operador, NULL, NULL, NULL, NULL, NULL, i.fornecedor, i.revenda, h.details,
-                h.data_operacao, NULL, NULL,
+                h.id AS history_id,
+                h.item_id,
+                NULL AS peripheral_id,
+                h.operador,
+                NULL AS usuario,
+                NULL AS cpf,
+                NULL AS cargo,
+                NULL AS center_cost,
+                NULL AS setor,
+                i.fornecedor,
+                i.revenda,
+                h.details,
+                h.data_operacao AS data_emprestimo,
+                NULL AS data_confirmacao,
+                NULL AS data_devolucao,
                 'Cadastro' AS operation_type,
-                COALESCE(i.tipo, h.tipo) AS tipo, COALESCE(i.brand, h.brand) AS brand,
-                COALESCE(i.model, h.model) AS model, COALESCE(i.identificador, h.identificador) AS identificador,
+                COALESCE(i.tipo, h.tipo) AS tipo,
+                COALESCE(i.brand, h.brand) AS brand,
+                COALESCE(i.model, h.model) AS model,
+                COALESCE(i.identificador, h.identificador) AS identificador,
                 COALESCE(i.nota_fiscal, h.nota_fiscal) AS nota_fiscal
             FROM history h
             LEFT JOIN items i ON i.id = h.item_id
             WHERE h.operation = 'Cadastro' AND h.is_reversed = 0 AND YEAR(h.data_operacao) = %s AND MONTH(h.data_operacao) = %s)
-            
+
             UNION ALL
 
             -- Bloco 3: Operações de Periféricos
             (SELECT
-                h.id, h.item_id, h.peripheral_id, h.operador, NULL, NULL, NULL, NULL, NULL, p.fornecedor, NULL, h.details,
-                h.data_operacao, NULL, NULL,
+                h.id AS history_id,
+                h.item_id,
+                h.peripheral_id,
+                h.operador,
+                NULL AS usuario,
+                NULL AS cpf,
+                NULL AS cargo,
+                NULL AS center_cost,
+                NULL AS setor,
+                NULL AS fornecedor,
+                NULL AS revenda,
+                h.details,
+                h.data_operacao AS data_emprestimo,
+                NULL AS data_confirmacao,
+                NULL AS data_devolucao,
                 h.operation AS operation_type,
-                p.tipo, p.brand, p.model, p.identificador, p.nota_fiscal
+                p.tipo,
+                p.brand,
+                p.model,
+                p.identificador,
+                NULL AS nota_fiscal
             FROM history h
-            LEFT JOIN peripherals p ON h.peripheral_id = p.id
-            WHERE h.operation IN ('Cadastro Periférico', 'Vínculo Periférico', 'Desvínculo Periférico', 'Substituição Periférico')
+            LEFT JOIN peripherals p ON p.id = h.peripheral_id
+            WHERE h.operation IN ('Cadastro Periférico', 'Vínculo Periférico', 'Desvínculo Periférico', 'Substituição Periférico') 
             AND h.is_reversed = 0 AND YEAR(h.data_operacao) = %s AND MONTH(h.data_operacao) = %s)
-
+            
             UNION ALL
-
+            
             -- Bloco 4: Exclusões de Equipamentos
             (SELECT
                 h.id, h.item_id, NULL, h.operador, NULL, NULL, NULL, NULL, NULL, h.fornecedor, h.revenda, h.details,
@@ -745,10 +784,9 @@ class InventoryDBManager:
                 h.tipo, h.brand, h.model, h.identificador, h.nota_fiscal
             FROM history h
             WHERE h.operation = 'Exclusão' AND h.is_reversed = 0 AND YEAR(h.data_operacao) = %s AND MONTH(h.data_operacao) = %s)
-            
+
             ORDER BY data_emprestimo, item_id;
         """
-        # A query agora espera 4 pares de (ano, mes)
         cur.execute(sql, (ano, mes, ano, mes, ano, mes, ano, mes))
         rows = cur.fetchall()
         cur.close()
