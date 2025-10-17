@@ -896,8 +896,11 @@ class App(tk.Tk):
         ttk.Label(top_frm, text="Buscar no Relatório:").grid(row=0, column=5, padx=(10, 5), pady=5)
         self.e_search_report = ttk.Entry(top_frm, width=30)
         self.e_search_report.grid(row=0, column=6, padx=5, pady=5)
-        ttk.Button(top_frm, text="Limpar Busca", command=self.clear_report_filter, style="Secondary.TButton").grid(row=0, column=7, padx=5, pady=5)
-
+        
+        ttk.Button(top_frm, text="Buscar", command=self.cmd_generate_report, style="Primary.TButton").grid(row=0, column=7, padx=5, pady=5)
+        
+        ttk.Button(top_frm, text="Limpar Busca", command=self.clear_report_filter, style="Secondary.TButton").grid(row=0, column=8, padx=5, pady=5)
+        
         action_frm = ttk.Frame(top_frm)
         action_frm.grid(row=0, column=8, sticky="e", padx=(20,0))
         top_frm.grid_columnconfigure(8, weight=1)
@@ -1765,7 +1768,7 @@ class App(tk.Tk):
             return
 
         pid = int(sel.split(' - ', 1)[0])
-        ok, msg = self.inv.issue(pid, user, cpf, cc, setor, cargo, revenda, date_issue, self.logged_user)
+        ok, msg = self.inv.issue(pid, user, cpf, cc, cargo, setor, revenda, date_issue, self.logged_user)
         self.lbl_issue.config(text=msg, style='Success.TLabel' if ok else 'Danger.TLabel')
         if ok:
             self.cb_issue.set('')
