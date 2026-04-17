@@ -1,0 +1,32 @@
+services:
+
+  backend:
+    build: ./backend
+    container_name: revalle_backend
+    restart: unless-stopped
+    env_file: ./backend/.env
+    volumes:
+      # Monta o storage local quando STORAGE_BACKEND=local
+      - backend_storage:/app/storage
+      # Templates de documentos Word
+      - ./backend/modelos:/app/modelos:ro
+    ports:
+      - "8000:8000"   # Exposto apenas internamente; o Nginx faz o proxy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build: ./frontend
+    container_name: revalle_frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"   # Se usar Caddy/Certbot externamente, pode remover esta linha
+    depends_on:
+      - backend
+
+volumes:
+  backend_storage:
