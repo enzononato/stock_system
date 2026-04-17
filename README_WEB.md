@@ -79,7 +79,7 @@ nano backend/.env
 Preencha obrigatoriamente:
 ```env
 JWT_SECRET=<string-aleatória-longa-32+-caracteres>
-DB_HOST=72.61.53.20
+DB_HOST=<ip-do-seu-banco>
 DB_PASSWORD=<senha-real>
 
 # Para produção, use S3

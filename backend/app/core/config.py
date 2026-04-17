@@ -5,9 +5,9 @@ import os
 
 class Settings(BaseSettings):
     # Database
-    DB_HOST: str = "72.61.53.20"
+    DB_HOST: str
     DB_USER: str = "root"
-    DB_PASSWORD: str = "Root123@"
+    DB_PASSWORD: str
     DB_NAME: str = "stock_sys_db"
     DB_CHARSET: str = "utf8mb4"
 
