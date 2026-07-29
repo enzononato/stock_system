@@ -691,13 +691,48 @@ class InventoryDBManager:
 
     # ── History ────────────────────────────────────────────────────────────────
 
-    def list_history(self, *, limit: int | None = None, offset: int = 0) -> tuple[list[dict], int]:
-        """Retorna (linhas, total_sem_paginacao)."""
+    def list_history(
+        self, *, search: str | None = None, limit: int | None = None, offset: int = 0
+    ) -> tuple[list[dict], int]:
+        """Retorna (linhas, total_sem_paginacao).
+
+        A busca é feita no banco, e não na página já carregada: com paginação
+        server-side, filtrar no cliente só varreria as linhas visíveis e daria a
+        impressão falsa de que o histórico inteiro foi pesquisado.
+        """
+        # As colunas exibidas vêm de COALESCE entre history, items e peripherals,
+        # e o MySQL não aceita alias de SELECT no WHERE — por isso as expressões
+        # são repetidas aqui.
+        campos_busca = [
+            "h.operador",
+            "h.usuario",
+            "h.operation",
+            "h.revenda",
+            "COALESCE(i.tipo, p.tipo, h.tipo)",
+            "COALESCE(i.brand, p.brand, h.brand)",
+            "COALESCE(i.model, p.model, h.model)",
+            "COALESCE(i.identificador, p.identificador, h.identificador)",
+        ]
+
+        condicoes = ["h.is_reversed = 0"]
+        filtro_params: list = []
+        if search and search.strip():
+            termo = f"%{search.strip()}%"
+            condicoes.append("(" + " OR ".join(f"{c} LIKE %s" for c in campos_busca) + ")")
+            filtro_params.extend([termo] * len(campos_busca))
+
+        origem = f"""
+            FROM history h
+            LEFT JOIN items i ON i.id = h.item_id
+            LEFT JOIN peripherals p ON p.id = h.peripheral_id
+            WHERE {" AND ".join(condicoes)}
+        """
+
         with get_cursor(commit=False) as cur:
-            cur.execute("SELECT COUNT(*) as total FROM history WHERE is_reversed = 0")
+            cur.execute(f"SELECT COUNT(*) as total {origem}", filtro_params)
             total = cur.fetchone()["total"]
 
-            query = """
+            query = f"""
                 SELECT h.id, h.item_id, h.operador, h.peripheral_id, h.details,
                     COALESCE(i.tipo, p.tipo, h.tipo) as tipo,
                     COALESCE(i.brand, p.brand, h.brand) as marca,
@@ -708,13 +743,10 @@ class InventoryDBManager:
                     h.usuario, h.cpf, h.cargo, h.center_cost, h.setor, h.revenda,
                     h.operacao_anexo, h.termo_assinado_anexo,
                     h.data_operacao, h.operation
-                FROM history h
-                LEFT JOIN items i ON i.id = h.item_id
-                LEFT JOIN peripherals p ON p.id = h.peripheral_id
-                WHERE h.is_reversed = 0
+                {origem}
                 ORDER BY h.data_operacao DESC, h.id DESC
             """
-            params: list = []
+            params = list(filtro_params)
             if limit is not None:
                 query += " LIMIT %s OFFSET %s"
                 params.extend([limit, offset])

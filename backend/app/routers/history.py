@@ -1,3 +1,5 @@
+from typing import Optional
+
 from fastapi import APIRouter, HTTPException, Depends, Request, Query
 
 from app.schemas.history import HistoryResponse, ReverseRequest
@@ -20,12 +22,19 @@ router = APIRouter(prefix="/api/history", tags=["history"])
 
 @router.get("", response_model=Paginated[HistoryResponse])
 def list_history(
+    search: Optional[str] = Query(
+        default=None,
+        description="Busca por operador, usuário, operação, revenda, tipo, marca, modelo ou identificador.",
+    ),
     limit: int = Query(default=settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_PAGE_SIZE),
     offset: int = Query(default=0, ge=0),
     _: CurrentUser = Depends(gestor_or_tecnico),
     inv: InventoryDBManager = Depends(get_inventory_db),
 ):
-    rows, total = inv.list_history(limit=limit, offset=offset)
+    # A busca precisa acontecer no banco: com paginação server-side, filtrar no
+    # cliente varreria apenas a página carregada e daria a impressão falsa de
+    # ter pesquisado o histórico inteiro.
+    rows, total = inv.list_history(search=search, limit=limit, offset=offset)
     return {"items": rows, "total": total}
 
 

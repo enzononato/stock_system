@@ -27,6 +27,13 @@ export interface HistoryEntry {
 }
 
 export interface ListHistoryParams {
+  /**
+   * Busca server-side por operador, usuário, operação, revenda, tipo, marca,
+   * modelo ou identificador. Precisa ser feita no backend: com paginação, um
+   * filtro no cliente varreria apenas a página carregada e passaria a impressão
+   * falsa de ter pesquisado o histórico inteiro.
+   */
+  search?: string
   limit?: number
   offset?: number
 }
