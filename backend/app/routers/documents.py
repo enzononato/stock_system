@@ -1,18 +1,19 @@
 from fastapi import APIRouter, HTTPException, Depends
-from fastapi.responses import Response, StreamingResponse
-from datetime import datetime
-import io
+from fastapi.responses import Response
 
 from app.db.inventory_manager_db import InventoryDBManager
-from app.dependencies import gestor_or_tecnico, CurrentUser
+from app.dependencies import gestor_or_tecnico, get_inventory_db, CurrentUser
 from app.core.storage import storage
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
-inv = InventoryDBManager()
 
 
 @router.post("/loan-term/{item_id}")
-def generate_loan_term(item_id: int, current_user: CurrentUser = Depends(gestor_or_tecnico)):
+def generate_loan_term(
+    item_id: int,
+    current_user: CurrentUser = Depends(gestor_or_tecnico),
+    inv: InventoryDBManager = Depends(get_inventory_db),
+):
     """Gera o termo de responsabilidade e retorna o DOCX para download."""
     ok, result, filename = inv.generate_loan_term_bytes(item_id)
     if not ok:

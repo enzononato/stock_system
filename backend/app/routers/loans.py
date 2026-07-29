@@ -4,13 +4,12 @@ from datetime import datetime
 
 from app.schemas.loans import LoanRequest
 from app.db.inventory_manager_db import InventoryDBManager
-from app.dependencies import gestor_or_tecnico, CurrentUser
+from app.dependencies import gestor_or_tecnico, get_inventory_db, CurrentUser
 from app.core.storage import storage
 
-MAX_UPLOAD_SIZE = 20 * 1024 * 1024  # 20MB
-
 router = APIRouter(prefix="/api/loans", tags=["loans"])
-inv = InventoryDBManager()
+
+MAX_UPLOAD_SIZE = 20 * 1024 * 1024  # 20MB
 
 
 def _safe_filename(name: str) -> str:
@@ -23,7 +22,11 @@ def _check_size(content: bytes) -> None:
 
 
 @router.post("", response_model=dict)
-def initiate_loan(body: LoanRequest, current_user: CurrentUser = Depends(gestor_or_tecnico)):
+def initiate_loan(
+    body: LoanRequest,
+    current_user: CurrentUser = Depends(gestor_or_tecnico),
+    inv: InventoryDBManager = Depends(get_inventory_db),
+):
     ok, msg = inv.issue(
         body.item_id,
         body.usuario,
@@ -45,6 +48,7 @@ async def confirm_loan(
     item_id: int,
     signed_pdf: UploadFile = File(...),
     current_user: CurrentUser = Depends(gestor_or_tecnico),
+    inv: InventoryDBManager = Depends(get_inventory_db),
 ):
     content = await signed_pdf.read()
     _check_size(content)
@@ -58,21 +62,14 @@ async def confirm_loan(
     return {"detail": msg}
 
 
-@router.post("/{item_id}/return/initiate", response_model=dict)
-def initiate_return(item_id: int, current_user: CurrentUser = Depends(gestor_or_tecnico)):
-    ok, result, filename = inv.generate_return_term_bytes(item_id, current_user.username)
-    if not ok:
-        raise HTTPException(status_code=400, detail=result)
-
-    # Salva o DOCX gerado no storage
-    storage_key = storage.save("termos_devolucao", filename, result)
-    download_url = storage.get_url(storage_key)
-
-    return {"detail": "Termo de devolução gerado.", "download_url": download_url, "filename": filename}
-
-
-@router.get("/{item_id}/signed-term-url")
-def get_signed_term_url(item_id: int, _: CurrentUser = Depends(gestor_or_tecnico)):
+@router.get("/{item_id}/signed-term-url", response_model=dict)
+def get_signed_term_url(
+    item_id: int,
+    _: CurrentUser = Depends(gestor_or_tecnico),
+    inv: InventoryDBManager = Depends(get_inventory_db),
+):
+    """Alimenta o botão "Ver Termo" da tela de Termos: devolve a URL do PDF
+    assinado do empréstimo ativo do item, sem expor a chave de storage crua."""
     item = inv.find(item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Item não encontrado.")
@@ -84,11 +81,29 @@ def get_signed_term_url(item_id: int, _: CurrentUser = Depends(gestor_or_tecnico
     return {"url": storage.get_url(key)}
 
 
+@router.post("/{item_id}/return/initiate", response_model=dict)
+def initiate_return(
+    item_id: int,
+    current_user: CurrentUser = Depends(gestor_or_tecnico),
+    inv: InventoryDBManager = Depends(get_inventory_db),
+):
+    ok, result, filename = inv.generate_return_term_bytes(item_id, current_user.username)
+    if not ok:
+        raise HTTPException(status_code=400, detail=result)
+
+    # Salva o DOCX gerado no storage
+    storage_key = storage.save("termos_devolucao", filename, result)
+    download_url = storage.get_url(storage_key)
+
+    return {"detail": "Termo de devolução gerado.", "download_url": download_url, "filename": filename}
+
+
 @router.post("/{item_id}/return/confirm", response_model=dict)
 async def confirm_return(
     item_id: int,
     signed_pdf: UploadFile = File(...),
     current_user: CurrentUser = Depends(gestor_or_tecnico),
+    inv: InventoryDBManager = Depends(get_inventory_db),
 ):
     content = await signed_pdf.read()
     _check_size(content)
