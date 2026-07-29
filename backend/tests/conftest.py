@@ -567,22 +567,41 @@ def token_aprendiz(client, usuario_aprendiz, senha_padrao_teste):
     return _login_e_obter_access_token(client, usuario_aprendiz["username"], senha_padrao_teste)
 
 
-@pytest.fixture
-def client_gestor(client, token_gestor):
-    """Cliente HTTP autenticado como Gestor com um token JWT real (via login de verdade)."""
-    client.headers.update({"Authorization": f"Bearer {token_gestor}"})
-    return client
+def _client_autenticado(app, token: str):
+    """Cria um TestClient NOVO já com o header Authorization.
+
+    Cada cliente autenticado precisa ser uma instância independente. Antes,
+    estas fixtures faziam `client.headers.update(...)` sobre o MESMO objeto e o
+    devolviam — como o `client` "anônimo" é o mesmo TestClient, ele passava a
+    carregar o token da última fixture instanciada no teste. Testes de RBAC que
+    verificam "sem token deve dar 401" recebiam 200 (autenticado como Gestor) ou
+    403 (autenticado como Jovem Aprendiz), e a suíte acusava uma regressão de
+    autenticação que não existia no produto.
+    """
+    from fastapi.testclient import TestClient
+
+    c = TestClient(app)
+    c.headers.update({"Authorization": f"Bearer {token}"})
+    return c
 
 
 @pytest.fixture
-def client_tecnico(client, token_tecnico):
+def client_gestor(_fastapi_app, client, token_gestor):
+    """Cliente HTTP autenticado como Gestor com um token JWT real (via login de verdade).
+
+    Depende de `client` apenas para herdar o banco limpo e a ordem de fixtures;
+    a instância devolvida é independente, para não contaminar o cliente anônimo.
+    """
+    return _client_autenticado(_fastapi_app, token_gestor)
+
+
+@pytest.fixture
+def client_tecnico(_fastapi_app, client, token_tecnico):
     """Cliente HTTP autenticado como Técnico com um token JWT real (via login de verdade)."""
-    client.headers.update({"Authorization": f"Bearer {token_tecnico}"})
-    return client
+    return _client_autenticado(_fastapi_app, token_tecnico)
 
 
 @pytest.fixture
-def client_aprendiz(client, token_aprendiz):
+def client_aprendiz(_fastapi_app, client, token_aprendiz):
     """Cliente HTTP autenticado como Jovem Aprendiz com um token JWT real (via login de verdade)."""
-    client.headers.update({"Authorization": f"Bearer {token_aprendiz}"})
-    return client
+    return _client_autenticado(_fastapi_app, token_aprendiz)
