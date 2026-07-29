@@ -1,0 +1,33 @@
+services:
+
+  # Banco de dados MySQL efêmero e DESCARTÁVEL, usado exclusivamente pela suíte de
+  # testes de caracterização em backend/tests/. Os dados vivem em tmpfs (RAM): tudo
+  # é perdido ao parar o container — de propósito, para garantir que cada execução
+  # da suíte comece de um estado limpo e previsível.
+  #
+  # NUNCA aponte as variáveis TEST_DB_* usadas pelos testes para o MySQL de
+  # produção (72.61.53.20 / stock_sys_db). Veja docs/TESTES.md para o guia completo.
+  mysql-test:
+    image: mysql:8
+    container_name: stock_sys_mysql_test
+    restart: "no"
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: stock_test_root_pw
+      MYSQL_DATABASE: stock_sys_test
+      MYSQL_USER: stock_test
+      MYSQL_PASSWORD: stock_test_pw
+    ports:
+      # Porta alternativa (3307) para não colidir com um MySQL local/dev já
+      # rodando em 3306. Pode ser sobrescrita via variável de ambiente.
+      - "${TEST_DB_PORT:-3307}:3306"
+    tmpfs:
+      # datadir em tmpfs: nada é persistido em disco, subida/derrubada é rápida
+      # e cada `docker compose up` recomeça com um banco 100% vazio.
+      - /var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-pstock_test_root_pw"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
