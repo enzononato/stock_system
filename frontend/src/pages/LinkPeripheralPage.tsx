@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { listItems } from '@/api/items'
+import { listItemsPaginated } from '@/api/items'
 import {
   listPeripherals,
   listItemPeripherals,
@@ -18,8 +18,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from '@/components/ui/toast'
 import { Link2, Unlink, RefreshCw } from 'lucide-react'
 
-// Tipos de equipamento que aceitam periféricos
+// Tipos de equipamento que aceitam periféricos. Regra própria desta tela
+// (subconjunto curado, não um cadastro de domínio) — não é uma das listas
+// duplicadas com o backend que a T2 pede para eliminar (revendas, setores,
+// centros de custo, tipos de equipamento/periférico, motivos de remoção),
+// por isso continua fixa aqui.
 const LINK_ALLOWED_TYPES = ['Desktop', 'Notebook', 'Switch', 'Impressora']
+
+// Sem paginação nesta tela (filtra os equipamentos linkáveis client-side a
+// partir da lista completa) — usamos o teto de página do backend para não
+// truncar em 50 itens (default de GET /api/items) como aconteceria chamando
+// listItemsPaginated() sem limit.
+const FETCH_ALL_LIMIT = 500
 
 function PeripheralCard({
   peripheral,
@@ -66,7 +76,11 @@ export default function LinkPeripheralPage() {
   const [replaceReason, setReplaceReason] = useState('')
   const [replaceAttachment, setReplaceAttachment] = useState<File | null>(null)
 
-  const { data: items = [] } = useQuery({ queryKey: ['items'], queryFn: () => listItems() })
+  const { data } = useQuery({
+    queryKey: ['items'],
+    queryFn: () => listItemsPaginated({ limit: FETCH_ALL_LIMIT }),
+  })
+  const items = data?.items ?? []
   const linkableItems = items.filter(i => LINK_ALLOWED_TYPES.includes(i.tipo ?? ''))
 
   const { data: linkedPeripherals = [], refetch: refetchLinked } = useQuery({

@@ -2,16 +2,15 @@ import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createItem, updateItem, getItem } from '@/api/items'
-import { TypeSpecificFields } from '@/components/equipment/TypeSpecificFields'
+import { TypeSpecificFields, validateTypeSpecificFields } from '@/components/equipment/TypeSpecificFields'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from '@/components/ui/toast'
+import { useConstants } from '@/hooks/useConstants'
+import { isValidNotaFiscal, maskNotaFiscalInput } from '@/lib/utils'
 import { ArrowLeft, Save } from 'lucide-react'
-
-const EQUIPMENT_TYPES = ['Celular','Notebook','Desktop','Impressora','Tablet','Switch','HD','Nobreak','Access Point']
-const REVENDAS = ['Revalle Juazeiro','Revalle Bonfim','Revalle Petrolina','Revalle Ribeira','Revalle Paulo Afonso','Revalle Alagoinhas','Revalle Serrinha']
 
 interface Props { mode: 'create' | 'edit' }
 
@@ -19,6 +18,7 @@ export default function RegisterItemPage({ mode }: Props) {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { equipmentTypes, revendas, isLoading: constantsLoading } = useConstants()
 
   const { data: existingItem, isLoading: loadingItem } = useQuery({
     queryKey: ['item', id],
@@ -77,6 +77,20 @@ export default function RegisterItemPage({ mode }: Props) {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+
+    // T3: o backend agora rejeita nota fiscal fora de 9 dígitos e campos de
+    // MAC/IP malformados — validamos aqui antes de enviar. Nota fiscal é
+    // opcional (sem *): só valida se algo foi preenchido.
+    if (notaFiscal && !isValidNotaFiscal(notaFiscal)) {
+      toast('Nota fiscal inválida. Informe 9 dígitos.', 'error')
+      return
+    }
+    const specificFieldsError = validateTypeSpecificFields(tipo, specificFields)
+    if (specificFieldsError) {
+      toast(specificFieldsError, 'error')
+      return
+    }
+
     const data: Record<string, unknown> = {
       tipo, brand, model, revenda,
       nota_fiscal: notaFiscal,
@@ -104,10 +118,10 @@ export default function RegisterItemPage({ mode }: Props) {
         {/* Tipo */}
         <div className="flex flex-col gap-1.5">
           <Label>Tipo *</Label>
-          <Select value={tipo} onValueChange={setTipo} required>
+          <Select value={tipo} onValueChange={setTipo} required disabled={constantsLoading}>
             <SelectTrigger><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
             <SelectContent>
-              {EQUIPMENT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+              {equipmentTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
@@ -125,10 +139,10 @@ export default function RegisterItemPage({ mode }: Props) {
 
         <div className="flex flex-col gap-1.5">
           <Label>Revenda *</Label>
-          <Select value={revenda} onValueChange={setRevenda} required>
+          <Select value={revenda} onValueChange={setRevenda} required disabled={constantsLoading}>
             <SelectTrigger><SelectValue placeholder="Selecione a revenda" /></SelectTrigger>
             <SelectContent>
-              {REVENDAS.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+              {revendas.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
@@ -136,7 +150,12 @@ export default function RegisterItemPage({ mode }: Props) {
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
             <Label>Nota Fiscal</Label>
-            <Input value={notaFiscal} onChange={e => setNotaFiscal(e.target.value)} placeholder="9 dígitos" />
+            <Input
+              value={notaFiscal}
+              onChange={e => setNotaFiscal(maskNotaFiscalInput(e.target.value))}
+              placeholder="9 dígitos"
+              inputMode="numeric"
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Fornecedor</Label>

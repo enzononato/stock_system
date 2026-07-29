@@ -8,10 +8,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'
 import { DataTable } from '@/components/ui/DataTable'
 import { toast } from '@/components/ui/toast'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import type { ColumnDef } from '@tanstack/react-table'
 import { UserPlus, Trash2, Key } from 'lucide-react'
 
 const ROLES = ['Gestor','Técnico','Jovem Aprendiz']
+
+function errorDetail(err: unknown, fallback: string): string {
+  return (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? fallback
+}
 
 export default function UsersPage() {
   const queryClient = useQueryClient()
@@ -30,19 +45,20 @@ export default function UsersPage() {
       setUsername(''); setPassword(''); setRole('')
       toast('Usuário criado com sucesso!')
     },
-    onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erro ao criar usuário.'
-      toast(msg, 'error')
-    },
+    onError: (err: unknown) => toast(errorDetail(err, 'Erro ao criar usuário.'), 'error'),
   })
 
+  // O backend agora recusa com 400 a auto-remoção e a remoção do último
+  // Gestor do sistema (ver backend/app/routers/users.py) — antes esta
+  // mutation descartava a mensagem de erro e sempre mostrava um toast
+  // genérico, então o usuário nunca sabia por que a remoção falhou.
   const removeMutation = useMutation({
     mutationFn: (id: number) => removeUser(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] })
       toast('Usuário removido.')
     },
-    onError: () => toast('Erro ao remover usuário.', 'error'),
+    onError: (err: unknown) => toast(errorDetail(err, 'Erro ao remover usuário.'), 'error'),
   })
 
   const passwordMutation = useMutation({
@@ -51,7 +67,7 @@ export default function UsersPage() {
       setChangingPasswordId(null); setNewPassword('')
       toast('Senha alterada com sucesso!')
     },
-    onError: () => toast('Erro ao alterar senha.', 'error'),
+    onError: (err: unknown) => toast(errorDetail(err, 'Erro ao alterar senha.'), 'error'),
   })
 
   const columns: ColumnDef<User, unknown>[] = [
@@ -74,14 +90,35 @@ export default function UsersPage() {
           <Button size="sm" variant="ghost" onClick={() => setChangingPasswordId(row.original.id)}>
             <Key size={14} />
           </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-red-500 hover:text-red-700"
-            onClick={() => removeMutation.mutate(row.original.id)}
-          >
-            <Trash2 size={14} />
-          </Button>
+          {/* T4: confirmação antes de remover — não havia nenhuma, o clique
+              disparava a exclusão direto. */}
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-red-500 hover:text-red-700"
+                disabled={removeMutation.isPending}
+              >
+                <Trash2 size={14} />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Remover usuário "{row.original.username}"?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Esta ação não pode ser desfeita. Não é possível remover seu próprio usuário
+                  nem o último Gestor do sistema.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={() => removeMutation.mutate(row.original.id)}>
+                  Remover
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       ),
     },

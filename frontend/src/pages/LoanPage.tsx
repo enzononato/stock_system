@@ -1,26 +1,29 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { listItems } from '@/api/items'
-import { initiateLoan, generateLoanTerm, confirmLoan } from '@/api/loans'
+import { listItemsPaginated } from '@/api/items'
+import { initiateLoan } from '@/api/loans'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { FileUpload } from '@/components/ui/FileUpload'
-import { StatusBadge } from '@/components/ui/badge'
 import { toast } from '@/components/ui/toast'
 import { DataTable } from '@/components/ui/DataTable'
+import { ConfirmacaoTermo, generateAndDownloadLoanTerm } from '@/components/equipment/ConfirmacaoTermo'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { Item } from '@/api/items'
+import { useConstants } from '@/hooks/useConstants'
 import { formatDate, maskCpfInput, isValidCpf } from '@/lib/utils'
-import { FileDown, CheckCircle } from 'lucide-react'
+import { FileDown } from 'lucide-react'
 
-const REVENDAS = ['Revalle Juazeiro','Revalle Bonfim','Revalle Petrolina','Revalle Ribeira','Revalle Paulo Afonso','Revalle Alagoinhas','Revalle Serrinha']
-const CENTER_COSTS = ['101 - Puxada','202 - Armazém','301 - Administrativo','401 - Vendas','501 - Entrega','601 - CSC']
-const SETORES = ['Contabilidade','Financeiro','Departamento pessoal','Cultura','Gente','Armazém','Distribuição','Segurança','Compras','TI','CME','Vendas','Puxada','Faturamento','Portaria','Auditório','Caixa','Diretoria']
+// Sem paginação nesta tela (filtra "Disponível"/"Pendente" client-side a
+// partir da lista completa) — usamos o teto de página do backend para não
+// truncar em 50 itens (default de GET /api/items) como aconteceria chamando
+// listItemsPaginated() sem limit.
+const FETCH_ALL_LIMIT = 500
 
 export default function LoanPage() {
   const queryClient = useQueryClient()
+  const { centerCosts, setores, revendas, isLoading: constantsLoading } = useConstants()
   const [selectedItemId, setSelectedItemId] = useState('')
   const [usuario, setUsuario] = useState('')
   const [cpf, setCpf] = useState('')
@@ -32,10 +35,13 @@ export default function LoanPage() {
     const d = new Date()
     return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`
   })
-  const [signedPdf, setSignedPdf] = useState<File | null>(null)
   const [pendingItemId, setPendingItemId] = useState<number | null>(null)
 
-  const { data: items = [] } = useQuery({ queryKey: ['items'], queryFn: () => listItems() })
+  const { data } = useQuery({
+    queryKey: ['items'],
+    queryFn: () => listItemsPaginated({ limit: FETCH_ALL_LIMIT }),
+  })
+  const items = data?.items ?? []
 
   const disponivel = items.filter(i => i.status === 'Disponível')
   const pendentes = items.filter(i => i.status === 'Pendente')
@@ -53,38 +59,13 @@ export default function LoanPage() {
     },
   })
 
-  const confirmMutation = useMutation({
-    mutationFn: ({ itemId, pdf }: { itemId: number; pdf: File }) => confirmLoan(itemId, pdf),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['items'] })
-      setPendingItemId(null)
-      setSignedPdf(null)
-      toast('Empréstimo confirmado com sucesso!')
-    },
-    onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erro ao confirmar empréstimo.'
-      toast(msg, 'error')
-    },
-  })
-
-  async function handleGenerateTerm(itemId: number) {
-    try {
-      const blob = await generateLoanTerm(itemId)
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `termo_emprestimo_${itemId}.docx`
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch {
-      toast('Erro ao gerar termo.', 'error')
-    }
-  }
-
   function handleLoanSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!selectedItemId) { toast('Selecione um item.', 'error'); return }
-    if (!isValidCpf(cpf)) { toast('CPF inválido. Deve conter 11 dígitos.', 'error'); return }
+    // isValidCpf agora confere os dígitos verificadores (T3) — a versão
+    // antiga só checava a contagem de dígitos e aceitava sequências como
+    // 111.111.111-11, que nunca são CPFs reais.
+    if (!isValidCpf(cpf)) { toast('CPF inválido.', 'error'); return }
     loanMutation.mutate({ item_id: Number(selectedItemId), usuario, cpf, center_cost: centerCost, cargo, setor, revenda, date_issue: dateIssue })
   }
 
@@ -100,7 +81,7 @@ export default function LoanPage() {
       header: 'Ações',
       cell: ({ row }) => (
         <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={() => handleGenerateTerm(row.original.id)}>
+          <Button size="sm" variant="outline" onClick={() => generateAndDownloadLoanTerm(row.original.id)}>
             <FileDown size={14} className="mr-1" />Termo
           </Button>
         </div>
@@ -145,23 +126,23 @@ export default function LoanPage() {
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Centro de Custo *</Label>
-            <Select value={centerCost} onValueChange={setCenterCost} required>
+            <Select value={centerCost} onValueChange={setCenterCost} required disabled={constantsLoading}>
               <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-              <SelectContent>{CENTER_COSTS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+              <SelectContent>{centerCosts.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Setor *</Label>
-            <Select value={setor} onValueChange={setSetor} required>
+            <Select value={setor} onValueChange={setSetor} required disabled={constantsLoading}>
               <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-              <SelectContent>{SETORES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+              <SelectContent>{setores.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Revenda *</Label>
-            <Select value={revenda} onValueChange={setRevenda} required>
+            <Select value={revenda} onValueChange={setRevenda} required disabled={constantsLoading}>
               <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-              <SelectContent>{REVENDAS.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+              <SelectContent>{revendas.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">
@@ -177,27 +158,20 @@ export default function LoanPage() {
         </div>
       </form>
 
-      {/* Confirmação de empréstimo pendente */}
+      {/* Confirmação de empréstimo pendente (T5: painel compartilhado com TermsPage) */}
       {pendingItemId && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 space-y-4">
-          <h3 className="font-medium text-amber-800">Confirmar Empréstimo — Item #{pendingItemId}</h3>
-          <p className="text-sm text-amber-700">
-            1. Clique em "Gerar Termo" para baixar o documento<br />
-            2. Imprima, assine e escaneie como PDF<br />
-            3. Faça o upload do PDF assinado abaixo e confirme
-          </p>
-          <Button variant="outline" onClick={() => handleGenerateTerm(pendingItemId)}>
-            <FileDown size={14} className="mr-2" />Gerar Termo
-          </Button>
-          <FileUpload onFile={setSignedPdf} label="Upload do Termo Assinado (PDF)" />
-          <Button
-            disabled={!signedPdf || confirmMutation.isPending}
-            onClick={() => signedPdf && confirmMutation.mutate({ itemId: pendingItemId, pdf: signedPdf })}
-          >
-            <CheckCircle size={14} className="mr-2" />
-            {confirmMutation.isPending ? 'Confirmando...' : 'Confirmar Empréstimo'}
-          </Button>
-        </div>
+        <ConfirmacaoTermo
+          itemId={pendingItemId}
+          description={
+            <>
+              1. Clique em "Gerar Termo" para baixar o documento<br />
+              2. Imprima, assine e escaneie como PDF<br />
+              3. Faça o upload do PDF assinado abaixo e confirme
+            </>
+          }
+          showGenerateButton
+          onConfirmed={() => setPendingItemId(null)}
+        />
       )}
 
       {/* Lista de empréstimos pendentes de confirmação */}

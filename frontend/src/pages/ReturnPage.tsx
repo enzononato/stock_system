@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { listItems } from '@/api/items'
-import { initiateReturn, confirmReturn } from '@/api/loans'
+import { listItemsPaginated } from '@/api/items'
+import { downloadReturnTerm, confirmReturn } from '@/api/loans'
 import { Button } from '@/components/ui/button'
 import { FileUpload } from '@/components/ui/FileUpload'
 import { DataTable } from '@/components/ui/DataTable'
@@ -11,22 +11,34 @@ import type { Item } from '@/api/items'
 import { formatDate } from '@/lib/utils'
 import { FileDown, CheckCircle } from 'lucide-react'
 
+// Esta tela ainda não tem paginação própria (filtra client-side por status a
+// partir da lista completa) — usamos o teto de página do backend para não
+// truncar a lista em 50 itens (default de GET /api/items) como aconteceria
+// chamando listItemsPaginated() sem limit.
+const FETCH_ALL_LIMIT = 500
+
 export default function ReturnPage() {
   const queryClient = useQueryClient()
   const [pendingReturnId, setPendingReturnId] = useState<number | null>(null)
   const [signedPdf, setSignedPdf] = useState<File | null>(null)
 
-  const { data: items = [] } = useQuery({ queryKey: ['items'], queryFn: () => listItems() })
+  const { data } = useQuery({
+    queryKey: ['items'],
+    queryFn: () => listItemsPaginated({ limit: FETCH_ALL_LIMIT }),
+  })
+  const items = data?.items ?? []
   const indisponivel = items.filter(i => i.status === 'Indisponível')
   const pendenteDevolucao = items.filter(i => i.status === 'Pendente Devolução')
 
   const initiateMutation = useMutation({
-    mutationFn: (itemId: number) => initiateReturn(itemId),
-    onSuccess: (data, itemId) => {
+    // downloadReturnTerm encapsula initiate + download autenticado (T1): o
+    // fluxo antigo fazia window.open(data.download_url, '_blank'), que nunca
+    // envia o header Authorization — o termo de devolução sempre voltava 401
+    // e nunca abria de fato.
+    mutationFn: (itemId: number) => downloadReturnTerm(itemId),
+    onSuccess: (_, itemId) => {
       queryClient.invalidateQueries({ queryKey: ['items'] })
       setPendingReturnId(itemId)
-      // Download automático do termo
-      window.open(data.download_url, '_blank')
       toast('Termo de devolução gerado! Faça a assinatura e confirme.')
     },
     onError: (err: unknown) => {

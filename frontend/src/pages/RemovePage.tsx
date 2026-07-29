@@ -1,31 +1,37 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { listItems, removeItem } from '@/api/items'
+import { listItemsPaginated, removeItem } from '@/api/items'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { FileUpload } from '@/components/ui/FileUpload'
 import { toast } from '@/components/ui/toast'
+import { useConstants } from '@/hooks/useConstants'
 import { Trash2 } from 'lucide-react'
 
-const REMOVAL_REASONS: Record<string, boolean> = {
-  Roubo: true,
-  Perda: false,
-  Obsolescência: false,
-  Doação: true,
-  Venda: true,
-}
+// Sem paginação nesta tela (filtra "Disponível" client-side a partir da
+// lista completa) — usamos o teto de página do backend para não truncar em
+// 50 itens (default de GET /api/items) como aconteceria chamando
+// listItemsPaginated() sem limit.
+const FETCH_ALL_LIMIT = 500
 
 export default function RemovePage() {
   const queryClient = useQueryClient()
+  const { removalReasons, removalReasonsAttachment, isLoading: constantsLoading } = useConstants()
   const [selectedId, setSelectedId] = useState('')
   const [reason, setReason] = useState('')
   const [attachment, setAttachment] = useState<File | null>(null)
 
-  const { data: items = [] } = useQuery({ queryKey: ['items'], queryFn: () => listItems() })
+  const { data } = useQuery({
+    queryKey: ['items'],
+    queryFn: () => listItemsPaginated({ limit: FETCH_ALL_LIMIT }),
+  })
+  const items = data?.items ?? []
   const disponiveis = items.filter(i => i.status === 'Disponível')
 
-  const needsAttachment = reason ? REMOVAL_REASONS[reason] : false
+  // T2: o mapa de quais motivos exigem comprovante vem de /api/constants
+  // (removalReasonsAttachment), não mais de um objeto hardcoded local.
+  const needsAttachment = reason ? removalReasonsAttachment[reason] : false
 
   const mutation = useMutation({
     mutationFn: () => removeItem(Number(selectedId), reason, attachment ?? undefined),
@@ -74,10 +80,10 @@ export default function RemovePage() {
 
         <div className="flex flex-col gap-1.5">
           <Label>Motivo da Remoção *</Label>
-          <Select value={reason} onValueChange={setReason} required>
+          <Select value={reason} onValueChange={setReason} required disabled={constantsLoading}>
             <SelectTrigger><SelectValue placeholder="Selecione o motivo" /></SelectTrigger>
             <SelectContent>
-              {Object.keys(REMOVAL_REASONS).map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+              {removalReasons.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
