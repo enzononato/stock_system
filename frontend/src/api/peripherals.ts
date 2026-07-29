@@ -41,6 +41,11 @@ export async function unlinkPeripheral(linkId: number) {
   return res.data
 }
 
+export async function deletePeripheral(peripheralId: number): Promise<{ detail: string }> {
+  const res = await api.delete(`/peripherals/${peripheralId}`)
+  return res.data as { detail: string }
+}
+
 export async function replacePeripheral(
   itemId: number,
   oldPeripheralId: number,

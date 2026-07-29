@@ -1,4 +1,4 @@
-import api from './client'
+import api, { type Paginated } from './client'
 
 export interface Item {
   id: number
@@ -37,14 +37,35 @@ export interface Item {
   peripheral_count?: number
 }
 
-export async function listItems(params?: {
+export interface ListItemsParams {
   tipo?: string
   status?: string
   revenda?: string
   search?: string
-}) {
+  limit?: number
+  offset?: number
+}
+
+/**
+ * `GET /api/items` agora responde `{ items, total }` (paginado) em vez de um
+ * array cru, aceitando `limit`/`offset`. Contrato acordado com o backend (T4).
+ */
+export async function listItems(params?: ListItemsParams): Promise<Paginated<Item>> {
   const res = await api.get('/items', { params })
-  return res.data as Item[]
+  return res.data as Paginated<Item>
+}
+
+/**
+ * @deprecated Wrapper temporário que devolve o array cru (`Paginated<Item>['items']`)
+ * para não quebrar em runtime as páginas que ainda esperam `Item[]` de `listItems`
+ * (StockPage, LoanPage, TermsPage, LinkPeripheralPage, ReturnPage, RemovePage).
+ * Essas páginas ainda vão falhar no `tsc` até serem migradas para o formato
+ * paginado — isso é esperado e é trabalho do Módulo 5/6. Remova este wrapper
+ * assim que a migração for concluída.
+ */
+export async function listItemsArray(params?: ListItemsParams): Promise<Item[]> {
+  const { items } = await listItems(params)
+  return items
 }
 
 export async function getItem(id: number) {
