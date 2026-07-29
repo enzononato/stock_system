@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { formatDate } from '@/lib/utils'
+import { formatDateTime } from '@/lib/utils'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Download } from 'lucide-react'
 
@@ -39,8 +39,8 @@ export default function ReportPage() {
     { accessorKey: 'cpf', header: 'CPF', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'revenda', header: 'Revenda', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'center_cost', header: 'C. Custo', cell: ({ getValue }) => getValue() as string || '-' },
-    { accessorKey: 'data_emprestimo', header: 'Data', cell: ({ getValue }) => formatDate(getValue() as string) },
-    { accessorKey: 'data_devolucao', header: 'Devolução', cell: ({ getValue }) => formatDate(getValue() as string) },
+    { accessorKey: 'data_emprestimo', header: 'Data', cell: ({ getValue }) => formatDateTime(getValue() as string) },
+    { accessorKey: 'data_devolucao', header: 'Devolução', cell: ({ getValue }) => formatDateTime(getValue() as string) },
   ]
 
   return (

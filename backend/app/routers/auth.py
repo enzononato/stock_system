@@ -17,7 +17,7 @@ def login(body: LoginRequest, response: Response):
     if not user or not verify_password(body.password, user["password"]):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuário ou senha inválidos.")
 
-    token_data = {"sub": user["id"], "username": user["username"], "role": user["role"]}
+    token_data = {"sub": str(user["id"]), "username": user["username"], "role": user["role"]}
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
 
@@ -26,7 +26,7 @@ def login(body: LoginRequest, response: Response):
         key="refresh_token",
         value=refresh_token,
         httponly=True,
-        secure=True,   # Requer HTTPS em produção
+        secure=False,  # False para dev (HTTP); True em produção (HTTPS)
         samesite="lax",
         max_age=60 * 60 * 24 * 7,
     )
@@ -45,7 +45,7 @@ def refresh(response: Response, refresh_token: Optional[str] = Cookie(default=No
         key="refresh_token",
         value=new_refresh,
         httponly=True,
-        secure=True,
+        secure=False,  # False para dev (HTTP); True em produção (HTTPS)
         samesite="lax",
         max_age=60 * 60 * 24 * 7,
     )

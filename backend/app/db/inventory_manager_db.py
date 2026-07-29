@@ -9,6 +9,7 @@ Adaptado do original para uso no backend FastAPI:
 """
 import io
 import calendar
+import logging
 from datetime import datetime
 import pymysql
 from docx import Document
@@ -16,6 +17,8 @@ from docx import Document
 from app.db.database_mysql import get_connection
 from app.core.config import TERMO_MODELOS, TERMO_DEVOLUCAO_MODELOS
 from app.db.utils import format_cpf, format_date
+
+logger = logging.getLogger(__name__)
 
 
 class InventoryDBManager:
@@ -106,9 +109,10 @@ class InventoryDBManager:
             )
             conn.commit()
             return True, item_id
-        except pymysql.MySQLError as e:
+        except pymysql.MySQLError:
             conn.rollback()
-            return False, f"Erro de banco de dados: {e}"
+            logger.exception("Erro de banco de dados")
+            return False, "Erro ao processar a operação. Tente novamente."
         finally:
             cur.close()
             conn.close()
@@ -156,9 +160,10 @@ class InventoryDBManager:
             )
             conn.commit()
             return True, f"Aparelho {item_id} removido do estoque."
-        except pymysql.MySQLError as e:
+        except pymysql.MySQLError:
             conn.rollback()
-            return False, f"Erro de banco de dados: {e}"
+            logger.exception("Erro de banco de dados")
+            return False, "Erro ao processar a operação. Tente novamente."
         finally:
             cur.close()
             conn.close()
@@ -209,7 +214,8 @@ class InventoryDBManager:
             conn.rollback()
             if e.args[0] == 1062:
                 return False, "Já existe um periférico com este Identificador (Nº de Série)."
-            return False, f"Erro de banco de dados: {e}"
+            logger.exception("Erro de banco de dados")
+            return False, "Erro ao processar a operação. Tente novamente."
         finally:
             cur.close()
             conn.close()
@@ -268,9 +274,10 @@ class InventoryDBManager:
             )
             conn.commit()
             return True, "Periférico vinculado com sucesso."
-        except pymysql.MySQLError as e:
+        except pymysql.MySQLError:
             conn.rollback()
-            return False, f"Erro ao vincular: {e}"
+            logger.exception("Erro ao vincular periférico")
+            return False, "Erro ao vincular periférico."
         finally:
             cur.close()
             conn.close()
@@ -292,9 +299,10 @@ class InventoryDBManager:
             )
             conn.commit()
             return True, "Periférico desvinculado com sucesso."
-        except pymysql.MySQLError as e:
+        except pymysql.MySQLError:
             conn.rollback()
-            return False, f"Erro ao desvincular: {e}"
+            logger.exception("Erro ao desvincular periférico")
+            return False, "Erro ao desvincular periférico."
         finally:
             cur.close()
             conn.close()
@@ -332,9 +340,10 @@ class InventoryDBManager:
             )
             conn.commit()
             return True, "Substituição realizada com sucesso."
-        except pymysql.MySQLError as e:
+        except pymysql.MySQLError:
             conn.rollback()
-            return False, f"Erro ao substituir periférico: {e}"
+            logger.exception("Erro ao substituir periférico")
+            return False, "Erro ao substituir periférico."
         finally:
             cur.close()
             conn.close()
@@ -412,9 +421,10 @@ class InventoryDBManager:
             )
             conn.commit()
             return True, f"Empréstimo do item {item_id} confirmado."
-        except Exception as e:
+        except Exception:
             conn.rollback()
-            return False, f"Erro ao confirmar empréstimo: {e}"
+            logger.exception("Erro ao confirmar empréstimo")
+            return False, "Erro ao confirmar empréstimo."
         finally:
             cur.close()
             conn.close()
@@ -484,8 +494,9 @@ class InventoryDBManager:
             buf = io.BytesIO()
             doc.save(buf)
             doc_bytes = buf.getvalue()
-        except Exception as e:
-            return False, f"Erro ao gerar documento: {e}", None
+        except Exception:
+            logger.exception("Erro ao gerar documento")
+            return False, "Erro ao gerar o documento.", None
 
         # Atualiza status e registra no histórico
         conn = get_connection()
@@ -526,9 +537,10 @@ class InventoryDBManager:
             )
             conn.commit()
             return True, f"Devolução do item {item_id} confirmada."
-        except Exception as e:
+        except Exception:
             conn.rollback()
-            return False, f"Erro ao confirmar devolução: {e}"
+            logger.exception("Erro ao confirmar devolução")
+            return False, "Erro ao confirmar devolução."
         finally:
             cur.close()
             conn.close()
@@ -596,8 +608,9 @@ class InventoryDBManager:
             buf = io.BytesIO()
             doc.save(buf)
             doc_bytes = buf.getvalue()
-        except Exception as e:
-            return False, f"Erro ao gerar documento: {e}", None
+        except Exception:
+            logger.exception("Erro ao gerar documento")
+            return False, "Erro ao gerar o documento.", None
 
         safe_user = str(user).replace(" ", "_")
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -726,9 +739,10 @@ class InventoryDBManager:
             )
             conn.commit()
             return True, f"Operação '{op}' do item {item_id} estornada com sucesso."
-        except pymysql.MySQLError as e:
+        except pymysql.MySQLError:
             conn.rollback()
-            return False, f"Erro ao estornar: {e}"
+            logger.exception("Erro ao estornar")
+            return False, "Erro ao estornar a operação."
         finally:
             cur.close()
             conn.close()
@@ -778,3 +792,17 @@ class InventoryDBManager:
         cur.close()
         conn.close()
         return days, list(registrations.values())
+
+    def get_active_signed_term_key(self, item_id: int):
+        conn = get_connection()
+        cur = conn.cursor(pymysql.cursors.DictCursor)
+        cur.execute(
+            "SELECT termo_assinado_anexo FROM history "
+            "WHERE item_id = %s AND operation = 'Confirmação Empréstimo' "
+            "ORDER BY id DESC LIMIT 1",
+            (item_id,),
+        )
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        return row["termo_assinado_anexo"] if row else None

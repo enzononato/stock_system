@@ -1,3 +1,4 @@
+import os
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 from typing import Optional
 
@@ -6,8 +7,14 @@ from app.db.inventory_manager_db import InventoryDBManager
 from app.dependencies import get_current_user, gestor_or_tecnico, CurrentUser
 from app.core.storage import storage
 
+MAX_UPLOAD_SIZE = 20 * 1024 * 1024  # 20MB
+
 router = APIRouter(tags=["peripherals"])
 inv = InventoryDBManager()
+
+
+def _safe_filename(name: str) -> str:
+    return os.path.basename(name or "").replace("\\", "").replace("/", "") or "arquivo"
 
 
 @router.get("/api/peripherals", response_model=list[PeripheralResponse])
@@ -70,9 +77,11 @@ async def replace_peripheral(
     storage_key = None
     if attachment:
         content = await attachment.read()
+        if len(content) > MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=413, detail="Arquivo excede o tamanho máximo de 20MB.")
         storage_key = storage.save(
             "notas_remocao",
-            f"substituicao_{old_peripheral_id}_{attachment.filename}",
+            f"substituicao_{old_peripheral_id}_{_safe_filename(attachment.filename)}",
             content,
         )
     ok, msg = inv.replace_peripheral(

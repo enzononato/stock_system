@@ -12,7 +12,7 @@ import { toast } from '@/components/ui/toast'
 import { DataTable } from '@/components/ui/DataTable'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { Item } from '@/api/items'
-import { formatDate } from '@/lib/utils'
+import { formatDate, maskCpfInput, isValidCpf } from '@/lib/utils'
 import { FileDown, CheckCircle } from 'lucide-react'
 
 const REVENDAS = ['Revalle Juazeiro','Revalle Bonfim','Revalle Petrolina','Revalle Ribeira','Revalle Paulo Afonso','Revalle Alagoinhas','Revalle Serrinha']
@@ -84,6 +84,7 @@ export default function LoanPage() {
   function handleLoanSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!selectedItemId) { toast('Selecione um item.', 'error'); return }
+    if (!isValidCpf(cpf)) { toast('CPF inválido. Deve conter 11 dígitos.', 'error'); return }
     loanMutation.mutate({ item_id: Number(selectedItemId), usuario, cpf, center_cost: centerCost, cargo, setor, revenda, date_issue: dateIssue })
   }
 
@@ -136,7 +137,7 @@ export default function LoanPage() {
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>CPF *</Label>
-            <Input value={cpf} onChange={e => setCpf(e.target.value)} placeholder="000.000.000-00" required />
+            <Input value={cpf} onChange={e => setCpf(maskCpfInput(e.target.value))} placeholder="000.000.000-00" maxLength={14} required />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Cargo *</Label>

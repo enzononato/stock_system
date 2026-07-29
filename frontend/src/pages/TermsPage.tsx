@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { listItems } from '@/api/items'
-import { generateLoanTerm, confirmLoan } from '@/api/loans'
+import { generateLoanTerm, confirmLoan, downloadSignedTerm } from '@/api/loans'
 import { DataTable } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/button'
 import { FileUpload } from '@/components/ui/FileUpload'
@@ -83,7 +83,24 @@ export default function TermsPage() {
     { accessorKey: 'cpf', header: 'CPF' },
     { accessorKey: 'revenda', header: 'Revenda' },
     { accessorKey: 'date_issued', header: 'Data Empréstimo', cell: ({ getValue }) => formatDate(getValue() as string) },
-    { accessorKey: 'status', header: 'Status', cell: ({ row }) => <StatusBadge status={row.original.status} /> },
+    {
+      id: 'actions',
+      header: 'Termo',
+      cell: ({ row }) => (
+        <Button size="sm" variant="outline" onClick={async () => {
+          try {
+            const blob = await downloadSignedTerm(row.original.id)
+            const url = URL.createObjectURL(blob)
+            window.open(url, '_blank')
+            setTimeout(() => URL.revokeObjectURL(url), 10000)
+          } catch {
+            toast('Termo assinado não encontrado.', 'error')
+          }
+        }}>
+          <FileDown size={13} className="mr-1" />Ver Termo
+        </Button>
+      ),
+    },
   ]
 
   return (

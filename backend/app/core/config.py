@@ -116,7 +116,7 @@ REMOVAL_REASONS = {
 
 # Caminhos dos modelos de termo (relativos ao diretório backend/)
 def _modelo_path(filename: str) -> str:
-    base = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "modelos")
+    base = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "modelos")
     return os.path.join(base, filename)
 
 TERMO_MODELOS = {

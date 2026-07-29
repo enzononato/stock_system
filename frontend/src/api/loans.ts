@@ -33,6 +33,15 @@ export async function confirmReturn(itemId: number, signedPdf: File) {
   return res.data
 }
 
+export async function downloadSignedTerm(itemId: number): Promise<Blob> {
+  const urlRes = await api.get(`/loans/${itemId}/signed-term-url`)
+  const fileUrl = (urlRes.data as { url: string }).url
+  // fileUrl comes as /api/documents/files/... — strip /api prefix to avoid double baseURL
+  const relativePath = fileUrl.replace(/^\/api/, '')
+  const fileRes = await api.get(relativePath, { responseType: 'blob' })
+  return fileRes.data as Blob
+}
+
 export async function generateLoanTerm(itemId: number): Promise<Blob> {
   const res = await api.post(`/documents/loan-term/${itemId}`, {}, { responseType: 'blob' })
   return res.data as Blob

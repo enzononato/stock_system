@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { toast } from '@/components/ui/toast'
 import { useAuth } from '@/contexts/AuthContext'
 import type { ColumnDef } from '@tanstack/react-table'
-import { formatDate } from '@/lib/utils'
+import { formatDateTime } from '@/lib/utils'
 import { RotateCcw } from 'lucide-react'
 
 const REVERSIBLE_OPS = ['Cadastro','Empréstimo','Confirmação Empréstimo','Devolução','Confirmação Devolução']
@@ -52,7 +52,7 @@ export default function HistoryPage() {
     { accessorKey: 'modelo', header: 'Modelo', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'usuario', header: 'Usuário', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'revenda', header: 'Revenda', cell: ({ getValue }) => getValue() as string || '-' },
-    { accessorKey: 'data_operacao', header: 'Data', cell: ({ getValue }) => formatDate(getValue() as string) },
+    { accessorKey: 'data_operacao', header: 'Data', cell: ({ getValue }) => formatDateTime(getValue() as string) },
     ...(hasRole('Gestor') ? [{
       id: 'actions',
       header: '',

@@ -55,7 +55,7 @@ export default function RegisterItemPage({ mode }: Props) {
       'sistema','licenca','anydesk','setor','ip','mac','potencia_nominal','autonomia_estimada',
       'ip_snmp','codigo_patrimonial','responsavel','local_instalacao','poe','quantidade_portas']
     specificKeys.forEach(k => {
-      const val = (existingItem as Record<string, unknown>)[k]
+      const val = (existingItem as unknown as Record<string, unknown>)[k]
       if (val) fields[k] = String(val)
     })
     setSpecificFields(fields)

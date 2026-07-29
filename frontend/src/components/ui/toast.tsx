@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { X, CheckCircle, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -19,14 +19,14 @@ export function toast(message: string, type: 'success' | 'error' = 'success') {
 export function ToastContainer() {
   const [toasts, setToasts] = useState<Toast[]>([])
 
-  useCallback(() => {
+  useEffect(() => {
     const handler = (t: Toast) => {
       setToasts((prev) => [...prev, t])
       setTimeout(() => setToasts((prev) => prev.filter((x) => x.id !== t.id)), 4000)
     }
     listeners.push(handler)
     return () => { listeners = listeners.filter((l) => l !== handler) }
-  }, [])()
+  }, [])
 
   return (
     <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-50">

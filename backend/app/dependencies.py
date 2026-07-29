@@ -26,7 +26,7 @@ def get_current_user(
         )
     payload = decode_token(credentials.credentials, expected_type="access")
     return CurrentUser(
-        id=payload["sub"],
+        id=int(payload["sub"]),
         username=payload["username"],
         role=payload["role"],
     )

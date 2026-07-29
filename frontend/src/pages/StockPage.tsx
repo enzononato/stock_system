@@ -17,14 +17,14 @@ const STATUS_OPTIONS = ['Disponível','Indisponível','Pendente','Pendente Devol
 export default function StockPage() {
   const { hasRole } = useAuth()
   const navigate = useNavigate()
-  const [filterTipo, setFilterTipo] = useState('')
-  const [filterStatus, setFilterStatus] = useState('')
+  const [filterTipo, setFilterTipo] = useState('all')
+  const [filterStatus, setFilterStatus] = useState('all')
 
   const { data: items = [], isLoading, refetch } = useQuery({
     queryKey: ['items', filterTipo, filterStatus],
     queryFn: () => listItems({
-      tipo: filterTipo || undefined,
-      status: filterStatus || undefined,
+      tipo: filterTipo !== 'all' ? filterTipo : undefined,
+      status: filterStatus !== 'all' ? filterStatus : undefined,
     }),
   })
 
@@ -92,7 +92,7 @@ export default function StockPage() {
             <SelectValue placeholder="Tipo" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Todos os tipos</SelectItem>
+            <SelectItem value="all">Todos os tipos</SelectItem>
             {EQUIPMENT_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
           </SelectContent>
         </Select>
@@ -101,7 +101,7 @@ export default function StockPage() {
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Todos os status</SelectItem>
+            <SelectItem value="all">Todos os status</SelectItem>
             {STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
           </SelectContent>
         </Select>
