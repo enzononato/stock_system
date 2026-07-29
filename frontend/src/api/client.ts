@@ -65,15 +65,37 @@ function processQueue(error: unknown, token: string | null) {
   failedQueue = []
 }
 
+// Endpoints do próprio fluxo de autenticação onde um 401 é resposta de negócio
+// normal, não sinal de sessão expirada: credenciais inválidas no login, ou
+// simplesmente nada para revogar no logout. `originalRequest.url` chega sem o
+// baseURL (ex.: "/auth/login"), mas o `includes` cobre também a forma com
+// prefixo "/api", então funciona nos dois casos.
+const NO_SESSION_HANDLING_PATHS = ['/auth/login', '/auth/logout']
+
+function requestPathIncludes(url: unknown, paths: string[]): boolean {
+  return typeof url === 'string' && paths.some((path) => url.includes(path))
+}
+
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
     const originalRequest = error.config
     const status = error.response?.status
+
+    // Um 401 em /auth/login (senha errada) ou /auth/logout nunca deve tentar
+    // refresh nem avisar "sessão expirada" — sem este bail-out antecipado, cai
+    // no fluxo abaixo como se fosse uma sessão que expirou: dispara um refresh
+    // espúrio (que falha, pois não há cookie válido) e mostra ao usuário um
+    // toast de sessão expirada por cima do "usuário ou senha inválidos" da
+    // própria LoginPage. Deixa a página tratar o erro normalmente.
+    if (status === 401 && requestPathIncludes(originalRequest?.url, NO_SESSION_HANDLING_PATHS)) {
+      return Promise.reject(error)
+    }
+
     // Se a própria chamada de refresh voltar com 401, ou se a requisição já foi
     // reenviada uma vez (já usamos um token "novo" e mesmo assim deu 401), não
     // tentamos de novo — isso evitaria um loop infinito de refresh.
-    const isRefreshCall = Boolean(originalRequest?.url && String(originalRequest.url).includes('/auth/refresh'))
+    const isRefreshCall = requestPathIncludes(originalRequest?.url, ['/auth/refresh'])
 
     if (status !== 401 || isRefreshCall || originalRequest?._retry) {
       if (status === 401) {

@@ -47,24 +47,26 @@ export interface ListItemsParams {
 }
 
 /**
- * `GET /api/items` agora responde `{ items, total }` (paginado) em vez de um
- * array cru, aceitando `limit`/`offset`. Contrato acordado com o backend (T4).
+ * Contrato novo (paginado) de `GET /api/items`: aceita `limit`/`offset` e
+ * devolve `{ items, total }`. Contrato acordado com o backend (T4) — use esta
+ * função em código novo. `listItems` (abaixo) é o shim de compatibilidade com
+ * a assinatura antiga.
  */
-export async function listItems(params?: ListItemsParams): Promise<Paginated<Item>> {
+export async function listItemsPaginated(params?: ListItemsParams): Promise<Paginated<Item>> {
   const res = await api.get('/items', { params })
   return res.data as Paginated<Item>
 }
 
 /**
- * @deprecated Wrapper temporário que devolve o array cru (`Paginated<Item>['items']`)
- * para não quebrar em runtime as páginas que ainda esperam `Item[]` de `listItems`
- * (StockPage, LoanPage, TermsPage, LinkPeripheralPage, ReturnPage, RemovePage).
- * Essas páginas ainda vão falhar no `tsc` até serem migradas para o formato
- * paginado — isso é esperado e é trabalho do Módulo 5/6. Remova este wrapper
- * assim que a migração for concluída.
+ * @deprecated `GET /api/items` passou a responder `{ items, total }` (ver
+ * `listItemsPaginated`). Esta função mantém a assinatura antiga (`Item[]`) —
+ * desembrulhando `.items` internamente — para StockPage, LoanPage, TermsPage,
+ * LinkPeripheralPage, ReturnPage e RemovePage, que ainda chamam `listItems()`
+ * esperando um array e não foram migradas (Módulo 5/6). Remova esta função e
+ * troque as chamadas por `listItemsPaginated` quando essas páginas migrarem.
  */
-export async function listItemsArray(params?: ListItemsParams): Promise<Item[]> {
-  const { items } = await listItems(params)
+export async function listItems(params?: ListItemsParams): Promise<Item[]> {
+  const { items } = await listItemsPaginated(params)
   return items
 }
 
