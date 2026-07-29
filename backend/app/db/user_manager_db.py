@@ -1,6 +1,10 @@
+import logging
+
 import bcrypt
 import pymysql
 from app.db.database_mysql import get_cursor
+
+logger = logging.getLogger(__name__)
 
 
 class UserDBManager:
@@ -42,15 +46,17 @@ class UserDBManager:
         except pymysql.MySQLError as e:
             if e.args[0] == 1062:
                 return False, f"O nome de usuário '{username}' já existe."
-            return False, f"Erro ao cadastrar usuário: {e}"
+            logger.exception("Erro ao cadastrar usuário")
+            return False, "Erro ao cadastrar usuário."
 
     def remove_user(self, user_id: int):
         try:
             with get_cursor(dict_cursor=False) as cur:
                 cur.execute("DELETE FROM usuarios WHERE id = %s", (user_id,))
             return True, "Usuário removido com sucesso."
-        except pymysql.MySQLError as e:
-            return False, f"Erro ao remover usuário: {e}"
+        except pymysql.MySQLError:
+            logger.exception("Erro ao remover usuário")
+            return False, "Erro ao remover usuário."
 
     def update_password(self, user_id: int, new_password: str):
         if not new_password:
@@ -60,5 +66,6 @@ class UserDBManager:
             with get_cursor(dict_cursor=False) as cur:
                 cur.execute("UPDATE usuarios SET password = %s WHERE id = %s", (hashed, user_id))
             return True, "Senha alterada com sucesso."
-        except pymysql.MySQLError as e:
-            return False, f"Erro ao alterar a senha: {e}"
+        except pymysql.MySQLError:
+            logger.exception("Erro ao alterar a senha")
+            return False, "Erro ao alterar a senha."

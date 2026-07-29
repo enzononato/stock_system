@@ -14,6 +14,7 @@ conexão nova a cada chamada, como antes).
 import io
 import os
 import calendar
+import logging
 from datetime import datetime
 import pymysql
 from docx import Document
@@ -21,6 +22,8 @@ from docx import Document
 from app.db.database_mysql import get_cursor
 from app.core.config import TERMO_MODELOS, TERMO_DEVOLUCAO_MODELOS
 from app.db.utils import format_cpf, format_date
+
+logger = logging.getLogger(__name__)
 
 
 class InventoryDBManager:
@@ -105,8 +108,9 @@ class InventoryDBManager:
                     (item_id, logged_user, datetime.now()),
                 )
             return True, item_id
-        except pymysql.MySQLError as e:
-            return False, f"Erro de banco de dados: {e}"
+        except pymysql.MySQLError:
+            logger.exception("Erro de banco de dados")
+            return False, "Erro ao processar a operação. Tente novamente."
 
     def update_item(self, item_id: int, item_data: dict, logged_user: str):
         sets = ", ".join([f"{k}=%s" for k in item_data.keys()])
@@ -119,8 +123,9 @@ class InventoryDBManager:
                     (item_id, logged_user, datetime.now()),
                 )
             return True, f"Item {item_id} atualizado."
-        except pymysql.MySQLError as e:
-            return False, f"Erro de banco de dados: {e}"
+        except pymysql.MySQLError:
+            logger.exception("Erro de banco de dados")
+            return False, "Erro ao processar a operação. Tente novamente."
 
     def remove(self, item_id: int, logged_user: str, reason: str, storage_key: str = None):
         """Remove (soft-delete) um item. storage_key é a chave do anexo no storage backend."""
@@ -148,8 +153,9 @@ class InventoryDBManager:
                     ),
                 )
             return True, f"Aparelho {item_id} removido do estoque."
-        except pymysql.MySQLError as e:
-            return False, f"Erro de banco de dados: {e}"
+        except pymysql.MySQLError:
+            logger.exception("Erro de banco de dados")
+            return False, "Erro ao processar a operação. Tente novamente."
 
     def list_items(
         self,
@@ -236,7 +242,8 @@ class InventoryDBManager:
         except pymysql.MySQLError as e:
             if e.args[0] == 1062:
                 return False, "Já existe um periférico com este Identificador (Nº de Série)."
-            return False, f"Erro de banco de dados: {e}"
+            logger.exception("Erro de banco de dados")
+            return False, "Erro ao processar a operação. Tente novamente."
 
     def list_peripherals(self, status_filter="", type_filter="", include_inactive=False):
         where = []
@@ -286,8 +293,9 @@ class InventoryDBManager:
                     ),
                 )
             return True, f"Periférico '{peripheral.get('tipo')}' (ID {peripheral_id}) removido do estoque."
-        except pymysql.MySQLError as e:
-            return False, f"Erro de banco de dados: {e}"
+        except pymysql.MySQLError:
+            logger.exception("Erro de banco de dados")
+            return False, "Erro ao processar a operação. Tente novamente."
 
     def list_peripherals_for_equipment(self, equipment_id: int):
         with get_cursor(commit=False) as cur:
@@ -314,8 +322,9 @@ class InventoryDBManager:
                     (equipment_id, peripheral_id, logged_user, datetime.now()),
                 )
             return True, "Periférico vinculado com sucesso."
-        except pymysql.MySQLError as e:
-            return False, f"Erro ao vincular: {e}"
+        except pymysql.MySQLError:
+            logger.exception("Erro ao vincular periférico")
+            return False, "Erro ao vincular periférico."
 
     def unlink_peripheral_from_equipment(self, link_id: int, logged_user: str):
         try:
@@ -332,8 +341,9 @@ class InventoryDBManager:
                     (ids["equipment_id"], ids["peripheral_id"], logged_user, datetime.now()),
                 )
             return True, "Periférico desvinculado com sucesso."
-        except pymysql.MySQLError as e:
-            return False, f"Erro ao desvincular: {e}"
+        except pymysql.MySQLError:
+            logger.exception("Erro ao desvincular periférico")
+            return False, "Erro ao desvincular periférico."
 
     def replace_peripheral(
         self,
@@ -366,8 +376,9 @@ class InventoryDBManager:
                     (equipment_id, old_peripheral_id, logged_user, datetime.now(), details_log, storage_key),
                 )
             return True, "Substituição realizada com sucesso."
-        except pymysql.MySQLError as e:
-            return False, f"Erro ao substituir periférico: {e}"
+        except pymysql.MySQLError:
+            logger.exception("Erro ao substituir periférico")
+            return False, "Erro ao substituir periférico."
 
     # ── Loan workflow ──────────────────────────────────────────────────────────
 
@@ -403,8 +414,9 @@ class InventoryDBManager:
                     (pid, logged_user, user, cpf, cargo, center_cost, setor, revenda, item.get("fornecedor"), dt_issue),
                 )
             return True, f"Empréstimo do item {pid} para {user} iniciado. Status: Pendente."
-        except pymysql.MySQLError as e:
-            return False, f"Erro de banco de dados: {e}"
+        except pymysql.MySQLError:
+            logger.exception("Erro de banco de dados")
+            return False, "Erro ao processar a operação. Tente novamente."
 
     def confirm_loan(self, item_id: int, logged_user: str, storage_key: str):
         """Confirma empréstimo. storage_key é a chave do PDF assinado no storage backend."""
@@ -449,8 +461,9 @@ class InventoryDBManager:
                     ),
                 )
             return True, f"Empréstimo do item {item_id} confirmado."
-        except Exception as e:
-            return False, f"Erro ao confirmar empréstimo: {e}"
+        except Exception:
+            logger.exception("Erro ao confirmar empréstimo")
+            return False, "Erro ao confirmar empréstimo."
 
     def get_active_signed_term_key(self, item_id: int):
         """Retorna a storage_key do termo de empréstimo assinado vigente (não
@@ -533,8 +546,9 @@ class InventoryDBManager:
             buf = io.BytesIO()
             doc.save(buf)
             doc_bytes = buf.getvalue()
-        except Exception as e:
-            return False, f"Erro ao gerar documento: {e}", None
+        except Exception:
+            logger.exception("Erro ao gerar documento")
+            return False, "Erro ao gerar o documento.", None
 
         # Atualiza status e registra no histórico
         try:
@@ -544,8 +558,9 @@ class InventoryDBManager:
                     "INSERT INTO history (item_id, operador, data_operacao, operation) VALUES (%s,%s,%s,'Devolução')",
                     (item_id, logged_user, datetime.now()),
                 )
-        except pymysql.MySQLError as e:
-            return False, f"Erro de banco de dados: {e}", None
+        except pymysql.MySQLError:
+            logger.exception("Erro de banco de dados")
+            return False, "Erro ao processar a operação. Tente novamente.", None
 
         safe_user = user.replace(" ", "_")
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -600,8 +615,9 @@ class InventoryDBManager:
                     (item_id, logged_user, datetime.now(), storage_key),
                 )
             return True, f"Devolução do item {item_id} confirmada."
-        except Exception as e:
-            return False, f"Erro ao confirmar devolução: {e}"
+        except Exception:
+            logger.exception("Erro ao confirmar devolução")
+            return False, "Erro ao confirmar devolução."
 
     # ── Loan term generation ───────────────────────────────────────────────────
 
@@ -664,8 +680,9 @@ class InventoryDBManager:
             buf = io.BytesIO()
             doc.save(buf)
             doc_bytes = buf.getvalue()
-        except Exception as e:
-            return False, f"Erro ao gerar documento: {e}", None
+        except Exception:
+            logger.exception("Erro ao gerar documento")
+            return False, "Erro ao gerar o documento.", None
 
         safe_user = str(user).replace(" ", "_")
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -793,8 +810,9 @@ class InventoryDBManager:
                     ),
                 )
             return True, f"Operação '{op}' do item {item_id} estornada com sucesso."
-        except pymysql.MySQLError as e:
-            return False, f"Erro ao estornar: {e}"
+        except pymysql.MySQLError:
+            logger.exception("Erro ao estornar")
+            return False, "Erro ao estornar a operação."
 
     # ── Charts ─────────────────────────────────────────────────────────────────
 
