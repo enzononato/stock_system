@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getMonthlyReport, getMonthlyReportExportUrl, type ReportRow } from '@/api/reports'
+import { getMonthlyReport, exportMonthlyReportCsv, type ReportRow } from '@/api/reports'
 import { DataTable } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { toast } from '@/components/ui/toast'
 import { formatDateTime } from '@/lib/utils'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Download } from 'lucide-react'
@@ -17,6 +18,7 @@ export default function ReportPage() {
   const [year, setYear] = useState(String(currentDate.getFullYear()))
   const [month, setMonth] = useState(String(currentDate.getMonth() + 1))
   const [queryParams, setQueryParams] = useState({ year: currentDate.getFullYear(), month: currentDate.getMonth() + 1 })
+  const [isExporting, setIsExporting] = useState(false)
 
   const { data: report = [], isLoading, refetch } = useQuery({
     queryKey: ['report', queryParams.year, queryParams.month],
@@ -28,6 +30,18 @@ export default function ReportPage() {
     refetch()
   }
 
+  async function handleExport() {
+    setIsExporting(true)
+    try {
+      await exportMonthlyReportCsv(queryParams.year, queryParams.month)
+    } catch (err) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erro ao exportar relatório.'
+      toast(msg, 'error')
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   const columns: ColumnDef<ReportRow, unknown>[] = [
     { accessorKey: 'item_id', header: 'ID Item', size: 70 },
     { accessorKey: 'operador', header: 'Operador' },
@@ -35,12 +49,19 @@ export default function ReportPage() {
     { accessorKey: 'tipo', header: 'Tipo' },
     { accessorKey: 'brand', header: 'Marca' },
     { accessorKey: 'model', header: 'Modelo' },
+    { accessorKey: 'identificador', header: 'Identificador', cell: ({ getValue }) => getValue() as string || '-' },
+    { accessorKey: 'nota_fiscal', header: 'Nota Fiscal', cell: ({ getValue }) => getValue() as string || '-' },
+    { accessorKey: 'fornecedor', header: 'Fornecedor', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'usuario', header: 'Usuário', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'cpf', header: 'CPF', cell: ({ getValue }) => getValue() as string || '-' },
+    { accessorKey: 'cargo', header: 'Cargo', cell: ({ getValue }) => getValue() as string || '-' },
+    { accessorKey: 'setor', header: 'Setor', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'revenda', header: 'Revenda', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'center_cost', header: 'C. Custo', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'data_emprestimo', header: 'Data', cell: ({ getValue }) => formatDateTime(getValue() as string) },
+    { accessorKey: 'data_confirmacao', header: 'Confirmação', cell: ({ getValue }) => formatDateTime(getValue() as string) },
     { accessorKey: 'data_devolucao', header: 'Devolução', cell: ({ getValue }) => formatDateTime(getValue() as string) },
+    { accessorKey: 'details', header: 'Detalhes', cell: ({ getValue }) => getValue() as string || '-' },
   ]
 
   return (
@@ -65,14 +86,10 @@ export default function ReportPage() {
           </Select>
         </div>
         <Button onClick={handleGenerate}>Gerar Relatório</Button>
-        <a
-          href={getMonthlyReportExportUrl(queryParams.year, queryParams.month)}
-          download
-        >
-          <Button variant="outline">
-            <Download size={14} className="mr-2" />Exportar CSV
-          </Button>
-        </a>
+        <Button variant="outline" onClick={handleExport} disabled={isExporting}>
+          <Download size={14} className="mr-2" />
+          {isExporting ? 'Exportando...' : 'Exportar CSV'}
+        </Button>
       </div>
 
       {isLoading ? (
