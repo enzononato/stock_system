@@ -1,0 +1,5 @@
+# Dependências adicionais para desenvolvimento e testes (não usadas em produção)
+-r requirements.txt
+pytest>=8.0
+pytest-cov
+httpx>=0.27

@@ -1,0 +1,15 @@
+# Dependências e build (reconstruídos dentro da imagem)
+node_modules/
+dist/
+.vite/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Metadados de VCS e do editor/IDE
+.git/
+.gitignore
+.claude/
+.vscode/
+.idea/

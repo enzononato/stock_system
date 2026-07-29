@@ -1,37 +1,26 @@
+# Ambiente virtual e cache Python
 /venv
-/__pycache__
+__pycache__/
+*.pyc
 /build
-main.spec
-Controle de Estoque.spec
 
+# Variáveis de ambiente — contêm segredos reais (senha do banco, JWT_SECRET
+# etc.), nunca devem ser commitadas. Use backend/.env.example como modelo.
+.env
+backend/.env
+
+# Dependências e build do frontend (reinstalados/gerados a cada build)
+frontend/node_modules/
+frontend/dist/
+
+# Documentos com dados pessoais (CPF, nomes completos, currículos, boletos).
+# As pastas continuam existindo em disco — apenas não são mais versionadas.
+# Ver docs/REMOCAO_HISTORICO_GIT.md para o expurgo do que já foi commitado.
 /terms
-
-/notas_remocao
-
 /termos_assinados
-
-/notas_remocao
-
-/termos_assinados
-
 /termos_devolucao
+/termos_devolucao_assinados
+/notas_remocao
 
-database_mysql.py
-
-"""
-import pymysql
-
-DB_CONFIG = {
-    "host": "localhost",
-    "user": "seu_usuario",        # Substitua pelo seu usuário do MySQL
-    "password": "sua_senha",           # Substitua pela sua senha
-    "database": "nome_do_banco",      # Substitua pelo nome do seu banco de dados
-    "charset": "utf8mb4",
-    "cursorclass": pymysql.cursors.DictCursor
-}
-
-def get_connection():
-    return pymysql.connect(**DB_CONFIG)
-
-
-"""
+# Configuração local do Claude Code (específica da máquina/usuário)
+.claude/settings.local.json
