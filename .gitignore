@@ -54,3 +54,4 @@ frontend/coverage/
 # Configuração local do Claude Code (específica da máquina/usuário)
 .claude/settings.local.json
 .claude/worktrees/
+.claude/settings.json
