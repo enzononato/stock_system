@@ -1,4 +1,4 @@
-import api from './client'
+import api, { downloadAuthenticated } from './client'
 
 export interface ReportRow {
   history_id?: number
@@ -35,8 +35,29 @@ export async function getMonthlyReport(year: number, month: number) {
   return res.data as ReportRow[]
 }
 
+/**
+ * @deprecated Este link cru nunca funcionou: o endpoint exige role Gestor via
+ * Bearer token, e um `<a href download>` apontando pra cá não envia headers
+ * (o navegador faz a navegação sem passar pelos interceptors do axios), então
+ * sempre resultava em 401. Use `exportMonthlyReportCsv`, que busca o CSV pela
+ * instância axios autenticada e dispara o download via blob. Mantido apenas
+ * para o ReportPage.tsx (Módulo 5/6) continuar compilando até ser migrado.
+ */
 export function getMonthlyReportExportUrl(year: number, month: number) {
   return `/api/reports/monthly/export?year=${year}&month=${month}`
+}
+
+/**
+ * Exporta o relatório mensal em CSV baixando-o de forma autenticada (Bearer
+ * token via axios) e disparando o download no navegador — substitui o antigo
+ * `<a href={getMonthlyReportExportUrl(...)} download>`, que sempre retornava
+ * 401 porque o navegador não envia o Authorization header numa navegação crua.
+ */
+export async function exportMonthlyReportCsv(year: number, month: number): Promise<void> {
+  await downloadAuthenticated(
+    `/reports/monthly/export?year=${year}&month=${month}`,
+    `relatorio_mensal_${year}_${String(month).padStart(2, '0')}.csv`
+  )
 }
 
 export async function getLoansChart(year: number, month: number) {

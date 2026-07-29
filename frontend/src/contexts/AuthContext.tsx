@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
-import { setAccessToken } from '@/api/client'
+import { setAccessToken, setSessionExpiredHandler } from '@/api/client'
 import { login as apiLogin, logout as apiLogout, getMe } from '@/api/auth'
+import { toast } from '@/components/ui/toast'
 
 interface AuthUser {
   id: number
@@ -40,6 +41,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
     tryRefresh()
+  }, [])
+
+  // Registra o callback chamado pelo interceptor de 401 do axios (api/client.ts)
+  // quando o refresh do token falha de verdade (sessão expirada). Em vez de forçar
+  // um hard reload com `window.location.href`, apenas limpamos o usuário aqui — o
+  // AppLayout já redireciona para /login normalmente (via <Navigate>) assim que
+  // `user` fica null, preservando o estado do React (SPA) durante a transição.
+  useEffect(() => {
+    setSessionExpiredHandler(() => {
+      setAccessToken(null)
+      setUser(null)
+      toast('Sessão expirada. Faça login novamente.', 'error')
+    })
+    return () => setSessionExpiredHandler(null)
   }, [])
 
   const login = useCallback(async (username: string, password: string) => {

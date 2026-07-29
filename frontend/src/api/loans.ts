@@ -1,4 +1,4 @@
-import api from './client'
+import api, { downloadAuthenticated } from './client'
 
 export async function initiateLoan(data: {
   item_id: number
@@ -24,6 +24,21 @@ export async function confirmLoan(itemId: number, signedPdf: File) {
 export async function initiateReturn(itemId: number) {
   const res = await api.post(`/loans/${itemId}/return/initiate`)
   return res.data as { detail: string; download_url: string; filename: string }
+}
+
+/**
+ * Encapsula o fluxo de geração + download do termo de devolução: chama
+ * `initiateReturn`, pega `download_url`/`filename` da resposta e baixa de forma
+ * autenticada. Substitui o antigo `window.open(data.download_url, '_blank')`
+ * (usado em ReturnPage.tsx), que sempre retornava 401 — `window.open` é uma
+ * navegação crua do navegador e não envia o Authorization header exigido por
+ * `/api/documents/files/{categoria}/{arquivo}`.
+ *
+ * @param filename Nome de exibição opcional; por padrão usa o `filename` devolvido por `initiateReturn`.
+ */
+export async function downloadReturnTerm(itemId: number, filename?: string): Promise<void> {
+  const { download_url, filename: responseFilename } = await initiateReturn(itemId)
+  await downloadAuthenticated(download_url, filename ?? responseFilename)
 }
 
 export async function confirmReturn(itemId: number, signedPdf: File) {

@@ -1,4 +1,4 @@
-import api from './client'
+import api, { type Paginated } from './client'
 
 export interface Item {
   id: number
@@ -37,14 +37,37 @@ export interface Item {
   peripheral_count?: number
 }
 
-export async function listItems(params?: {
+export interface ListItemsParams {
   tipo?: string
   status?: string
   revenda?: string
   search?: string
-}) {
+  limit?: number
+  offset?: number
+}
+
+/**
+ * Contrato novo (paginado) de `GET /api/items`: aceita `limit`/`offset` e
+ * devolve `{ items, total }`. Contrato acordado com o backend (T4) — use esta
+ * função em código novo. `listItems` (abaixo) é o shim de compatibilidade com
+ * a assinatura antiga.
+ */
+export async function listItemsPaginated(params?: ListItemsParams): Promise<Paginated<Item>> {
   const res = await api.get('/items', { params })
-  return res.data as Item[]
+  return res.data as Paginated<Item>
+}
+
+/**
+ * @deprecated `GET /api/items` passou a responder `{ items, total }` (ver
+ * `listItemsPaginated`). Esta função mantém a assinatura antiga (`Item[]`) —
+ * desembrulhando `.items` internamente — para StockPage, LoanPage, TermsPage,
+ * LinkPeripheralPage, ReturnPage e RemovePage, que ainda chamam `listItems()`
+ * esperando um array e não foram migradas (Módulo 5/6). Remova esta função e
+ * troque as chamadas por `listItemsPaginated` quando essas páginas migrarem.
+ */
+export async function listItems(params?: ListItemsParams): Promise<Item[]> {
+  const { items } = await listItemsPaginated(params)
+  return items
 }
 
 export async function getItem(id: number) {
