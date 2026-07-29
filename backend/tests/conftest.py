@@ -84,6 +84,62 @@ class _TestDBConfig:
     name: str
 
 
+def pytest_configure(config):
+    """Reconfigura o ambiente ANTES da coleta — este hook é o único ponto seguro.
+
+    `app.core.config.settings` é um singleton criado no primeiro import de
+    `app.core.config`. Arquivos de teste unitário importam `settings` no nível de
+    módulo, e imports de módulo acontecem na COLETA, antes de qualquer fixture.
+    Se as variáveis só fossem sobrescritas numa fixture (como era antes), o
+    singleton já teria sido construído a partir do backend/.env real e a camada
+    da aplicação apontaria para PRODUÇÃO durante a suíte inteira — enquanto a
+    limpeza entre testes, que usa conexão crua, zeraria o banco de teste. Foi
+    exatamente isso que aconteceu: os testes escreviam em produção.
+
+    Sobrescrever aqui garante que qualquer import posterior de `app.core.config`
+    já enxergue o banco de teste. A verificação final de que isso funcionou está
+    em `_assegurar_app_apontando_para_teste`.
+    """
+    host = (os.environ.get("TEST_DB_HOST") or "").strip()
+    name = (os.environ.get("TEST_DB_NAME") or "").strip()
+    if not host or not name:
+        return  # sem configuração de teste, os testes de integração pulam adiante
+
+    prod_hosts, prod_names = _markers_de_producao()
+    if host in prod_hosts or name in prod_names:
+        return  # o guard de _ambiente_de_teste aborta a sessão com mensagem clara
+
+    os.environ["DB_HOST"] = host
+    os.environ["DB_PORT"] = os.environ.get("TEST_DB_PORT", "3307")
+    os.environ["DB_USER"] = os.environ.get("TEST_DB_USER", "stock_test")
+    os.environ["DB_PASSWORD"] = os.environ.get("TEST_DB_PASSWORD", "stock_test_pw")
+    os.environ["DB_NAME"] = name
+    os.environ["DB_CHARSET"] = "utf8mb4"
+    os.environ["LOGIN_RATE_LIMIT"] = "10000/minute"
+
+
+def _assegurar_app_apontando_para_teste(cfg: "_TestDBConfig") -> None:
+    """Confere para onde a APLICAÇÃO realmente vai conectar, e não apenas o que
+    pedimos via variáveis de ambiente.
+
+    Validar `TEST_DB_*` não basta: o que decide o destino das escritas é o
+    `settings` já materializado dentro do processo. Se por qualquer motivo ele
+    tiver sido construído antes da nossa reconfiguração, esta checagem aborta a
+    sessão inteira em vez de deixar a suíte gravar no banco errado.
+    """
+    from app.core.config import settings
+
+    if settings.DB_HOST != cfg.host or settings.DB_NAME != cfg.name:
+        pytest.exit(
+            "ABORTADO POR SEGURANÇA: a aplicação está configurada para "
+            f"{settings.DB_HOST}/{settings.DB_NAME}, mas os testes exigem "
+            f"{cfg.host}/{cfg.name}. O singleton app.core.config.settings foi "
+            "construído antes da reconfiguração do ambiente (algum import de "
+            "app.* aconteceu cedo demais). Rodar assim gravaria no banco errado.",
+            returncode=1,
+        )
+
+
 @pytest.fixture(scope="session")
 def _ambiente_de_teste(tmp_path_factory):
     """Valida TEST_DB_* e, se seguro, reconfigura o ambiente do processo.
@@ -132,6 +188,13 @@ def _ambiente_de_teste(tmp_path_factory):
     os.environ["DB_PASSWORD"] = password
     os.environ["DB_NAME"] = name
     os.environ["DB_CHARSET"] = "utf8mb4"
+    # As fixtures autenticam fazendo login de verdade, e vários testes logam
+    # múltiplas vezes. Com o limite de produção (5/min por IP, e o TestClient
+    # usa sempre o mesmo "testclient"), a suíte passaria a receber 429 a partir
+    # da sexta chamada — falha de infraestrutura de teste, não de comportamento.
+    # O limite em si é testado explicitamente em test_auth.py, que sobrescreve
+    # este valor no escopo dele.
+    os.environ["LOGIN_RATE_LIMIT"] = "10000/minute"
     os.environ["STORAGE_BACKEND"] = "local"
     os.environ["LOCAL_STORAGE_PATH"] = str(tmp_path_factory.mktemp("storage"))
 
@@ -204,6 +267,11 @@ def _test_schema(_ambiente_de_teste):
             conn.close()
     except Exception as e:
         pytest.skip(f"Não foi possível criar a tabela 'usuarios' no banco de teste: {e}")
+
+    # Última linha de defesa, antes de qualquer escrita pela camada da aplicação:
+    # confirma que o `settings` materializado no processo aponta para o banco de
+    # teste. Se apontar para outro lugar, aborta a sessão inteira.
+    _assegurar_app_apontando_para_teste(cfg)
 
     try:
         from app.db.inventory_manager_db import InventoryDBManager

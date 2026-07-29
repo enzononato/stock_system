@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     # credenciais reais no código-fonte: o app deve falhar no boot com uma
     # mensagem clara caso alguma destas variáveis esteja ausente do .env.
     DB_HOST: str
+    DB_PORT: int = 3306
     DB_USER: str
     DB_PASSWORD: str
     DB_NAME: str

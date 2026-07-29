@@ -51,6 +51,7 @@ def _get_pool() -> PooledDB:
             blocking=True,
             ping=1,
             host=settings.DB_HOST,
+            port=settings.DB_PORT,
             user=settings.DB_USER,
             password=settings.DB_PASSWORD,
             database=settings.DB_NAME,
@@ -72,6 +73,7 @@ def get_connection() -> pymysql.connections.Connection:
     """
     return pymysql.connect(
         host=settings.DB_HOST,
+        port=settings.DB_PORT,
         user=settings.DB_USER,
         password=settings.DB_PASSWORD,
         database=settings.DB_NAME,

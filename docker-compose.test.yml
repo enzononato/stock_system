@@ -8,10 +8,16 @@ services:
   # NUNCA aponte as variáveis TEST_DB_* usadas pelos testes para o MySQL de
   # produção (72.61.53.20 / stock_sys_db). Veja docs/TESTES.md para o guia completo.
   mysql-test:
-    image: mysql:8
+    # Versão fixada de propósito. A tag flutuante `mysql:8` passou a resolver
+    # para 8.4, que removeu a opção `default-authentication-plugin` e faz o
+    # servidor abortar na inicialização — a suíte quebraria sozinha, sem
+    # nenhuma mudança no repositório. Fixar também mantém os testes
+    # reproduzíveis entre máquinas e no CI.
+    image: mysql:8.0.40
     container_name: stock_sys_mysql_test
     restart: "no"
-    command: --default-authentication-plugin=mysql_native_password
+    # Sem override de authentication plugin: o PyMySQL fala caching_sha2_password
+    # (padrão desde o 8.0) porque `cryptography` está nas dependências.
     environment:
       MYSQL_ROOT_PASSWORD: stock_test_root_pw
       MYSQL_DATABASE: stock_sys_test
