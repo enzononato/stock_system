@@ -39,6 +39,9 @@ frontend/dist/
 frontend/.vite/
 frontend/build/
 
+# Relatório de cobertura do Vitest (gerado por `npm run test:coverage`)
+frontend/coverage/
+
 # IDE
 .vscode/
 .idea/

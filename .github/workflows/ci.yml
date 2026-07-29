@@ -1,0 +1,111 @@
+name: CI
+
+# Chave entre aspas de propósito: YAML 1.1 (usado por parsers como o do
+# PyYAML) interpreta o literal `on` sem aspas como o booleano `true`, o que
+# faria uma validação de sintaxe genérica acusar uma chave incorreta mesmo
+# o GitHub Actions entendendo esta chave normalmente.
+"on":
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancela execuções supérfluas do mesmo branch/PR quando um novo push chega
+# antes da anterior terminar — evita gastar minutos de CI numa rodada obsoleta.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend — tipos, testes e build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4.2.2
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4.1.0
+        with:
+          node-version: '20.18.1'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependências (npm ci)
+        run: npm ci
+
+      - name: Checagem de tipos (tsc --noEmit)
+        run: npx tsc --noEmit
+
+      - name: Testes de frontend (Vitest + Testing Library + MSW)
+        run: npm run test:run
+
+      - name: Build de produção (Vite)
+        run: npm run build
+
+  backend:
+    name: Backend — pytest contra MySQL de teste do CI
+    runs-on: ubuntu-latest
+    services:
+      # MySQL efêmero, exclusivo deste job — nunca aponte TEST_DB_* para o MySQL
+      # de produção (72.61.53.20 / stock_sys_db). Credenciais e nome do banco
+      # espelham docker-compose.test.yml (raiz do repo), usado para rodar a
+      # mesma suíte localmente (ver docs/CI.md).
+      mysql:
+        # Versão fixada de propósito: a tag flutuante `mysql:8` passou a
+        # resolver para 8.4, que removeu `default-authentication-plugin` e faz
+        # o servidor abortar na inicialização — o job quebraria sozinho, sem
+        # nenhuma mudança no repositório. Ver docker-compose.test.yml.
+        image: mysql:8.0.40
+        env:
+          MYSQL_ROOT_PASSWORD: stock_test_root_pw
+          MYSQL_DATABASE: stock_sys_test
+          MYSQL_USER: stock_test
+          MYSQL_PASSWORD: stock_test_pw
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -pstock_test_root_pw"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+          --health-start-period=20s
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      # Aponta explicitamente para o serviço MySQL deste job (localhost, porta
+      # publicada acima) — nunca para um host externo. `backend/tests/conftest.py`
+      # (fixture `_ambiente_de_teste`) se recusa a rodar se estes valores
+      # coincidirem com os de produção, e pula a suíte inteira se estiverem ausentes.
+      TEST_DB_HOST: 127.0.0.1
+      TEST_DB_PORT: '3306'
+      TEST_DB_USER: stock_test
+      TEST_DB_PASSWORD: stock_test_pw
+      TEST_DB_NAME: stock_sys_test
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4.2.2
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5.3.0
+        with:
+          python-version: '3.11.9'
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Instalar dependências (requirements-dev.txt)
+        run: pip install -r requirements-dev.txt
+
+      - name: Rodar a suíte (pytest), exceto "mudanca_esperada"
+        # "mudanca_esperada" documenta bugs com correção já em andamento em
+        # paralelo (ver docs/TESTES.md): espera-se que passem a falhar assim que
+        # essa correção for mesclada, o que não deve quebrar o CI de outro módulo.
+        run: python -m pytest -m "not mudanca_esperada"
+
+  # Não há lint/typecheck configurado para o backend neste repositório (sem
+  # ruff/flake8/mypy/black em requirements*.txt ou arquivo de config na raiz/
+  # backend/). Ver "Próximos passos" em docs/CI.md em vez de inventar uma
+  # configuração aqui.

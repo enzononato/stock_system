@@ -238,8 +238,9 @@ export default function HistoryPage() {
             {reversingEntry.operador && ` (operador: ${reversingEntry.operador})`}. Esta ação não pode ser desfeita.
           </p>
           <div className="flex flex-col gap-1.5 max-w-xs">
-            <Label>Confirme sua senha</Label>
+            <Label htmlFor="senha-estorno">Confirme sua senha</Label>
             <Input
+              id="senha-estorno"
               type="password"
               value={password}
               onChange={(e) => { setPassword(e.target.value); setReverseError(null) }}
