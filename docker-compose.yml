@@ -10,10 +10,13 @@ services:
       - backend_storage:/app/storage
       # Templates de documentos Word
       - ./backend/modelos:/app/modelos:ro
-    ports:
-      - "8000:8000"   # Exposto apenas internamente; o Nginx faz o proxy
+    expose:
+      - "8000"   # Não publica a porta no host: só acessível pela rede interna do
+                 # Docker (o serviço frontend/Nginx faz proxy_pass para backend:8000)
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      # A imagem python:3.12-slim não inclui curl; usamos urllib da stdlib para
+      # não precisar instalar um pacote extra só para o healthcheck.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
       interval: 30s
       timeout: 10s
       retries: 3

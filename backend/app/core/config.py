@@ -1,21 +1,45 @@
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from typing import Optional
 import os
 
 
 class Settings(BaseSettings):
-    # Database
-    DB_HOST: str = "72.61.53.20"
-    DB_USER: str = "root"
-    DB_PASSWORD: str = "Root123@"
-    DB_NAME: str = "stock_sys_db"
+    # Ambiente de execução: "development" (padrão) ou "production".
+    # Em produção, cookie_secure_effective força cookies Secure=True automaticamente,
+    # mesmo que COOKIE_SECURE esteja configurado incorretamente no .env.
+    ENVIRONMENT: str = "development"
+
+    # Banco de dados MySQL — obrigatórios, SEM valor padrão. Nunca commitar
+    # credenciais reais no código-fonte: o app deve falhar no boot com uma
+    # mensagem clara caso alguma destas variáveis esteja ausente do .env.
+    DB_HOST: str
+    DB_USER: str
+    DB_PASSWORD: str
+    DB_NAME: str
     DB_CHARSET: str = "utf8mb4"
 
-    # JWT
-    JWT_SECRET: str = "CHANGE_ME_IN_PRODUCTION_USE_A_LONG_RANDOM_STRING"
+    # Pool de conexões MySQL (DBUtils) usado pela camada de acesso a dados
+    DB_POOL_SIZE: int = 5
+    DB_POOL_MAX_CONNECTIONS: int = 20
+
+    # JWT — obrigatório, SEM valor padrão (ver validador abaixo: mínimo 32 caracteres).
+    # Gere um valor seguro com: python -c "import secrets; print(secrets.token_urlsafe(48))"
+    JWT_SECRET: str
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
+    # Cookies do refresh token
+    COOKIE_SECURE: bool = False
+    COOKIE_SAMESITE: str = "lax"
+
+    # Rate limiting do endpoint de login (proteção contra força bruta)
+    LOGIN_RATE_LIMIT: str = "5/minute"
+
+    # Paginação padrão das listagens da API
+    DEFAULT_PAGE_SIZE: int = 50
+    MAX_PAGE_SIZE: int = 500
 
     # Storage
     STORAGE_BACKEND: str = "local"  # "local" ou "s3"
@@ -25,6 +49,10 @@ class Settings(BaseSettings):
     AWS_ACCESS_KEY_ID: Optional[str] = None
     AWS_SECRET_ACCESS_KEY: Optional[str] = None
 
+    # Modelos de documentos (.docx): diretório absoluto opcional. Quando vazio,
+    # o caminho é calculado a partir de __file__ (ver _modelo_path mais abaixo).
+    MODELOS_DIR: str = ""
+
     # CORS
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
 
@@ -32,9 +60,28 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
 
+    @field_validator("JWT_SECRET")
+    @classmethod
+    def validar_tamanho_jwt_secret(cls, v: str) -> str:
+        if len(v) < 32:
+            raise ValueError(
+                "JWT_SECRET deve ter no mínimo 32 caracteres. Gere um valor seguro com: "
+                'python -c "import secrets; print(secrets.token_urlsafe(48))"'
+            )
+        return v
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",")]
+
+    @property
+    def cookie_secure_effective(self) -> bool:
+        """True sempre que ENVIRONMENT == "production", independentemente do
+        valor bruto de COOKIE_SECURE — evita servir cookies de refresh token
+        sem o atributo Secure em produção por um .env mal configurado."""
+        if self.ENVIRONMENT == "production":
+            return True
+        return self.COOKIE_SECURE
 
 
 settings = Settings()
@@ -114,9 +161,16 @@ REMOVAL_REASONS = {
     "Venda": True,
 }
 
-# Caminhos dos modelos de termo (relativos ao diretório backend/)
+# Caminhos dos modelos de termo. Por padrão resolve para backend/modelos (3 níveis
+# acima de app/core/config.py — em contêiner, com WORKDIR /app, resolve para
+# /app/modelos, que é exatamente o volume somente-leitura montado pelo
+# docker-compose). Se MODELOS_DIR estiver preenchido no .env, ele tem prioridade
+# sobre o cálculo automático baseado em __file__.
 def _modelo_path(filename: str) -> str:
-    base = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "modelos")
+    if settings.MODELOS_DIR:
+        base = settings.MODELOS_DIR
+    else:
+        base = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "modelos")
     return os.path.join(base, filename)
 
 TERMO_MODELOS = {

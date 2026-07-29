@@ -1,4 +1,4 @@
-# Python
+# Ambiente virtual e cache Python
 /venv
 __pycache__/
 *.pyc
@@ -7,29 +7,33 @@ __pycache__/
 .Python
 *.egg-info/
 .pytest_cache/
+.coverage
+htmlcov/
 
 # Build
 /build
 /dist
-main.spec
-Controle de Estoque.spec
 
-# Environment / secrets
+# Variáveis de ambiente — contêm segredos reais (senha do banco, JWT_SECRET
+# etc.), nunca devem ser commitadas. Use backend/.env.example como modelo.
 .env
 .env.local
 .env.*.local
 backend/.env
 
-# Storage (arquivos gerados em runtime)
+# Arquivos gerados em runtime pelo storage local do backend
 backend/storage/
+
+# Documentos com dados pessoais (CPF, nomes completos, currículos, boletos).
+# As pastas continuam existindo em disco — apenas não são mais versionadas.
+# Ver docs/REMOCAO_HISTORICO_GIT.md para o expurgo do que já foi commitado.
 /terms
-/notas_remocao
 /termos_assinados
 /termos_devolucao
 /termos_devolucao_assinados
-/termos_devolucao_assinados
+/notas_remocao
 
-# Frontend
+# Dependências e build do frontend (reinstalados/gerados a cada build)
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
@@ -43,3 +47,7 @@ frontend/build/
 
 # Logs
 *.log
+
+# Configuração local do Claude Code (específica da máquina/usuário)
+.claude/settings.local.json
+.claude/worktrees/

@@ -1,0 +1,20 @@
+# Ambiente virtual e caches Python (reconstruídos dentro da imagem)
+venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+
+# Segredos e dados locais — nunca devem entrar no contexto de build
+.env
+storage/
+
+# Metadados de VCS e do editor/IDE
+.git/
+.gitignore
+.claude/
+.vscode/
+.idea/
+
+# Testes (não são necessários na imagem de produção)
+tests/
