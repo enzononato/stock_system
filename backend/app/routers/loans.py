@@ -1,3 +1,4 @@
+import os
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from datetime import datetime
 
@@ -7,6 +8,17 @@ from app.dependencies import gestor_or_tecnico, get_inventory_db, CurrentUser
 from app.core.storage import storage
 
 router = APIRouter(prefix="/api/loans", tags=["loans"])
+
+MAX_UPLOAD_SIZE = 20 * 1024 * 1024  # 20MB
+
+
+def _safe_filename(name: str) -> str:
+    return os.path.basename(name or "").replace("\\", "").replace("/", "") or "arquivo"
+
+
+def _check_size(content: bytes) -> None:
+    if len(content) > MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=413, detail="Arquivo excede o tamanho máximo de 20MB.")
 
 
 @router.post("", response_model=dict)
@@ -39,14 +51,34 @@ async def confirm_loan(
     inv: InventoryDBManager = Depends(get_inventory_db),
 ):
     content = await signed_pdf.read()
+    _check_size(content)
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    filename = f"termo_{item_id}_{timestamp}_{signed_pdf.filename}"
+    filename = f"termo_{item_id}_{timestamp}_{_safe_filename(signed_pdf.filename)}"
     storage_key = storage.save("termos_assinados", filename, content)
 
     ok, msg = inv.confirm_loan(item_id, current_user.username, storage_key)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
     return {"detail": msg}
+
+
+@router.get("/{item_id}/signed-term-url", response_model=dict)
+def get_signed_term_url(
+    item_id: int,
+    _: CurrentUser = Depends(gestor_or_tecnico),
+    inv: InventoryDBManager = Depends(get_inventory_db),
+):
+    """Alimenta o botão "Ver Termo" da tela de Termos: devolve a URL do PDF
+    assinado do empréstimo ativo do item, sem expor a chave de storage crua."""
+    item = inv.find(item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item não encontrado.")
+    if item["status"] != "Indisponível":
+        raise HTTPException(status_code=400, detail="Item não está com empréstimo ativo.")
+    key = inv.get_active_signed_term_key(item_id)
+    if not key or not storage.exists(key):
+        raise HTTPException(status_code=404, detail="Termo assinado não encontrado.")
+    return {"url": storage.get_url(key)}
 
 
 @router.post("/{item_id}/return/initiate", response_model=dict)
@@ -74,8 +106,9 @@ async def confirm_return(
     inv: InventoryDBManager = Depends(get_inventory_db),
 ):
     content = await signed_pdf.read()
+    _check_size(content)
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    filename = f"termo_devolucao_{item_id}_{timestamp}_{signed_pdf.filename}"
+    filename = f"termo_devolucao_{item_id}_{timestamp}_{_safe_filename(signed_pdf.filename)}"
     storage_key = storage.save("termos_devolucao_assinados", filename, content)
 
     ok, msg = inv.confirm_return(item_id, current_user.username, storage_key)

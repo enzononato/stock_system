@@ -1,3 +1,4 @@
+import os
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, Query
 from typing import Optional
 from datetime import datetime
@@ -10,6 +11,12 @@ from app.core.storage import storage
 from app.core.config import settings
 
 router = APIRouter(prefix="/api/items", tags=["items"])
+
+MAX_UPLOAD_SIZE = 20 * 1024 * 1024  # 20MB
+
+
+def _safe_filename(name: str) -> str:
+    return os.path.basename(name or "").replace("\\", "").replace("/", "") or "arquivo"
 
 
 @router.get("", response_model=Paginated[ItemResponse])
@@ -94,7 +101,11 @@ async def remove_item(
     storage_key = None
     if attachment:
         content = await attachment.read()
-        storage_key = storage.save("notas_remocao", f"remocao_{item_id}_{attachment.filename}", content)
+        if len(content) > MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=413, detail="Arquivo excede o tamanho máximo de 20MB.")
+        storage_key = storage.save(
+            "notas_remocao", f"remocao_{item_id}_{_safe_filename(attachment.filename)}", content
+        )
 
     ok, msg = inv.remove(item_id, current_user.username, reason, storage_key)
     if not ok:
