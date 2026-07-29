@@ -1,12 +1,13 @@
 """
 Matriz de RBAC (role x endpoint): quem recebe 401 (sem token), 403 (role errado) e 200.
 
-Usa os fixtures client_gestor/client_tecnico/client_aprendiz (conftest.py), que
-contornam deliberadamente o BUG CONHECIDO do JWT (claim "sub" inteiro — ver
-test_auth.py) via dependency_override, para poder caracterizar a lógica de
-autorização por role (gestor_only/gestor_or_tecnico) isoladamente. O caso "com token
-real" (que hoje falha sempre com 401, independente do role) já está coberto em
-test_auth.py::test_token_de_login_real_nao_autentica_em_nenhuma_rota.
+Usa os fixtures client_gestor/client_tecnico/client_aprendiz (conftest.py), que hoje
+fazem login de verdade via POST /api/auth/login e mandam um token JWT real no header
+Authorization — sem nenhum contorno. Isso exercita de fato get_current_user(),
+decode_token() e gestor_only()/gestor_or_tecnico() em conjunto (o BUG CORRIGIDO nº 1
+do JWT — claim "sub" inteiro — que impedia isso está documentado em
+docs/TESTES.md, seção "Bugs corrigidos com teste de regressão", e caracterizado em
+test_auth.py).
 
 Para os casos que devem falhar (401 sem token / 403 role errado), usamos IDs
 "fantasia" (ex.: 999999) quando o endpoint tem parâmetros de path — a dependency de

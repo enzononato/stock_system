@@ -38,8 +38,9 @@ class TestTokens:
     def test_access_token_contem_claims_esperadas(self):
         # Usamos get_unverified_claims (só decodifica o payload, sem validar "sub") em vez
         # de jwt.decode()/decode_token() propositalmente: o objetivo aqui é só conferir que
-        # create_access_token() monta as claims certas. A validação no decode tem um bug
-        # próprio, caracterizado abaixo em testes dedicados.
+        # create_access_token() monta as claims certas, independente do tipo de "sub" (quem
+        # decide o tipo de "sub" é o chamador — hoje, o login real usa string; ver
+        # docs/TESTES.md, "Bugs corrigidos", item 1, e os testes abaixo).
         token = create_access_token({"sub": 1, "username": "fulano", "role": "Gestor"})
         payload = jwt.get_unverified_claims(token)
         assert payload["sub"] == 1
@@ -54,27 +55,29 @@ class TestTokens:
         assert payload["type"] == "refresh"
 
     def test_decode_token_funciona_quando_sub_e_string(self):
-        """Isola que decode_token() em si funciona bem — o problema (abaixo) é
-        especificamente o tipo do valor colocado em "sub" por quem gera o token."""
+        """Isola que decode_token() em si funciona bem quando "sub" é string — que é
+        exatamente o que o fluxo de login real usa hoje (ver test_auth.py)."""
         token = create_access_token({"sub": "2", "username": "ciclana", "role": "Técnico"})
         payload = decode_token(token, expected_type="access")
         assert payload["username"] == "ciclana"
 
-    def test_decode_token_falha_com_sub_inteiro_como_o_login_real_gera(self):
+    def test_decode_token_rejeita_sub_nao_string_regressao_bug_1(self):
         """
-        BUG CONHECIDO (CRÍTICO): app/routers/auth.py::login() monta o token com
-        `token_data = {"sub": user["id"], ...}`, e `user["id"]` é um INT nativo (coluna
-        AUTO_INCREMENT do MySQL, lido via pymysql.cursors.DictCursor) — não uma string.
-        `python-jose` valida no decode, por padrão (verify_sub=True), que o claim "sub"
-        seja uma string (jose/jwt.py:_validate_sub); com um "sub" inteiro, ele levanta
+        Teste de regressão / documentação de contrato para o BUG CORRIGIDO nº 1 (ver
+        docs/TESTES.md, "Bugs corrigidos com teste de regressão"): `python-jose` valida
+        no decode, por padrão (verify_sub=True), que o claim "sub" seja uma string
+        (jose/jwt.py:_validate_sub); com um "sub" não-string, ele levanta
         JWTClaimsError("Subject must be a string."), que decode_token() captura como
         JWTError genérico e converte em 401 "Token inválido ou expirado.".
 
-        Resultado prático: TODO token de acesso emitido pelo fluxo de login real é
-        rejeitado por decode_token() — ou seja, get_current_user()/gestor_only()/
-        gestor_or_tecnico() falham para qualquer usuário, em qualquer rota autenticada,
-        sempre. Ver a demonstração ponta a ponta via HTTP em
-        test_auth.py::test_token_de_login_real_nao_autentica_em_nenhuma_rota.
+        Esse comportamento do decode_token() em si está correto e não muda — foi
+        `app/routers/auth.py::login()` que, antes da correção, colocava um INT (o id
+        do MySQL) no "sub" em vez de uma string, e por isso todo token de login real
+        era rejeitado aqui. Este teste garante que, se ALGUM código voltar a construir
+        um token com "sub" não-string, o decode continua recusando — é a documentação
+        viva de por que o contrato "sub deve ser string" importa. A demonstração ponta
+        a ponta de que o login real hoje respeita esse contrato está em
+        test_auth.py::TestLogin::test_regressao_sub_do_jwt_emitido_pelo_login_deve_ser_string.
         """
         token = create_access_token({"sub": 2, "username": "ciclana", "role": "Técnico"})
         with pytest.raises(HTTPException) as exc_info:
@@ -86,8 +89,8 @@ class TestTokens:
         """Um refresh token não pode ser usado como access token (e vice-versa).
 
         Usa "sub" como string de propósito, para isolar esta checagem (type incompatível)
-        do BUG CONHECIDO caracterizado acima (sub inteiro) — aqui queremos garantir que,
-        mesmo corrigido o bug do sub, a checagem de "type" continua funcionando.
+        da checagem de tipo do "sub" (teste acima) — aqui queremos garantir que a
+        checagem de "type" funciona independentemente daquela.
         """
         refresh = create_refresh_token({"sub": "1", "username": "fulano", "role": "Gestor"})
         with pytest.raises(HTTPException) as exc_info:
@@ -96,7 +99,7 @@ class TestTokens:
         assert exc_info.value.detail == "Token inválido ou expirado."
 
     def test_decode_token_rejeita_assinatura_invalida(self):
-        # "sub" como string: isola a checagem de assinatura do bug de sub inteiro.
+        # "sub" como string: isola a checagem de assinatura da checagem de tipo do "sub".
         token_forjado = jwt.encode(
             {"sub": "1", "username": "invasor", "role": "Gestor", "type": "access",
              "exp": datetime.utcnow() + timedelta(minutes=5)},
@@ -109,7 +112,7 @@ class TestTokens:
         assert exc_info.value.detail == "Token inválido ou expirado."
 
     def test_decode_token_rejeita_token_expirado(self):
-        # "sub" como string: isola a checagem de expiração do bug de sub inteiro.
+        # "sub" como string: isola a checagem de expiração da checagem de tipo do "sub".
         token_expirado = jwt.encode(
             {"sub": "1", "username": "fulano", "role": "Gestor", "type": "access",
              "exp": datetime.utcnow() - timedelta(minutes=1)},

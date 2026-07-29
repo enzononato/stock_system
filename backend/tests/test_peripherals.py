@@ -109,16 +109,29 @@ class TestEfeitoDoFluxoDeEmprestimoSobrePerifericos:
         perif = next(p for p in listagem if p["id"] == periferico_disponivel["id"])
         assert perif["status"] == "Em Uso"
 
+    @pytest.mark.mudanca_esperada
     def test_confirmar_devolucao_libera_periferico_mas_nao_remove_o_vinculo(
         self, client_gestor, inv_manager, item_indisponivel, periferico_disponivel, forcar_devolucao_iniciada
     ):
         """
-        BUG CONHECIDO (item 16): confirm_return() atualiza o status de cada periférico
-        vinculado para 'Disponível', mas não executa nenhum DELETE em
-        equipment_peripherals. Ou seja, depois da devolução confirmada, o periférico
-        aparece como "Disponível" (correto) só que CONTINUA aparecendo como vinculado
-        àquele equipamento em GET /api/items/{id}/peripherals (incorreto) — o vínculo
-        nunca é desfeito automaticamente pela devolução, só por um desvincular manual.
+        BUG CONHECIDO (item 16), MUDANÇA ESPERADA NESTE CICLO (ver docs/TESTES.md):
+        confirm_return() atualiza o status de cada periférico vinculado para
+        'Disponível', mas não executa nenhum DELETE em equipment_peripherals. Ou seja,
+        depois da devolução confirmada, o periférico aparece como "Disponível"
+        (correto) só que CONTINUA aparecendo como vinculado àquele equipamento em
+        GET /api/items/{id}/peripherals (incorreto) — o vínculo nunca é desfeito
+        automaticamente pela devolução, só por um desvincular manual.
+
+        O Módulo 2 está corrigindo isso neste mesmo ciclo: confirm_return() passará a
+        também apagar as linhas de equipment_peripherals do equipamento devolvido e
+        registrar 'Desvínculo Periférico' no histórico para cada periférico
+        desvinculado. Este teste continua afirmando o comportamento ATUAL (vínculo
+        preservado) de propósito — não o atualize para o comportamento novo. Depois do
+        merge com o Módulo 2, ele deve passar a FALHAR (a última asserção abaixo deixa
+        de ser verdade); isso é o sinal esperado de que a correção chegou, não uma
+        regressão. Quando isso acontecer, reescreva o teste para afirmar o novo
+        comportamento (vínculo removido + 'Desvínculo Periférico' no histórico) e troque
+        este comentário por uma nota de "corrigido em <commit/PR>".
         """
         ok, msg = inv_manager.link_peripheral_to_equipment(
             item_indisponivel["id"], periferico_disponivel["id"], "teste"

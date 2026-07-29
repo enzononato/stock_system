@@ -1,11 +1,17 @@
 """
 Caracterização de autenticação: /api/auth/login, /me, /refresh, /logout.
 
-Ver conftest.py para a nota extensa sobre o BUG CONHECIDO (CRÍTICO) do claim "sub" do
-JWT. Este arquivo contém a demonstração ponta a ponta, via HTTP real (sem nenhum
-contorno), desse bug — é a evidência mais direta e importante de toda a suíte.
+Ver docs/TESTES.md, seção "Bugs corrigidos com teste de regressão", item 1: este
+módulo encontrou (e o Módulo 3 confirmou de forma independente) um bug crítico no
+claim "sub" do JWT que quebrava toda autenticação. O bug já estava corrigido no
+código-alvo desta refatoração no momento em que isso foi reconciliado com o
+coordenador (login agora grava "sub" como string; get_current_user faz
+int(payload["sub"])). Este arquivo caracteriza o comportamento CORRETO/atual (token
+de login autentica de verdade) e inclui um teste de regressão explícito para que
+ninguém reintroduza o "sub" como inteiro.
 """
 import pytest
+from jose import jwt as jose_jwt
 
 pytestmark = pytest.mark.integration
 
@@ -39,6 +45,37 @@ class TestLogin:
         assert resp.status_code == 401
         assert resp.json()["detail"] == "Usuário ou senha inválidos."
 
+    def test_regressao_sub_do_jwt_emitido_pelo_login_deve_ser_string(
+        self, client, usuario_gestor, senha_padrao_teste
+    ):
+        """
+        Teste de regressão para o BUG CORRIGIDO nº 1 (ver docs/TESTES.md): o claim
+        "sub" do access_token emitido por /api/auth/login precisa ser uma STRING. Se
+        alguém voltar a colocar o id inteiro do usuário ali, `jose.jwt.decode()` (usado
+        por decode_token(), chamado por toda rota autenticada via get_current_user)
+        volta a rejeitar TODO token com 401 "Token inválido ou expirado." — foi
+        exatamente isso que quebrava a autenticação inteira antes da correção.
+
+        De propósito, este teste não pressupõe COMO a correção foi feita: ele só lê
+        (sem verificar assinatura/expiração — get_unverified_claims) o payload de um
+        token de verdade devolvido pelo login e confere o tipo do "sub". Continua
+        válido não importa se a correção usa str(id), um UUID, ou outra estratégia,
+        desde que "sub" seja uma string.
+        """
+        resp = client.post(
+            "/api/auth/login",
+            json={"username": usuario_gestor["username"], "password": senha_padrao_teste},
+        )
+        assert resp.status_code == 200
+        access_token = resp.json()["access_token"]
+
+        payload = jose_jwt.get_unverified_claims(access_token)
+        assert isinstance(payload["sub"], str), (
+            f"O claim 'sub' do JWT voltou a não ser string (veio {payload['sub']!r}, "
+            f"tipo {type(payload['sub']).__name__}) — isso reintroduz o bug crítico nº 1 "
+            "que quebrava toda a autenticação (ver docs/TESTES.md)."
+        )
+
 
 class TestMe:
     def test_me_sem_token_retorna_401(self, client):
@@ -46,12 +83,8 @@ class TestMe:
         assert resp.status_code == 401
         assert resp.json()["detail"] == "Token de autenticação não fornecido."
 
-    def test_me_com_usuario_autenticado_via_dependency_override(self, client_gestor, usuario_gestor):
-        """
-        Caracteriza a LÓGICA do endpoint /me (dado um usuário autenticado, devolve seus
-        dados) isolada do bug de JWT — ver test_token_de_login_real_nao_autentica_em_nenhuma_rota
-        logo abaixo para o comportamento com um token *real*.
-        """
+    def test_me_com_usuario_autenticado_retorna_seus_proprios_dados(self, client_gestor, usuario_gestor):
+        """client_gestor usa um token JWT real (login de verdade — ver conftest.py)."""
         resp = client_gestor.get("/api/auth/me")
         assert resp.status_code == 200
         body = resp.json()
@@ -59,23 +92,13 @@ class TestMe:
         assert body["role"] == "Gestor"
         assert body["id"] == usuario_gestor["id"]
 
-    def test_token_de_login_real_nao_autentica_em_nenhuma_rota(self, client, usuario_gestor, senha_padrao_teste):
+    def test_token_de_login_real_autentica_em_rotas_protegidas(self, client, usuario_gestor, senha_padrao_teste):
         """
-        BUG CONHECIDO (CRÍTICO) — caracterização ponta a ponta via HTTP, sem nenhum
-        contorno: faz login de verdade, pega o access_token de verdade que a API
-        devolveu, e usa esse token exato em /api/auth/me. O resultado hoje é 401,
-        não 200 — ou seja, o próprio fluxo de login da aplicação gera tokens que a
-        aplicação em seguida rejeita.
-
-        Causa raiz (ver detalhes em test_unit_seguranca.py e conftest.py):
-        app/routers/auth.py::login() monta `{"sub": user["id"], ...}` com um INT; a
-        validação padrão de claims do python-jose (verify_sub=True) exige que "sub"
-        seja uma string e rejeita com JWTClaimsError, que decode_token() converte em
-        401 "Token inválido ou expirado.".
-
-        Isso significa que, no sistema como está hoje, NENHUM usuário consegue de fato
-        usar a API além do login — toda rota protegida por get_current_user (ou seja,
-        praticamente toda a API) devolve 401 mesmo com um token recém-emitido e válido.
+        Caracterização ponta a ponta via HTTP, sem nenhum contorno: faz login de
+        verdade, pega o access_token de verdade que a API devolveu, e usa esse token
+        exato em /api/auth/me e em outra rota protegida qualquer. Antes da correção do
+        bug nº 1 (ver docs/TESTES.md), isso devolvia 401 "Token inválido ou expirado."
+        mesmo com um token recém-emitido e válido; hoje autentica corretamente.
         """
         login_resp = client.post(
             "/api/auth/login",
@@ -85,15 +108,13 @@ class TestMe:
         access_token = login_resp.json()["access_token"]
 
         me_resp = client.get("/api/auth/me", headers={"Authorization": f"Bearer {access_token}"})
-        assert me_resp.status_code == 401
-        assert me_resp.json()["detail"] == "Token inválido ou expirado."
+        assert me_resp.status_code == 200
+        assert me_resp.json()["username"] == usuario_gestor["username"]
 
-        # O mesmo token também não autentica em nenhuma outra rota protegida — só uma
-        # amostra aqui (a matriz completa de RBAC está em test_rbac.py, usando o
-        # contorno via dependency_override para caracterizar a lógica de roles em si).
+        # O mesmo token também autentica em outra rota protegida qualquer — só uma
+        # amostra aqui (a matriz completa de RBAC por role está em test_rbac.py).
         items_resp = client.get("/api/items", headers={"Authorization": f"Bearer {access_token}"})
-        assert items_resp.status_code == 401
-        assert items_resp.json()["detail"] == "Token inválido ou expirado."
+        assert items_resp.status_code == 200
 
 
 class TestRefresh:
@@ -102,11 +123,14 @@ class TestRefresh:
         assert resp.status_code == 401
         assert resp.json()["detail"] == "Refresh token não encontrado."
 
-    def test_refresh_com_cookie_de_login_real_tambem_falha(self, client, usuario_gestor, senha_padrao_teste):
+    def test_refresh_com_cookie_de_login_real_emite_novo_access_token(
+        self, client, usuario_gestor, senha_padrao_teste
+    ):
         """
-        Mesmo BUG CONHECIDO do "sub" inteiro (ver acima): o refresh_token emitido pelo
-        login também tem `sub=user["id"]` (int), então /api/auth/refresh — que decodifica
-        esse cookie com decode_token(..., expected_type="refresh") — falha do mesmo jeito.
+        O refresh_token emitido pelo login também tem "sub" como string (mesma
+        correção do bug nº 1 — ver docs/TESTES.md), então /api/auth/refresh —
+        que decodifica esse cookie com decode_token(..., expected_type="refresh") —
+        funciona corretamente: devolve um novo access_token, também utilizável.
         """
         login_resp = client.post(
             "/api/auth/login",
@@ -116,8 +140,13 @@ class TestRefresh:
         assert "refresh_token" in client.cookies  # o TestClient guarda o cookie automaticamente
 
         refresh_resp = client.post("/api/auth/refresh")
-        assert refresh_resp.status_code == 401
-        assert refresh_resp.json()["detail"] == "Token inválido ou expirado."
+        assert refresh_resp.status_code == 200
+        novo_access_token = refresh_resp.json()["access_token"]
+        assert isinstance(novo_access_token, str) and novo_access_token
+
+        # O token novo também autentica de verdade.
+        me_resp = client.get("/api/auth/me", headers={"Authorization": f"Bearer {novo_access_token}"})
+        assert me_resp.status_code == 200
 
 
 class TestLogout:

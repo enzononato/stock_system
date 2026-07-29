@@ -25,9 +25,15 @@ class TestFormatCpf:
     def test_ja_formatado_permanece_idempotente(self):
         assert format_cpf("123.456.789-01") == "123.456.789-01"
 
-    def test_quantidade_de_digitos_diferente_de_11_retorna_original(self):
-        # BUG CONHECIDO (utils.format_cpf): não há validação de CPF real (dígito
-        # verificador); qualquer string com != 11 dígitos volta sem alteração.
+    def test_sem_11_digitos_nao_formata_pois_nao_e_papel_desta_funcao_validar(self):
+        """
+        Documentação de contrato (não é um bug): format_cpf() é um FORMATADOR, não um
+        validador — ele só decide "tem 11 dígitos? então pontua; senão, devolve como
+        veio". Não há checagem de dígito verificador aqui, e não deveria haver: a
+        validação de CPF de verdade vive em `isValidCpf` no frontend e em
+        `app/schemas/validators.py` no backend. Qualquer string com != 11 dígitos
+        (válida ou não) simplesmente volta sem alteração.
+        """
         assert format_cpf("123") == "123"
         assert format_cpf("123456789012") == "123456789012"
 

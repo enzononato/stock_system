@@ -461,90 +461,60 @@ def usuario_aprendiz(criar_usuario, senha_padrao_teste):
     return criar_usuario("aprendiz.teste", senha_padrao_teste, "Jovem Aprendiz")
 
 
-def _mint_access_token(user: dict) -> str:
-    from app.core.security import create_access_token
-
-    return create_access_token({"sub": user["id"], "username": user["username"], "role": user["role"]})
-
-
-@pytest.fixture
-def token_gestor(usuario_gestor):
-    return _mint_access_token(usuario_gestor)
-
-
-@pytest.fixture
-def token_tecnico(usuario_tecnico):
-    return _mint_access_token(usuario_tecnico)
-
-
-@pytest.fixture
-def token_aprendiz(usuario_aprendiz):
-    return _mint_access_token(usuario_aprendiz)
-
-
 # ────────────────────────────────────────────────────────────────────────────
-# BUG CONHECIDO CRÍTICO (ver test_auth.py::test_token_de_login_real_nao_autentica_em_nenhuma_rota
-# e docs/TESTES.md): app/routers/auth.py monta o claim "sub" do JWT com o id INTEIRO do
-# usuário (`user["id"]`, vindo direto do MySQL). `python-jose` valida no decode
-# (jose/jwt.py:_validate_sub, opção verify_sub=True por padrão) que "sub" seja uma STRING,
-# e `app/core/security.decode_token()` não passa `options={"verify_sub": False}` nem
-# converte o valor. Resultado: TODO token de acesso emitido por create_access_token() é
-# rejeitado por decode_token() com 401 "Token inválido ou expirado." — inclusive o próprio
-# token que acabou de ser emitido por /api/auth/login. Na prática, hoje, NENHUMA rota
-# autenticada é utilizável com um token real (verificamos isso diretamente, sem
-# reimplementar nada, em test_auth.py).
-#
-# Isso inviabilizaria por completo a caracterização HTTP de RBAC/itens/empréstimos/
-# periféricos/histórico/relatórios — que é o objetivo central deste módulo e não tem
-# nenhuma relação com o bug acima nem com a refatoração do connection manager. Para não
-# jogar fora essa caracterização, os fixtures `client_gestor`/`client_tecnico`/
-# `client_aprendiz` abaixo *não* usam o token JWT real: eles substituem a dependency
-# `get_current_user` do FastAPI (via `app.dependency_overrides`) por um usuário fixo.
-# A lógica de autorização por role (`gestor_only`/`gestor_or_tecnico`), que depende de
-# `get_current_user` como sub-dependency, continua sendo executada de verdade — só o
-# passo quebrado (decodificar um JWT real) é substituído. Ou seja: estes fixtures
-# caracterizam "dado um usuário autenticado com role X, o que a rota faz", que é
-# exatamente o que os testes de RBAC/workflow pedem — o bug de autenticação em si tem
-# sua própria caracterização dedicada e não fica escondido.
+# Histórico (ver docs/TESTES.md, seção "Bugs corrigidos com teste de regressão"):
+# este módulo encontrou, caracterizou e reportou um bug crítico de autenticação —
+# app/routers/auth.py montava o claim "sub" do JWT com o id INTEIRO do usuário, e
+# python-jose exige por padrão (verify_sub=True) que "sub" seja uma string, então
+# TODO token de acesso emitido pelo login era rejeitado por decode_token() com 401
+# "Token inválido ou expirado.". O achado foi confirmado de forma independente pelo
+# Módulo 3, e já estava corrigido no código-alvo desta refatoração (login grava
+# "sub" como string; get_current_user faz int(payload["sub"])) no momento em que
+# isso foi reconciliado com o coordenador. Por isso os fixtures abaixo usam tokens
+# REAIS obtidos via POST /api/auth/login (sem nenhum contorno/override) — o que
+# agora exercita de verdade get_current_user, decode_token() e a checagem de
+# expiração em todo teste de RBAC/workflow, exatamente como deveria. A demonstração
+# do bug já corrigido e o teste de regressão que impede sua reintrodução ficam em
+# test_auth.py.
 # ────────────────────────────────────────────────────────────────────────────
 
-@pytest.fixture
-def _logar_como(_fastapi_app):
-    """Fábrica que força `get_current_user` a devolver um CurrentUser fixo, contornando
-    o bug de JWT descrito acima. Restaura o estado anterior ao final do teste."""
-    from app.dependencies import get_current_user, CurrentUser
-
-    app = _fastapi_app
-    tinha_override = get_current_user in app.dependency_overrides
-    override_anterior = app.dependency_overrides.get(get_current_user)
-
-    def _aplicar(*, id: int, username: str, role: str):
-        app.dependency_overrides[get_current_user] = lambda: CurrentUser(id=id, username=username, role=role)
-
-    yield _aplicar
-
-    if tinha_override:
-        app.dependency_overrides[get_current_user] = override_anterior
-    else:
-        app.dependency_overrides.pop(get_current_user, None)
+def _login_e_obter_access_token(client, username: str, password: str) -> str:
+    resp = client.post("/api/auth/login", json={"username": username, "password": password})
+    assert resp.status_code == 200, f"Login de teste falhou para '{username}': {resp.text}"
+    return resp.json()["access_token"]
 
 
 @pytest.fixture
-def client_gestor(client, usuario_gestor, _logar_como):
-    """Cliente HTTP "logado" como Gestor (contorna o bug de JWT — ver nota acima)."""
-    _logar_como(id=usuario_gestor["id"], username=usuario_gestor["username"], role=usuario_gestor["role"])
+def token_gestor(client, usuario_gestor, senha_padrao_teste):
+    return _login_e_obter_access_token(client, usuario_gestor["username"], senha_padrao_teste)
+
+
+@pytest.fixture
+def token_tecnico(client, usuario_tecnico, senha_padrao_teste):
+    return _login_e_obter_access_token(client, usuario_tecnico["username"], senha_padrao_teste)
+
+
+@pytest.fixture
+def token_aprendiz(client, usuario_aprendiz, senha_padrao_teste):
+    return _login_e_obter_access_token(client, usuario_aprendiz["username"], senha_padrao_teste)
+
+
+@pytest.fixture
+def client_gestor(client, token_gestor):
+    """Cliente HTTP autenticado como Gestor com um token JWT real (via login de verdade)."""
+    client.headers.update({"Authorization": f"Bearer {token_gestor}"})
     return client
 
 
 @pytest.fixture
-def client_tecnico(client, usuario_tecnico, _logar_como):
-    """Cliente HTTP "logado" como Técnico (contorna o bug de JWT — ver nota acima)."""
-    _logar_como(id=usuario_tecnico["id"], username=usuario_tecnico["username"], role=usuario_tecnico["role"])
+def client_tecnico(client, token_tecnico):
+    """Cliente HTTP autenticado como Técnico com um token JWT real (via login de verdade)."""
+    client.headers.update({"Authorization": f"Bearer {token_tecnico}"})
     return client
 
 
 @pytest.fixture
-def client_aprendiz(client, usuario_aprendiz, _logar_como):
-    """Cliente HTTP "logado" como Jovem Aprendiz (contorna o bug de JWT — ver nota acima)."""
-    _logar_como(id=usuario_aprendiz["id"], username=usuario_aprendiz["username"], role=usuario_aprendiz["role"])
+def client_aprendiz(client, token_aprendiz):
+    """Cliente HTTP autenticado como Jovem Aprendiz com um token JWT real (via login de verdade)."""
+    client.headers.update({"Authorization": f"Bearer {token_aprendiz}"})
     return client

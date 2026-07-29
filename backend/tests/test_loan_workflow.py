@@ -155,19 +155,33 @@ class TestIniciarDevolucaoTransicoesInvalidas:
         assert resp.status_code == 400
         assert resp.json()["detail"] == self.MSG_APENAS_INDISPONIVEL
 
+    @pytest.mark.mudanca_esperada
     def test_iniciar_devolucao_com_modelo_ausente_retorna_erro_tecnico_nao_amigavel(
         self, client_gestor, item_indisponivel, termo_devolucao_disponivel
     ):
         """
-        BUG CONHECIDO: para uma revenda VÁLIDA (presente em TERMO_DEVOLUCAO_MODELOS),
-        generate_return_term_bytes() só cai no ramo de mensagem amigável
-        ("Modelo de termo de devolução não encontrado para {revenda}.") quando
-        TERMO_DEVOLUCAO_MODELOS.get(revenda) já é None/vazio — ou seja, quando a
-        revenda é desconhecida. Se a revenda é conhecida mas o ARQUIVO .docx
-        correspondente não existe (ou está corrompido) no disco, o código pula direto
-        para `Document(modelo_path)`, que levanta uma exceção técnica capturada
-        genericamente e devolvida crua ao usuário como "Erro ao gerar documento: {e}"
-        — sem a checagem amigável de existência do arquivo ser feita antes.
+        BUG CONHECIDO, MUDANÇA ESPERADA NESTE CICLO (ver docs/TESTES.md): para uma
+        revenda VÁLIDA (presente em TERMO_DEVOLUCAO_MODELOS), generate_return_term_bytes()
+        só cai no ramo de mensagem amigável ("Modelo de termo de devolução não
+        encontrado para {revenda}.") quando TERMO_DEVOLUCAO_MODELOS.get(revenda) já é
+        None/vazio — ou seja, quando a revenda é desconhecida. Se a revenda é conhecida
+        mas o ARQUIVO .docx correspondente não existe (ou está corrompido) no disco, o
+        código pula direto para `Document(modelo_path)`, que levanta uma exceção técnica
+        capturada genericamente e devolvida crua ao usuário como
+        "Erro ao gerar documento: {e}" — sem a checagem amigável de existência do
+        arquivo ser feita antes.
+
+        O Módulo 2 está corrigindo isso neste mesmo ciclo: a checagem amigável deixará
+        de ser código morto para revenda válida e passará a disparar de verdade quando
+        o arquivo não existir, devolvendo "Modelo de termo de devolução não encontrado
+        para {revenda}." também neste caso (não mais só para revenda desconhecida). Este
+        teste continua afirmando o comportamento ATUAL (mensagem técnica crua) de
+        propósito — não o atualize para o comportamento novo. Depois do merge com o
+        Módulo 2, ele deve passar a FALHAR na asserção de `startswith("Erro ao gerar
+        documento:")`; isso é o sinal esperado de que a correção chegou, não uma
+        regressão. Quando isso acontecer, reescreva o teste para afirmar a nova
+        mensagem amigável e troque este comentário por uma nota de "corrigido em
+        <commit/PR>".
         """
         if termo_devolucao_disponivel:
             pytest.skip(
