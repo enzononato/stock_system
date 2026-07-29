@@ -1,9 +1,36 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional
 from datetime import datetime
 
+from app.schemas.validators import (
+    validar_nota_fiscal,
+    normalizar_mac,
+    validar_ip,
+    validar_data_br,
+)
 
-class ItemCreate(BaseModel):
+
+class _ItemDomainValidators:
+    """Validadores de domínio compartilhados entre ItemCreate e ItemUpdate
+    (mixin comum para não duplicar a lógica entre as duas variantes)."""
+
+    @field_validator("nota_fiscal")
+    @classmethod
+    def _validar_nota_fiscal(cls, v):
+        return validar_nota_fiscal(v)
+
+    @field_validator("mac", "endereco_fisico")
+    @classmethod
+    def _validar_mac(cls, v):
+        return normalizar_mac(v)
+
+    @field_validator("ip", "ip_snmp")
+    @classmethod
+    def _validar_ip(cls, v):
+        return validar_ip(v)
+
+
+class ItemCreate(BaseModel, _ItemDomainValidators):
     tipo: str
     brand: str
     model: str
@@ -25,7 +52,6 @@ class ItemCreate(BaseModel):
     setor: Optional[str] = None
     ip: Optional[str] = None
     mac: Optional[str] = None
-    fornecedor: Optional[str] = None
     potencia_nominal: Optional[str] = None
     autonomia_estimada: Optional[str] = None
     ip_snmp: Optional[str] = None
@@ -35,8 +61,13 @@ class ItemCreate(BaseModel):
     poe: Optional[str] = None
     quantidade_portas: Optional[str] = None
 
+    @field_validator("date_registered")
+    @classmethod
+    def _validar_date_registered(cls, v):
+        return validar_data_br(v, campo="data de cadastro", obrigatorio=True)
 
-class ItemUpdate(BaseModel):
+
+class ItemUpdate(BaseModel, _ItemDomainValidators):
     tipo: Optional[str] = None
     brand: Optional[str] = None
     model: Optional[str] = None

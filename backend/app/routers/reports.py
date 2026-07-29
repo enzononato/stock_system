@@ -6,10 +6,9 @@ from fastapi.responses import StreamingResponse
 
 from app.schemas.reports import ReportRow, ChartData
 from app.db.inventory_manager_db import InventoryDBManager
-from app.dependencies import get_current_user, gestor_or_tecnico, gestor_only, CurrentUser
+from app.dependencies import get_current_user, gestor_or_tecnico, gestor_only, get_inventory_db, CurrentUser
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
-inv = InventoryDBManager()
 
 
 @router.get("/monthly", response_model=list[ReportRow])
@@ -17,6 +16,7 @@ def monthly_report(
     year: int = None,
     month: int = None,
     _: CurrentUser = Depends(gestor_or_tecnico),
+    inv: InventoryDBManager = Depends(get_inventory_db),
 ):
     now = datetime.now()
     year = year or now.year
@@ -32,6 +32,7 @@ def export_monthly_report(
     year: int = None,
     month: int = None,
     _: CurrentUser = Depends(gestor_only),
+    inv: InventoryDBManager = Depends(get_inventory_db),
 ):
     now = datetime.now()
     year = year or now.year
@@ -60,6 +61,7 @@ def chart_loans(
     year: int = None,
     month: int = None,
     _: CurrentUser = Depends(get_current_user),
+    inv: InventoryDBManager = Depends(get_inventory_db),
 ):
     now = datetime.now()
     year = year or now.year
@@ -73,6 +75,7 @@ def chart_registrations(
     year: int = None,
     month: int = None,
     _: CurrentUser = Depends(get_current_user),
+    inv: InventoryDBManager = Depends(get_inventory_db),
 ):
     now = datetime.now()
     year = year or now.year

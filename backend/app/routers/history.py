@@ -1,20 +1,52 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request, Query
 
-from app.schemas.history import HistoryResponse
+from app.schemas.history import HistoryResponse, ReverseRequest
+from app.schemas.common import Paginated
 from app.db.inventory_manager_db import InventoryDBManager
-from app.dependencies import get_current_user, gestor_only, gestor_or_tecnico, CurrentUser
+from app.db.user_manager_db import UserDBManager
+from app.dependencies import (
+    gestor_only,
+    gestor_or_tecnico,
+    get_inventory_db,
+    get_user_db,
+    limiter,
+    CurrentUser,
+)
+from app.core.security import verify_password
+from app.core.config import settings
 
 router = APIRouter(prefix="/api/history", tags=["history"])
-inv = InventoryDBManager()
 
 
-@router.get("", response_model=list[HistoryResponse])
-def list_history(_: CurrentUser = Depends(gestor_or_tecnico)):
-    return inv.list_history()
+@router.get("", response_model=Paginated[HistoryResponse])
+def list_history(
+    limit: int = Query(default=settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_PAGE_SIZE),
+    offset: int = Query(default=0, ge=0),
+    _: CurrentUser = Depends(gestor_or_tecnico),
+    inv: InventoryDBManager = Depends(get_inventory_db),
+):
+    rows, total = inv.list_history(limit=limit, offset=offset)
+    return {"items": rows, "total": total}
 
 
 @router.post("/{history_id}/reverse", response_model=dict)
-def reverse_entry(history_id: int, current_user: CurrentUser = Depends(gestor_only)):
+@limiter.limit(settings.LOGIN_RATE_LIMIT)
+def reverse_entry(
+    request: Request,
+    history_id: int,
+    body: ReverseRequest,
+    current_user: CurrentUser = Depends(gestor_only),
+    inv: InventoryDBManager = Depends(get_inventory_db),
+    user_db: UserDBManager = Depends(get_user_db),
+):
+    # T6: estorno é uma operação destrutiva sobre o histórico; exige
+    # reconfirmação de senha do operador logado, não apenas o role.
+    # Reaproveita o mesmo rate limit do login (T2) para não virar um
+    # oráculo de senha (tentativas ilimitadas de adivinhação).
+    user = user_db.get_user_by_id(current_user.id)
+    if not user or not verify_password(body.password, user["password"]):
+        raise HTTPException(status_code=403, detail="Senha incorreta. Ação não autorizada.")
+
     ok, msg = inv.reverse_history_entry(history_id, current_user.username)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
