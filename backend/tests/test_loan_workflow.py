@@ -120,13 +120,12 @@ class TestIniciarEmprestimoTransicoesInvalidas:
 
     def test_data_de_emprestimo_anterior_ao_cadastro(self, client_gestor, criar_item):
         """
-        BUG CONHECIDO (ver test_unit_formatacao.py::TestFormatDate::
-        test_string_iso_com_hora_nao_e_reformatada): a mensagem de erro deveria mostrar a
-        data de cadastro como dd/mm/aaaa (é isso que format_date() faz), mas
-        issue() chama format_date(str(item['date_registered'])) — o str() já convertido
-        antes faz o parse interno de format_date falhar (o padrão "%Y-%m-%d" não bate
-        com o "YYYY-MM-DD HH:MM:SS" resultante), então a função devolve a string crua do
-        MySQL sem reformatar. O usuário vê "2026-06-01 09:00:00" em vez de "01/06/2026".
+        CORRIGIDO NESTE CICLO: a mensagem mostrava a data crua do MySQL
+        ("2026-06-01 09:00:00") em vez de dd/mm/aaaa. `issue()` chama
+        format_date(str(item['date_registered'])), e format_date só tentava o
+        padrão "%Y-%m-%d" — que não casa com o "YYYY-MM-DD HH:MM:SS" resultante do
+        str(). A função caía no except e devolvia a string original. format_date
+        agora tenta também os formatos com hora.
         """
         item = criar_item(date_registered=datetime(2026, 6, 1, 9, 0, 0))
         resp = client_gestor.post(
@@ -134,7 +133,7 @@ class TestIniciarEmprestimoTransicoesInvalidas:
         )
         assert resp.status_code == 400
         assert resp.json()["detail"] == (
-            "Data de empréstimo não pode ser anterior ao cadastro (2026-06-01 09:00:00)."
+            "Data de empréstimo não pode ser anterior ao cadastro (01/06/2026)."
         )
 
 

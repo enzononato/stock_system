@@ -57,17 +57,17 @@ class TestFormatDate:
     def test_string_iso_sem_hora_formata_dd_mm_aaaa(self):
         assert format_date("2026-07-28") == "28/07/2026"
 
-    def test_string_iso_com_hora_nao_e_reformatada(self):
+    def test_string_iso_com_hora_e_reformatada(self):
         """
-        BUG CONHECIDO (app/db/utils.format_date): quando recebe uma string no formato
-        "YYYY-MM-DD HH:MM:SS" (ex.: str(datetime) de uma coluna DATETIME do MySQL já
-        convertida para string antes da chamada, como acontece em
-        InventoryDBManager.issue() ao montar a mensagem de erro de data anterior ao
-        cadastro), o parse com o padrão "%Y-%m-%d" falha (sobra a parte da hora) e a
-        função cai no except, devolvendo a string ORIGINAL sem reformatar — em vez de
-        "28/07/2026", o usuário vê "2026-07-28 10:15:30" cru.
+        CORRIGIDO NESTE CICLO: `format_date` só tentava o padrão "%Y-%m-%d", então
+        uma string "YYYY-MM-DD HH:MM:SS" — que é o que sai de str() sobre uma coluna
+        DATETIME do MySQL, como em InventoryDBManager.issue() ao montar a mensagem de
+        data anterior ao cadastro — caía no except e era devolvida crua ao usuário.
+        Agora os formatos com hora também são reconhecidos.
         """
-        assert format_date("2026-07-28 10:15:30") == "2026-07-28 10:15:30"
+        assert format_date("2026-07-28 10:15:30") == "28/07/2026"
+        assert format_date("2026-07-28T10:15:30") == "28/07/2026"
+        assert format_date("2026-07-28") == "28/07/2026"
 
     def test_string_invalida_retorna_original(self):
         assert format_date("não-é-uma-data") == "não-é-uma-data"

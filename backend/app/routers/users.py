@@ -56,6 +56,12 @@ def update_password(
     _: CurrentUser = Depends(gestor_only),
     user_db: UserDBManager = Depends(get_user_db),
 ):
+    # 404 para usuário inexistente, coerente com remove_user e com o resto da API.
+    # Antes, a troca de senha de um id inexistente respondia 200 "Senha alterada
+    # com sucesso" sem ter alterado nada.
+    if not user_db.get_user_by_id(user_id):
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+
     ok, msg = user_db.update_password(user_id, body.new_password)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)

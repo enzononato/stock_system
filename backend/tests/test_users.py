@@ -142,9 +142,13 @@ class TestAtualizarSenha:
         assert resp.status_code == 400
         assert resp.json()["detail"] == "A nova senha não pode estar em branco."
 
-    def test_atualizar_senha_de_usuario_inexistente_tambem_retorna_sucesso(self, client_gestor):
-        """Mesma classe de BUG CONHECIDO do remove_user(): update_password() não checa
-        se o id existe nem o rowcount, então sempre reporta sucesso."""
+    def test_atualizar_senha_de_usuario_inexistente_retorna_404(self, client_gestor):
+        """
+        CORRIGIDO NESTE CICLO: `update_password()` não checava o id nem o `rowcount`,
+        então respondia 200 "Senha alterada com sucesso" sem ter alterado nada. Agora
+        o router devolve 404, coerente com remove_user, e a camada de dados também
+        confere `rowcount` como defesa em profundidade.
+        """
         resp = client_gestor.put("/api/users/999999/password", json={"new_password": "Qualquer#123"})
-        assert resp.status_code == 200
-        assert resp.json()["detail"] == "Senha alterada com sucesso."
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "Usuário não encontrado."

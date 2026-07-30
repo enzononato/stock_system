@@ -112,7 +112,9 @@ class TestVincularEDesvincular:
 
         segunda = client_gestor.post(url)
         assert segunda.status_code == 400
-        assert segunda.json()["detail"] == "Erro ao vincular periférico."
+        # Passou a distinguir a violação do UNIQUE (erro 1062) dos demais erros de
+        # banco, como add_peripheral() já fazia para o identificador duplicado.
+        assert segunda.json()["detail"] == "Este periférico já está vinculado a este equipamento."
 
     def test_desvincular_periferico_marca_disponivel(
         self, client_gestor, item_disponivel, periferico_disponivel

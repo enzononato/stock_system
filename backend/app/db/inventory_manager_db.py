@@ -322,7 +322,12 @@ class InventoryDBManager:
                     (equipment_id, peripheral_id, logged_user, datetime.now()),
                 )
             return True, "Periférico vinculado com sucesso."
-        except pymysql.MySQLError:
+        except pymysql.MySQLError as e:
+            # equipment_peripherals tem UNIQUE(equipment_id, peripheral_id), então
+            # vincular o mesmo par duas vezes cai em 1062. É erro de uso, não de
+            # sistema: merece mensagem específica, como já acontece em add_peripheral.
+            if e.args and e.args[0] == 1062:
+                return False, "Este periférico já está vinculado a este equipamento."
             logger.exception("Erro ao vincular periférico")
             return False, "Erro ao vincular periférico."
 

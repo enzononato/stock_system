@@ -50,9 +50,14 @@ class UserDBManager:
             return False, "Erro ao cadastrar usuário."
 
     def remove_user(self, user_id: int):
+        # `rowcount` é o que distingue "removeu" de "não havia nada para remover":
+        # sem essa checagem, a camada reportava sucesso para um id inexistente e a
+        # interface exibiria "Usuário removido com sucesso" sem ter removido nada.
         try:
             with get_cursor(dict_cursor=False) as cur:
                 cur.execute("DELETE FROM usuarios WHERE id = %s", (user_id,))
+                if cur.rowcount == 0:
+                    return False, "Usuário não encontrado."
             return True, "Usuário removido com sucesso."
         except pymysql.MySQLError:
             logger.exception("Erro ao remover usuário")
@@ -65,6 +70,10 @@ class UserDBManager:
             hashed = bcrypt.hashpw(new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
             with get_cursor(dict_cursor=False) as cur:
                 cur.execute("UPDATE usuarios SET password = %s WHERE id = %s", (hashed, user_id))
+                # Mesmo motivo do remove_user: um id inexistente afeta 0 linhas e
+                # não deve ser reportado como troca de senha bem-sucedida.
+                if cur.rowcount == 0:
+                    return False, "Usuário não encontrado."
             return True, "Senha alterada com sucesso."
         except pymysql.MySQLError:
             logger.exception("Erro ao alterar a senha")

@@ -98,6 +98,13 @@ async def remove_item(
     current_user: CurrentUser = Depends(gestor_only),
     inv: InventoryDBManager = Depends(get_inventory_db),
 ):
+    # Checagem de existência antes de gravar o anexo, por dois motivos: manter o
+    # 404 coerente com GET e PUT do mesmo recurso (a remoção respondia 400 "ID não
+    # encontrado", vindo da camada de dados), e não deixar comprovante órfão no
+    # storage para um item que nunca existiu.
+    if not inv.find(item_id):
+        raise HTTPException(status_code=404, detail="Item não encontrado.")
+
     storage_key = None
     if attachment:
         content = await attachment.read()

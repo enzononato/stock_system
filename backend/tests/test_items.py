@@ -225,14 +225,14 @@ class TestRemoverItem:
         assert resp.status_code == 400
         assert resp.json()["detail"] == "Não é possível remover produto emprestado."
 
-    def test_remover_item_inexistente_retorna_400_nao_404(self, client_gestor):
+    def test_remover_item_inexistente_retorna_404(self, client_gestor):
         """
-        Inconsistência observada (não é um erro de servidor, então não classificamos
-        como BUG CONHECIDO, mas vale registrar): GET/PUT /api/items/{id} devolvem 404
-        "Item não encontrado." para um id inexistente, enquanto DELETE devolve 400
-        "ID não encontrado." — mensagem e status code diferentes para o mesmo tipo de
-        situação, dependendo do endpoint.
+        CORRIGIDO NESTE CICLO: o DELETE respondia 400 "ID não encontrado." enquanto
+        GET e PUT do mesmo recurso respondiam 404 "Item não encontrado." — status e
+        mensagem diferentes para a mesma situação. Além da coerência, a checagem
+        agora acontece antes de gravar o anexo, para não deixar comprovante órfão no
+        storage de um item que nunca existiu.
         """
         resp = client_gestor.request("DELETE", "/api/items/999999", data={"reason": "Perda"})
-        assert resp.status_code == 400
-        assert resp.json()["detail"] == "ID não encontrado."
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "Item não encontrado."

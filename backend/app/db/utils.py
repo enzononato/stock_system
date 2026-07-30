@@ -16,10 +16,16 @@ def format_date(date_input) -> str:
         return ""
     if isinstance(date_input, (datetime, date)):
         return date_input.strftime("%d/%m/%Y")
-    try:
-        return datetime.strptime(str(date_input), "%Y-%m-%d").strftime("%d/%m/%Y")
-    except (ValueError, TypeError):
-        return str(date_input)
+    # O MySQL devolve DATETIME como "YYYY-MM-DD HH:MM:SS". Sem o segundo formato
+    # abaixo, a conversão falhava e a função devolvia a string crua do banco —
+    # que vazava para o usuário em mensagens como "Data de empréstimo não pode
+    # ser anterior ao cadastro (2026-07-29 12:32:07)".
+    for formato in ("%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            return datetime.strptime(str(date_input), formato).strftime("%d/%m/%Y")
+        except (ValueError, TypeError):
+            continue
+    return str(date_input)
 
 
 def format_datetime(datetime_input) -> str:
