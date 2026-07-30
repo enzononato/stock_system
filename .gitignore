@@ -55,3 +55,7 @@ frontend/coverage/
 .claude/settings.local.json
 .claude/worktrees/
 .claude/settings.json
+
+# Termo de origem enviado pelo usuário: contém dados pessoais reais (nome e CPF)
+# de um funcionário. O template derivado, sem PII, é backend/modelos/termo.docx.
+/Termo.docx
