@@ -22,8 +22,150 @@ from docx import Document
 from app.db.database_mysql import get_cursor
 from app.core.config import TERMO_MODELOS, TERMO_DEVOLUCAO_MODELOS
 from app.db.utils import format_cpf, format_date
+from app.db.unidade_db import UnidadeDBManager
 
 logger = logging.getLogger(__name__)
+
+# ── Geração de termos (.docx) — utilitários compartilhados ─────────────────────
+#
+# Nomes dos meses em português para "{{data_hoje_extenso}}". Propositalmente NÃO
+# usa o módulo `locale`: depende de configuração do sistema operacional (locale
+# "pt_BR" instalado) e quebra silenciosamente em containers Linux mínimos, onde a
+# formatação cai para o padrão "C" sem lançar exceção — um bug difícil de notar em
+# produção e impossível de reproduzir localmente sem o mesmo container.
+_MESES_PT_BR = [
+    "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+    "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+]
+
+
+def _data_por_extenso(dt: datetime) -> str:
+    """Formata uma data por extenso em português, ex.: '30 de julho de 2026'."""
+    return f"{dt.day} de {_MESES_PT_BR[dt.month - 1]} de {dt.year}"
+
+
+# Campos técnicos do equipamento incluídos em "{{especificacoes}}", na ordem em
+# que devem aparecer, com o rótulo legível em português de cada um.
+_CAMPOS_ESPECIFICACOES = [
+    ("cpu", "CPU"),
+    ("ram", "RAM"),
+    ("storage", "Armazenamento"),
+    ("sistema", "Sistema"),
+    ("licenca", "Licença"),
+    ("host", "Host"),
+    ("ip", "IP"),
+    ("mac", "MAC"),
+    ("dominio", "Domínio"),
+    ("anydesk", "AnyDesk"),
+    ("potencia_nominal", "Potência Nominal"),
+    ("autonomia_estimada", "Autonomia"),
+    ("ip_snmp", "IP SNMP"),
+    ("poe", "POE"),
+    ("quantidade_portas", "Qtde. de Portas"),
+    ("codigo_patrimonial", "Código Patrimonial"),
+    ("local_instalacao", "Local de Instalação"),
+]
+
+
+def _montar_especificacoes(item: dict) -> str:
+    """Junta os campos técnicos preenchidos do equipamento em uma única linha,
+    para "{{especificacoes}}". Sem nenhum campo preenchido, devolve "Não
+    informado" — nunca deixa o placeholder cru nem uma linha vazia no termo."""
+    partes = [
+        f"{rotulo}: {item[campo]}"
+        for campo, rotulo in _CAMPOS_ESPECIFICACOES
+        if item.get(campo) not in (None, "")
+    ]
+    return " | ".join(partes) if partes else "Não informado"
+
+
+def _texto_runs(runs) -> str:
+    return "".join(r.text for r in runs)
+
+
+def _substituir_intervalo_em_runs(runs, inicio: int, fim: int, valor: str) -> None:
+    """Escreve `valor` no lugar do intervalo [inicio, fim) do texto concatenado
+    dos `runs`, preservando a formatação: o primeiro run atingido herda o texto
+    novo (mantendo seu `bold`/`italic`/fonte), e os demais runs atingidos têm
+    apenas a parte consumida removida (nunca são recriados)."""
+    cursor = 0
+    afetados = []  # (run, inicio_local, fim_local)
+    for run in runs:
+        run_inicio = cursor
+        run_fim = cursor + len(run.text)
+        if run_fim > inicio and run_inicio < fim:
+            afetados.append((run, max(inicio, run_inicio) - run_inicio, min(fim, run_fim) - run_inicio))
+        cursor = run_fim
+        if cursor >= fim:
+            break
+    if not afetados:
+        return
+    primeiro_run, ini0, fim0 = afetados[0]
+    texto = primeiro_run.text
+    primeiro_run.text = texto[:ini0] + valor + texto[fim0:]
+    for run, ini, fim_local in afetados[1:]:
+        texto = run.text
+        run.text = texto[:ini] + texto[fim_local:]
+
+
+def _substituir_em_paragrafo(paragrafo, substituicoes: dict) -> None:
+    """Substitui todas as ocorrências de cada chave de `substituicoes` no texto de
+    um parágrafo, run-aware: localiza a chave no texto concatenado do parágrafo
+    (o placeholder pode estar dividido entre vários runs — o Word faz isso
+    rotineiramente ao salvar), escreve o valor no primeiro run do intervalo
+    (herdando a formatação dele) e remove apenas a parte consumida dos runs
+    seguintes. Diferente de `paragraph.text = ...`, nunca colapsa os runs nem
+    descarta negrito/itálico/fonte."""
+    runs = paragrafo.runs
+    if not runs:
+        return
+    for chave, valor in substituicoes.items():
+        valor = "" if valor is None else str(valor)
+        while True:
+            texto_atual = _texto_runs(runs)
+            pos = texto_atual.find(chave)
+            if pos == -1:
+                break
+            _substituir_intervalo_em_runs(runs, pos, pos + len(chave), valor)
+
+
+def _paragrafos_de(container):
+    """Gera todos os parágrafos de um container do python-docx (documento,
+    célula de tabela, cabeçalho ou rodapé), incluindo os de tabelas aninhadas,
+    recursivamente."""
+    for paragrafo in container.paragraphs:
+        yield paragrafo
+    for tabela in container.tables:
+        for linha in tabela.rows:
+            for celula in linha.cells:
+                yield from _paragrafos_de(celula)
+
+
+def _substituir_placeholders_documento(doc: Document, substituicoes: dict) -> None:
+    """Aplica `_substituir_em_paragrafo` em TODO o documento: parágrafos e
+    tabelas do corpo, e cabeçalhos/rodapés de todas as seções (incluindo
+    variantes de primeira página e página par/ímpar, quando a seção as usa) —
+    um placeholder que caísse só no cabeçalho passaria intacto para o
+    documento final se apenas o corpo fosse varrido."""
+    containers = [doc]
+    for secao in doc.sections:
+        containers.extend([
+            secao.header, secao.footer,
+            secao.first_page_header, secao.first_page_footer,
+            secao.even_page_header, secao.even_page_footer,
+        ])
+    for container in containers:
+        for paragrafo in _paragrafos_de(container):
+            _substituir_em_paragrafo(paragrafo, substituicoes)
+
+
+def _texto_perifericos(linked_peripherals, texto_vazio: str) -> str:
+    if not linked_peripherals:
+        return texto_vazio
+    return "\n".join(
+        f"- {p['tipo']}: {p.get('brand','')} {p.get('model','')} (S/N: {p.get('identificador') or 'N/A'})"
+        for p in linked_peripherals
+    )
 
 
 class InventoryDBManager:
@@ -504,18 +646,29 @@ class InventoryDBManager:
             return False, "Não foi possível encontrar o usuário associado.", None
 
         revenda = item.get("revenda")
-        modelo_path = TERMO_DEVOLUCAO_MODELOS.get(revenda)
-        if not modelo_path or not os.path.exists(modelo_path):
-            return False, f"Modelo de termo de devolução não encontrado para {revenda}.", None
+        # Agora que unidades podem ser cadastradas pela tela, uma unidade nova não
+        # terá entrada em TERMO_DEVOLUCAO_MODELOS (dicionário fixo por revenda) — sem
+        # essa checagem em duas etapas, a devolução falharia com a mensagem genérica
+        # "Modelo de termo de devolução não encontrado para {revenda}", sem indicar o
+        # que fazer. Não inventamos um modelo de devolução para a unidade: apenas
+        # explicamos que é preciso providenciar e cadastrar o .docx correspondente.
+        if revenda not in TERMO_DEVOLUCAO_MODELOS:
+            return False, (
+                f"Não há modelo de termo de devolução cadastrado para a unidade '{revenda}'. "
+                "Esta é provavelmente uma unidade nova, criada pela tela de unidades: "
+                "providencie o arquivo .docx do termo de devolução dessa unidade e registre-o "
+                "em TERMO_DEVOLUCAO_MODELOS (backend/app/core/config.py) antes de devolver "
+                "equipamentos vinculados a ela."
+            ), None
+        modelo_path = TERMO_DEVOLUCAO_MODELOS[revenda]
+        if not os.path.exists(modelo_path):
+            return False, (
+                f"O modelo de termo de devolução cadastrado para '{revenda}' não foi encontrado "
+                f"em {modelo_path}. Verifique se o arquivo .docx está presente em backend/modelos/devolucao/."
+            ), None
 
         linked_peripherals = self.list_peripherals_for_equipment(item_id)
-        if linked_peripherals:
-            peripherals_text = "\n".join(
-                f"- {p['tipo']}: {p.get('brand','')} {p.get('model','')} (S/N: {p.get('identificador') or 'N/A'})"
-                for p in linked_peripherals
-            )
-        else:
-            peripherals_text = "Nenhum periférico adicional devolvido."
+        peripherals_text = _texto_perifericos(linked_peripherals, "Nenhum periférico adicional devolvido.")
 
         detalhes_parts = [f"{item.get('tipo','')} {item.get('brand','')} {item.get('model','')}".strip()]
         for key, label in {"identificador": "S/N", "cpu": "CPU", "ram": "RAM",
@@ -537,17 +690,7 @@ class InventoryDBManager:
 
         try:
             doc = Document(modelo_path)
-            for p in doc.paragraphs:
-                for k, v in substituicoes.items():
-                    if k in p.text:
-                        p.text = p.text.replace(k, str(v))
-            for tabela in doc.tables:
-                for linha in tabela.rows:
-                    for celula in linha.cells:
-                        for p in celula.paragraphs:
-                            for k, v in substituicoes.items():
-                                if k in p.text:
-                                    p.text = p.text.replace(k, str(v))
+            _substituir_placeholders_documento(doc, substituicoes)
             buf = io.BytesIO()
             doc.save(buf)
             doc_bytes = buf.getvalue()
@@ -628,7 +771,9 @@ class InventoryDBManager:
 
     def generate_loan_term_bytes(self, item_id: int):
         """
-        Gera o termo de responsabilidade em memória.
+        Gera o termo de responsabilidade em memória, a partir do template único
+        (TERMO_MODELOS, ver app/core/config.py) preenchido com os dados da unidade
+        (bloco do EMPREGADOR) e do equipamento/empréstimo.
         Retorna (True, bytes_do_docx, filename) ou (False, msg_erro, None).
         """
         item = self.find(item_id)
@@ -637,51 +782,70 @@ class InventoryDBManager:
         if item["status"] != "Pendente":
             return False, "Este equipamento não está pendente de empréstimo.", None
 
-        linked_peripherals = self.list_peripherals_for_equipment(item_id)
-        if linked_peripherals:
-            peripherals_text = "\n".join(
-                f"- {p['tipo']}: {p.get('brand','')} {p.get('model','')} (S/N: {p.get('identificador') or 'N/A'})"
-                for p in linked_peripherals
-            )
-        else:
-            peripherals_text = "Nenhum periférico adicional vinculado."
-
         revenda = item.get("revenda")
-        modelo_path = TERMO_MODELOS.get(revenda)
-        if not modelo_path or not os.path.exists(modelo_path):
-            return False, f"Modelo de termo não encontrado para {revenda}.", None
+
+        # O bloco do EMPREGADOR é preenchido com os dados da unidade cadastrada no
+        # banco — nunca deixamos o termo (documento jurídico) sair com esse bloco
+        # vazio ou parcial. Se a unidade não existir ou estiver inativa, a geração
+        # é recusada com uma mensagem que diz explicitamente qual unidade precisa
+        # ser cadastrada/ativada, em vez de produzir um termo incompleto.
+        unidade = UnidadeDBManager().get_unidade_por_nome(revenda)
+        if not unidade:
+            return False, (
+                f"A unidade '{revenda}' não está cadastrada. Cadastre a unidade "
+                "(com razão social, CNPJ e endereço) antes de gerar o termo de "
+                "responsabilidade."
+            ), None
+        if not unidade.get("is_active"):
+            return False, (
+                f"A unidade '{revenda}' está inativa. Reative a unidade antes de "
+                "gerar o termo de responsabilidade."
+            ), None
+
+        modelo_path = TERMO_MODELOS
+        if not os.path.exists(modelo_path):
+            return False, f"Modelo de termo de responsabilidade não encontrado em {modelo_path}.", None
+
+        linked_peripherals = self.list_peripherals_for_equipment(item_id)
+        peripherals_text = _texto_perifericos(linked_peripherals, "Nenhum periférico adicional vinculado.")
+
+        cidade = (unidade.get("cidade") or "").strip()
+        uf = (unidade.get("uf") or "").strip()
+        cidade_uf = f"{cidade}/{uf}" if cidade and uf else cidade
+
+        # CEP pode estar vazio (ex.: Petrolina não tem CEP cadastrado). O trecho
+        # do template é "..., CEP {{cep}}, inscrita ..." — se substituíssemos
+        # apenas "{{cep}}" por "", o termo sairia com "CEP , inscrita" pendurado.
+        # Por isso a chave de substituição é o trecho inteiro "CEP {{cep}}, ":
+        # com CEP presente vira "CEP <cep>, "; sem CEP, o segmento inteiro
+        # desaparece e a frase segue direto de "{{cidade_uf}}," para "inscrita".
+        cep = (unidade.get("cep") or "").strip()
+        cep_segmento = f"CEP {cep}, " if cep else ""
 
         user = item.get("assigned_to", "")
-        detalhes_parts = [f"{item.get('tipo','')} {item.get('brand','')} {item.get('model','')}".strip()]
-        for key, label in {"identificador": "S/N", "cpu": "CPU", "ram": "RAM",
-                           "storage": "Armazenamento", "setor": "Setor", "ip": "IP", "mac": "MAC"}.items():
-            if item.get(key):
-                detalhes_parts.append(f"{label}: {item[key]}")
-        detalhes_finais = " - ".join(detalhes_parts)
+        marca_modelo = f"{item.get('brand','')} {item.get('model','')}".strip()
 
         substituicoes = {
+            "CEP {{cep}}, ": cep_segmento,
+            "{{razao_social}}": unidade.get("razao_social") or "",
+            "{{endereco}}": unidade.get("endereco") or "",
+            "{{cidade_uf}}": cidade_uf,
+            "{{cep}}": cep,  # rede de segurança: nunca deixa o token cru se o segmento acima não bater
+            "{{cnpj}}": unidade.get("cnpj") or "",
             "{{nome}}": user or "",
-            "{{data_hoje}}": datetime.now().strftime("%d/%m/%Y"),
             "{{cpf}}": format_cpf(item.get("cpf", "")),
-            "{{data_emprestimo}}": format_date(item.get("date_issued", "")),
-            "{{detalhes_equipamento}}": detalhes_finais,
+            "{{tipo}}": item.get("tipo", "") or "",
+            "{{marca_modelo}}": marca_modelo,
+            "{{identificador}}": item.get("identificador", "") or "",
             "{{perifericos}}": peripherals_text,
+            "{{especificacoes}}": _montar_especificacoes(item),
+            "{{data_hoje_extenso}}": _data_por_extenso(datetime.now()),
         }
         substituicoes = {k: (v if v is not None else "") for k, v in substituicoes.items()}
 
         try:
             doc = Document(modelo_path)
-            for p in doc.paragraphs:
-                for k, v in substituicoes.items():
-                    if k in p.text:
-                        p.text = p.text.replace(k, str(v))
-            for tabela in doc.tables:
-                for linha in tabela.rows:
-                    for celula in linha.cells:
-                        for p in celula.paragraphs:
-                            for k, v in substituicoes.items():
-                                if k in p.text:
-                                    p.text = p.text.replace(k, str(v))
+            _substituir_placeholders_documento(doc, substituicoes)
             buf = io.BytesIO()
             doc.save(buf)
             doc_bytes = buf.getvalue()
