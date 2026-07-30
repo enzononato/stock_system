@@ -297,6 +297,18 @@ def _test_schema(_ambiente_de_teste):
             f"Não foi possível importar/instanciar app.db.token_db.TokenDBManager: {e}."
         )
 
+    # Módulo 9 (Unidades): mesmo motivo do TokenDBManager acima — `unidades` só
+    # é criada sob demanda pelo __init__ de UnidadeDBManager, e precisa existir
+    # antes do primeiro `limpar_banco` (que agora inclui essa tabela no TRUNCATE).
+    try:
+        from app.db.unidade_db import UnidadeDBManager
+
+        UnidadeDBManager()
+    except Exception as e:
+        pytest.skip(
+            f"Não foi possível importar/instanciar app.db.unidade_db.UnidadeDBManager: {e}."
+        )
+
     return cfg
 
 
@@ -314,7 +326,7 @@ def limpar_banco(_test_schema):
             cur.execute("SET FOREIGN_KEY_CHECKS=0")
             for tabela in (
                 "equipment_peripherals", "history", "items", "peripherals", "usuarios",
-                "revoked_tokens",
+                "revoked_tokens", "unidades",
             ):
                 cur.execute(f"TRUNCATE TABLE `{tabela}`")
             cur.execute("SET FOREIGN_KEY_CHECKS=1")
@@ -373,6 +385,48 @@ def token_db(_test_schema, limpar_banco):
     from app.db.token_db import TokenDBManager
 
     return TokenDBManager()
+
+
+@pytest.fixture
+def unidade_db(_test_schema, limpar_banco):
+    """Módulo 9 (Unidades): acesso direto a UnidadeDBManager, para fábricas de
+    unidades e para os testes conferirem o estado do banco sem depender só das
+    respostas HTTP."""
+    from app.db.unidade_db import UnidadeDBManager
+
+    return UnidadeDBManager()
+
+
+@pytest.fixture
+def criar_unidade(unidade_db):
+    """Fábrica de unidades via UnidadeDBManager.add_unidade (método real da
+    camada de dados). Os dados default já são um CNPJ válido (dígitos
+    verificadores conferidos), para não obrigar cada teste a calcular um."""
+
+    def _criar(**overrides):
+        dados = {
+            "nome": f"Unidade Teste {uuid4().hex[:8]}",
+            "razao_social": "REVENDA VALLE DA INTEGRAÇÃO LTDA",
+            "cnpj": "04.690.106/0001-15",
+            "endereco": "Rua de Teste, 123",
+            "cep": "48905-630",
+            "cidade": "Juazeiro",
+            "uf": "BA",
+        }
+        dados.update(overrides)
+        ok, msg = unidade_db.add_unidade(dados)
+        assert ok, f"Falha ao criar unidade de teste via add_unidade: {msg}"
+        return unidade_db.get_unidade_por_nome(dados["nome"])
+
+    return _criar
+
+
+@pytest.fixture
+def unidade(criar_unidade):
+    """Unidade recém-cadastrada, ativa (o default da coluna)."""
+    u = criar_unidade()
+    assert u["is_active"] == 1
+    return u
 
 
 # ────────────────────────────────────────────────────────────────────────────
