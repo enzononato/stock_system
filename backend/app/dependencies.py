@@ -12,6 +12,7 @@ from app.core.security import decode_token
 from app.db.inventory_manager_db import InventoryDBManager
 from app.db.user_manager_db import UserDBManager
 from app.db.token_db import TokenDBManager
+from app.db.unidade_db import UnidadeDBManager
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -92,6 +93,11 @@ def get_user_db() -> UserDBManager:
 @lru_cache
 def get_token_db() -> TokenDBManager:
     return TokenDBManager()
+
+
+@lru_cache
+def get_unidade_db() -> UnidadeDBManager:
+    return UnidadeDBManager()
 
 
 # ── Rate limiting (T2) ──────────────────────────────────────────────────────

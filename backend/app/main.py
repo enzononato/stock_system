@@ -8,7 +8,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
 from app.dependencies import limiter, get_inventory_db
-from app.routers import auth, users, items, peripherals, loans, documents, history, reports, constants
+from app.routers import auth, users, items, peripherals, loans, documents, history, reports, constants, unidades
 
 app = FastAPI(
     title="Controle de Estoque Revalle",
@@ -107,6 +107,7 @@ app.include_router(documents.router)
 app.include_router(history.router)
 app.include_router(reports.router)
 app.include_router(constants.router)
+app.include_router(unidades.router)
 
 
 @app.get("/api/health")
