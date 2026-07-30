@@ -45,18 +45,22 @@ PLACEHOLDER_RE = re.compile(r"\{\{\s*[a-zA-Z_]+\s*\}\}")
 # ────────────────────────────────────────────────────────────────────────────
 
 def _instalar_unidade_fake(monkeypatch, resultado):
-    """Substitui UnidadeDBManager visto por app.db.inventory_manager_db por um
-    dublê que devolve exatamente `resultado` (dict ou None) de
-    get_unidade_por_nome, respeitando só o contrato documentado."""
+    """Substitui o acesso ao UnidadeDBManager visto por
+    app.db.inventory_manager_db por um dublê que devolve exatamente `resultado`
+    (dict ou None) de get_unidade_por_nome, respeitando só o contrato documentado.
+
+    O patch é sobre `get_unidade_manager`, e não sobre a classe: a geração de
+    termo passou a usar o acessor com instância compartilhada em vez de
+    instanciar o manager a cada chamada — `UnidadeDBManager.__init__` executa
+    `CREATE TABLE IF NOT EXISTS`, então instanciar por chamada disparava um DDL
+    em toda geração de termo.
+    """
 
     class _UnidadeFake:
-        def __init__(self):
-            pass
-
         def get_unidade_por_nome(self, nome):
             return resultado
 
-    monkeypatch.setattr(inv_mod, "UnidadeDBManager", _UnidadeFake)
+    monkeypatch.setattr(inv_mod, "get_unidade_manager", lambda: _UnidadeFake())
 
 
 class _FakeManager(inv_mod.InventoryDBManager):

@@ -271,3 +271,21 @@ class UnidadeDBManager:
             resultado["perifericos_vinculados"] = cur.fetchone()["total"]
 
         return resultado
+
+
+# Instância reaproveitada pelo processo. `__init__` roda `CREATE TABLE IF NOT
+# EXISTS`, então instanciar a cada chamada — como a geração de termo fazia —
+# dispara um DDL a cada operação de negócio. A criação é preguiçosa: o primeiro
+# uso conecta, e o import do módulo continua sem tocar no banco, preservando a
+# propriedade de o app subir com o MySQL indisponível.
+_instancia: "UnidadeDBManager | None" = None
+
+
+def get_unidade_manager() -> "UnidadeDBManager":
+    """Devolve a instância compartilhada de UnidadeDBManager, criando-a na
+    primeira chamada. Testes que precisem recriar o schema podem seguir
+    instanciando `UnidadeDBManager()` diretamente."""
+    global _instancia
+    if _instancia is None:
+        _instancia = UnidadeDBManager()
+    return _instancia

@@ -589,11 +589,16 @@ def termo_devolucao_disponivel():
 
 @pytest.fixture
 def termo_emprestimo_disponivel():
-    """True se o .docx modelo de termo de responsabilidade para 'Revalle Juazeiro' existir."""
+    """True se o .docx do termo de responsabilidade existir.
+
+    `TERMO_MODELOS` deixou de ser um dicionário por revenda e passou a ser o
+    caminho único do template — o bloco do EMPREGADOR virou placeholder,
+    preenchido a partir da unidade cadastrada. A chamada `.get("Revalle
+    Juazeiro")` que existia aqui levantaria AttributeError sobre a string.
+    """
     from app.core.config import TERMO_MODELOS
 
-    caminho = TERMO_MODELOS.get("Revalle Juazeiro")
-    return bool(caminho and os.path.exists(caminho))
+    return bool(TERMO_MODELOS and os.path.exists(TERMO_MODELOS))
 
 
 # ────────────────────────────────────────────────────────────────────────────

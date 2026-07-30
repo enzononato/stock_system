@@ -22,7 +22,7 @@ from docx import Document
 from app.db.database_mysql import get_cursor
 from app.core.config import TERMO_MODELOS, TERMO_DEVOLUCAO_MODELOS
 from app.db.utils import format_cpf, format_date
-from app.db.unidade_db import UnidadeDBManager
+from app.db.unidade_db import get_unidade_manager
 
 logger = logging.getLogger(__name__)
 
@@ -789,7 +789,7 @@ class InventoryDBManager:
         # vazio ou parcial. Se a unidade não existir ou estiver inativa, a geração
         # é recusada com uma mensagem que diz explicitamente qual unidade precisa
         # ser cadastrada/ativada, em vez de produzir um termo incompleto.
-        unidade = UnidadeDBManager().get_unidade_por_nome(revenda)
+        unidade = get_unidade_manager().get_unidade_por_nome(revenda)
         if not unidade:
             return False, (
                 f"A unidade '{revenda}' não está cadastrada. Cadastre a unidade "
