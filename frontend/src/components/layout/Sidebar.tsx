@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import {
   LayoutDashboard, Package, PackagePlus, Pencil, Cpu, Link2,
   ArrowRightLeft, Undo2, Trash2, History, BarChart2, LineChart,
-  FileText, Users,
+  FileText, Users, Building2,
 } from 'lucide-react'
 
 interface NavItem {
@@ -27,6 +27,7 @@ const navItems: NavItem[] = [
   { to: '/charts', label: 'Gráficos', icon: <LineChart size={18} /> },
   { to: '/terms', label: 'Termos', icon: <FileText size={18} />, roles: ['Gestor', 'Técnico'] },
   { to: '/users', label: 'Usuários', icon: <Users size={18} />, roles: ['Gestor'] },
+  { to: '/unidades', label: 'Unidades', icon: <Building2 size={18} />, roles: ['Gestor'] },
 ]
 
 export default function Sidebar() {

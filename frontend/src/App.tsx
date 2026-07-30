@@ -14,6 +14,7 @@ import ReportPage from '@/pages/ReportPage'
 import ChartsPage from '@/pages/ChartsPage'
 import TermsPage from '@/pages/TermsPage'
 import UsersPage from '@/pages/UsersPage'
+import UnidadesPage from '@/pages/UnidadesPage'
 import { ToastContainer } from '@/components/ui/toast'
 
 /** Guard que redireciona para /login se não tiver o role necessário */
@@ -123,6 +124,14 @@ export default function App() {
             element={
               <RequireRole roles={['Gestor']}>
                 <UsersPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="unidades"
+            element={
+              <RequireRole roles={['Gestor']}>
+                <UnidadesPage />
               </RequireRole>
             }
           />
