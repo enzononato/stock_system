@@ -18,6 +18,66 @@ class TestCadastroDePeriferico:
         assert segunda.json()["detail"] == "Já existe um periférico com este Identificador (Nº de Série)."
 
 
+class TestInativarPeriferico:
+    """T2 (novo): DELETE /api/peripherals/{id} (T9 no código) inativa (soft-delete)
+    um periférico disponível; recusa com 400 se o periférico estiver 'Em Uso' ou
+    vinculado a um equipamento; RBAC permite Gestor ou Técnico (gestor_or_tecnico)."""
+
+    def test_inativa_periferico_disponivel(self, client_gestor, periferico_disponivel):
+        resp = client_gestor.delete(f"/api/peripherals/{periferico_disponivel['id']}")
+        assert resp.status_code == 200
+        assert resp.json()["detail"] == (
+            f"Periférico 'Mouse' (ID {periferico_disponivel['id']}) removido do estoque."
+        )
+        # Soft-delete: some da listagem padrão, mas continua existindo com include_inactive.
+        ids_ativos = {p["id"] for p in client_gestor.get("/api/peripherals").json()}
+        assert periferico_disponivel["id"] not in ids_ativos
+        todos = client_gestor.get("/api/peripherals", params={"include_inactive": True}).json()
+        inativo = next(p for p in todos if p["id"] == periferico_disponivel["id"])
+        assert inativo["status"] == "Disponível"  # status não muda, só is_active
+
+    def test_recusa_com_400_se_periferico_estiver_em_uso(
+        self, client_gestor, item_disponivel, periferico_disponivel
+    ):
+        """
+        deactivate_peripheral() checa 'Em Uso' ANTES de checar o vínculo em
+        equipment_peripherals -- e link_peripheral_to_equipment() já marca o
+        periférico como 'Em Uso' no momento do vínculo. Por isso, vincular um
+        periférico dispara a primeira checagem (mensagem "...em uso.") antes da
+        segunda ("...vinculado a um equipamento.") ter a chance de rodar; a
+        segunda mensagem existiria, na prática, para um estado inconsistente em
+        que o periférico está vinculado mas não está mais 'Em Uso'.
+        """
+        link = client_gestor.post(
+            f"/api/items/{item_disponivel['id']}/peripherals/{periferico_disponivel['id']}"
+        )
+        assert link.status_code == 200
+
+        resp = client_gestor.delete(f"/api/peripherals/{periferico_disponivel['id']}")
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == "Não é possível remover periférico em uso."
+
+    def test_periferico_inexistente_retorna_400(self, client_gestor):
+        resp = client_gestor.delete("/api/peripherals/999999")
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == "Periférico não encontrado."
+
+    def test_rbac_gestor_e_tecnico_podem_aprendiz_nao(
+        self, client, client_gestor, client_tecnico, client_aprendiz, criar_periferico
+    ):
+        perif_gestor = criar_periferico(identificador="RBAC-DEL-GESTOR")
+        perif_tecnico = criar_periferico(identificador="RBAC-DEL-TECNICO")
+
+        assert client.delete(f"/api/peripherals/{perif_gestor['id']}").status_code == 401
+
+        resp_apr = client_aprendiz.delete(f"/api/peripherals/{perif_gestor['id']}")
+        assert resp_apr.status_code == 403
+        assert resp_apr.json()["detail"] == "Acesso restrito a Gestor ou Técnico."
+
+        assert client_gestor.delete(f"/api/peripherals/{perif_gestor['id']}").status_code == 200
+        assert client_tecnico.delete(f"/api/peripherals/{perif_tecnico['id']}").status_code == 200
+
+
 class TestVincularEDesvincular:
     def test_vincular_periferico_marca_em_uso(self, client_gestor, item_disponivel, periferico_disponivel):
         resp = client_gestor.post(
@@ -30,14 +90,21 @@ class TestVincularEDesvincular:
         perif = next(p for p in listagem if p["id"] == periferico_disponivel["id"])
         assert perif["status"] == "Em Uso"
 
-    def test_vincular_o_mesmo_par_duas_vezes_retorna_erro_tecnico_nao_amigavel(
+    def test_vincular_o_mesmo_par_duas_vezes_retorna_mensagem_amigavel(
         self, client_gestor, item_disponivel, periferico_disponivel
     ):
         """
-        BUG CONHECIDO: link_peripheral_to_equipment() não trata a violação do UNIQUE
-        (equipment_id, peripheral_id) de forma amigável (ao contrário de add_peripheral,
-        que trata o UNIQUE do identificador com uma mensagem clara). O usuário recebe a
-        exceção crua do pymysql/MySQL prefixada só por "Erro ao vincular: ".
+        CORRIGIDO NESTE CICLO (era o BUG CONHECIDO nº 5, ver docs/TESTES.md):
+        `link_peripheral_to_equipment()` capturava a violação do UNIQUE
+        (equipment_id, peripheral_id) e devolvia a exceção crua do pymysql/MySQL,
+        prefixada só por "Erro ao vincular: " — algo como
+        "Erro ao vincular: (1062, \"Duplicate entry...\")". O código atual já trata
+        `pymysql.MySQLError` de forma genérica (mesmo padrão usado em outros métodos
+        deste manager) e devolve uma mensagem limpa em português, sem vazar a exceção
+        do driver. Não é uma mensagem específica para "já vinculado" (ainda não
+        distingue esse UNIQUE do resto dos erros de banco, ao contrário de
+        add_peripheral() com o identificador duplicado) — mas não há mais vazamento
+        técnico, que era o bug real caracterizado aqui.
         """
         url = f"/api/items/{item_disponivel['id']}/peripherals/{periferico_disponivel['id']}"
         primeira = client_gestor.post(url)
@@ -45,7 +112,7 @@ class TestVincularEDesvincular:
 
         segunda = client_gestor.post(url)
         assert segunda.status_code == 400
-        assert segunda.json()["detail"].startswith("Erro ao vincular:")
+        assert segunda.json()["detail"] == "Erro ao vincular periférico."
 
     def test_desvincular_periferico_marca_disponivel(
         self, client_gestor, item_disponivel, periferico_disponivel
@@ -109,29 +176,22 @@ class TestEfeitoDoFluxoDeEmprestimoSobrePerifericos:
         perif = next(p for p in listagem if p["id"] == periferico_disponivel["id"])
         assert perif["status"] == "Em Uso"
 
-    @pytest.mark.mudanca_esperada
-    def test_confirmar_devolucao_libera_periferico_mas_nao_remove_o_vinculo(
+    def test_confirmar_devolucao_libera_periferico_e_remove_o_vinculo(
         self, client_gestor, inv_manager, item_indisponivel, periferico_disponivel, forcar_devolucao_iniciada
     ):
         """
-        BUG CONHECIDO (item 16), MUDANÇA ESPERADA NESTE CICLO (ver docs/TESTES.md):
-        confirm_return() atualiza o status de cada periférico vinculado para
-        'Disponível', mas não executa nenhum DELETE em equipment_peripherals. Ou seja,
-        depois da devolução confirmada, o periférico aparece como "Disponível"
-        (correto) só que CONTINUA aparecendo como vinculado àquele equipamento em
-        GET /api/items/{id}/peripherals (incorreto) — o vínculo nunca é desfeito
-        automaticamente pela devolução, só por um desvincular manual.
-
-        O Módulo 2 está corrigindo isso neste mesmo ciclo: confirm_return() passará a
-        também apagar as linhas de equipment_peripherals do equipamento devolvido e
-        registrar 'Desvínculo Periférico' no histórico para cada periférico
-        desvinculado. Este teste continua afirmando o comportamento ATUAL (vínculo
-        preservado) de propósito — não o atualize para o comportamento novo. Depois do
-        merge com o Módulo 2, ele deve passar a FALHAR (a última asserção abaixo deixa
-        de ser verdade); isso é o sinal esperado de que a correção chegou, não uma
-        regressão. Quando isso acontecer, reescreva o teste para afirmar o novo
-        comportamento (vínculo removido + 'Desvínculo Periférico' no histórico) e troque
-        este comentário por uma nota de "corrigido em <commit/PR>".
+        CORRIGIDO NESTE CICLO (era o item nº 4/16 de "Mudanças esperadas", ver
+        docs/TESTES.md): antes, `confirm_return()` atualizava o status de cada
+        periférico vinculado para 'Disponível', mas não apagava a linha em
+        `equipment_peripherals` — o periférico ficava "Disponível" e, ao mesmo
+        tempo, continuava aparecendo como vinculado ao equipamento devolvido em
+        GET /api/items/{id}/peripherals. O código atual
+        (`InventoryDBManager.confirm_return`) passou a também fazer
+        `DELETE FROM equipment_peripherals WHERE equipment_id=%s` e registrar
+        'Desvínculo Periférico' no histórico para cada periférico que estava
+        vinculado — este teste agora afirma o comportamento CORRIGIDO e funciona
+        como teste de regressão para que o vínculo não volte a "vazar" após a
+        devolução.
         """
         ok, msg = inv_manager.link_peripheral_to_equipment(
             item_indisponivel["id"], periferico_disponivel["id"], "teste"
@@ -144,8 +204,18 @@ class TestEfeitoDoFluxoDeEmprestimoSobrePerifericos:
 
         listagem = client_gestor.get("/api/peripherals").json()
         perif = next(p for p in listagem if p["id"] == periferico_disponivel["id"])
-        assert perif["status"] == "Disponível"  # correto
+        assert perif["status"] == "Disponível"
 
         vinculados = client_gestor.get(f"/api/items/{item_indisponivel['id']}/peripherals").json()
         ids_vinculados = {p["id"] for p in vinculados}
-        assert periferico_disponivel["id"] in ids_vinculados  # BUG CONHECIDO (item 16)
+        assert periferico_disponivel["id"] not in ids_vinculados  # vínculo removido (corrigido)
+
+        # Regressão: o desvínculo automático fica registrado no histórico.
+        linhas, _total = inv_manager.list_history()
+        desvinculos = [
+            h for h in linhas
+            if h["item_id"] == item_indisponivel["id"]
+            and h["peripheral_id"] == periferico_disponivel["id"]
+            and h["operation"] == "Desvínculo Periférico"
+        ]
+        assert desvinculos, "Esperava um registro 'Desvínculo Periférico' no histórico após a devolução."

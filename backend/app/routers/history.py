@@ -52,7 +52,11 @@ def reverse_entry(
     # reconfirmação de senha do operador logado, não apenas o role.
     # Reaproveita o mesmo rate limit do login (T2) para não virar um
     # oráculo de senha (tentativas ilimitadas de adivinhação).
-    user = user_db.get_user_by_id(current_user.id)
+    # get_user_by_username e não get_user_by_id: apenas o primeiro traz a coluna
+    # `password` no SELECT. Com get_user_by_id (que devolve id/username/role, sem
+    # o hash, por design) o acesso a user["password"] levantava KeyError e todo
+    # estorno respondia 500 — com senha certa ou errada.
+    user = user_db.get_user_by_username(current_user.username)
     if not user or not verify_password(body.password, user["password"]):
         raise HTTPException(status_code=403, detail="Senha incorreta. Ação não autorizada.")
 

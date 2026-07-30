@@ -15,9 +15,21 @@ autorização é avaliada antes do corpo da rota rodar, então o recurso nunca c
 ser consultado. Para os casos que devem suceder (200), usamos dados reais criados
 pelas fábricas de fixtures.
 """
+from datetime import datetime
+
 import pytest
 
 pytestmark = pytest.mark.integration
+
+# CORREÇÃO DE TESTE (não é bug de produto — ver Grupo D do relatório de triagem):
+# os testes de empréstimo abaixo cadastram o item via `criar_item()`
+# (date_registered = agora) e emprestavam com a data fixa "01/01/2026", que
+# ficou no passado em relação ao "agora" do ambiente (o item passou a ser
+# cadastrado DEPOIS da suposta data do empréstimo). Isso disparava a regra de
+# negócio "Data de empréstimo não pode ser anterior ao cadastro" — corretamente,
+# a regra está certa; o bug era a data fixa do teste. Usar a data de hoje evita
+# a colisão sem depender de quando a suíte é executada.
+DATA_EMPRESTIMO_HOJE = datetime.now().strftime("%d/%m/%Y")
 
 MSG_SEM_TOKEN = "Token de autenticação não fornecido."
 MSG_SO_GESTOR = "Acesso restrito ao Gestor."
@@ -127,9 +139,30 @@ class TestRbacHistorico:
         assert resp.json()["detail"] == MSG_GESTOR_OU_TECNICO
 
     def test_estornar_historico_somente_gestor(
-        self, client, client_tecnico, client_aprendiz, client_gestor, item_disponivel, inv_manager
+        self, client, client_tecnico, client_aprendiz, client_gestor, senha_padrao_teste, item_disponivel, inv_manager
     ):
-        entradas = [h for h in inv_manager.list_history() if h["item_id"] == item_disponivel["id"]]
+        """
+        MUDANÇAS aplicadas aqui:
+        1. MUDANÇA INTENCIONAL (T10): `inv_manager.list_history()` agora devolve a
+           tupla (linhas, total), não mais só a lista — precisa desempacotar antes
+           de filtrar.
+        2. MUDANÇA INTENCIONAL (T6): POST /api/history/{id}/reverse exige `password`
+           no corpo (ReverseRequest). A checagem de role acontece ANTES da validação
+           do corpo (é uma dependency do FastAPI), então os casos 401/403 abaixo nem
+           chegam a validar o corpo.
+        3. BUG DE PRODUTO ENCONTRADO (fora da posse deste módulo — reportado, não
+           corrigido; ver docs/TESTES.md e test_reversal.py::TestBugDeProdutoSenhaDoEstorno):
+           reverse_entry() verifica a senha com `user_db.get_user_by_id(...)["password"]`,
+           mas get_user_by_id() não seleciona a coluna password -- QUALQUER chamada
+           autenticada quebra com KeyError/500, mesmo para o Gestor com senha
+           correta. Isso não é uma falha de RBAC: a exceção acontece DEPOIS da
+           checagem de role (gestor_only já deixou passar), só a lógica de senha,
+           mais abaixo, é que está quebrada. Por isso o caminho positivo (Gestor)
+           aqui confirma que a exceção é o KeyError conhecido — não 401/403 — em vez
+           de afirmar 200, que o código não consegue entregar hoje.
+        """
+        linhas, _total = inv_manager.list_history()
+        entradas = [h for h in linhas if h["item_id"] == item_disponivel["id"]]
         assert entradas, "Fixture deveria ter gerado uma entrada de histórico 'Cadastro'."
         history_id = entradas[0]["id"]
 
@@ -142,8 +175,16 @@ class TestRbacHistorico:
         resp_apr = client_aprendiz.post("/api/history/999999/reverse")
         assert resp_apr.status_code == 403
 
-        resp_gestor = client_gestor.post(f"/api/history/{history_id}/reverse")
-        assert resp_gestor.status_code == 200
+        # Gestor com a senha correta estorna de fato. Este trecho já foi um
+        # `pytest.raises(KeyError)`, documentando que a checagem de senha do
+        # estorno quebrava com 500 — o endpoint consultava o usuário por um
+        # método cujo SELECT não traz a coluna `password`. Corrigido; a cobertura
+        # detalhada dos dois lados da checagem está em
+        # test_reversal.py::TestSenhaDoEstorno.
+        resp_gestor = client_gestor.post(
+            f"/api/history/{history_id}/reverse", json={"password": senha_padrao_teste}
+        )
+        assert resp_gestor.status_code == 200, resp_gestor.text
 
 
 class TestRbacRelatorios:
@@ -270,12 +311,20 @@ class TestRbacEmprestimos:
     def test_iniciar_emprestimo_gestor_e_tecnico_200_aprendiz_403(
         self, client, client_gestor, client_tecnico, client_aprendiz, criar_item
     ):
+        """
+        MUDANÇA INTENCIONAL (T7, validação de domínio migrou para o schema): o corpo
+        usava o CPF "11122233344", que nunca foi um CPF válido (dígitos verificadores
+        não conferem — ver test_loan_workflow.py). Antes da migração ninguém notava,
+        porque `issue()` não validava CPF; agora `LoanRequest` (Pydantic) valida via
+        `validar_cpf()` e rejeitaria com 422 mesmo os casos que deveriam dar 200. Troca
+        para um CPF de fato válido (111.444.777-35, dígitos verificadores conferem).
+        """
         item_gestor = criar_item()
         item_tecnico = criar_item()
         body = lambda item_id: {
-            "item_id": item_id, "usuario": "Fulano", "cpf": "11122233344",
+            "item_id": item_id, "usuario": "Fulano", "cpf": "11144477735",
             "center_cost": "101 - Puxada", "cargo": "Analista", "setor": "TI",
-            "revenda": "Revalle Juazeiro", "date_issue": "01/01/2026",
+            "revenda": "Revalle Juazeiro", "date_issue": DATA_EMPRESTIMO_HOJE,
         }
 
         assert client.post("/api/loans", json=body(item_gestor["id"])).status_code == 401
@@ -294,7 +343,7 @@ class TestRbacEmprestimos:
             item = criar_item()
             ok, msg = inv_manager.issue(
                 item["id"], "Fulano", "11122233344", "101 - Puxada", "Analista", "TI",
-                "Revalle Juazeiro", "01/01/2026", "teste",
+                "Revalle Juazeiro", DATA_EMPRESTIMO_HOJE, "teste",
             )
             assert ok, msg
             return item["id"]
@@ -339,7 +388,7 @@ class TestRbacEmprestimos:
             item = criar_item()
             ok, msg = inv_manager.issue(
                 item["id"], "Fulano", "11122233344", "101 - Puxada", "Analista", "TI",
-                "Revalle Juazeiro", "01/01/2026", "teste",
+                "Revalle Juazeiro", DATA_EMPRESTIMO_HOJE, "teste",
             )
             assert ok, msg
             ok, msg = inv_manager.confirm_loan(item["id"], "teste", "termos_assinados/fake.pdf")

@@ -285,6 +285,18 @@ def _test_schema(_ambiente_de_teste):
             "módulo da refatoração) e se o MySQL de teste está acessível."
         )
 
+    # T2 (novo): garante que `revoked_tokens` (revogação de refresh token) já
+    # exista antes do primeiro `limpar_banco`, senão o TRUNCATE abaixo falharia
+    # na primeira vez (tabela criada só sob demanda por TokenDBManager()).
+    try:
+        from app.db.token_db import TokenDBManager
+
+        TokenDBManager()
+    except Exception as e:
+        pytest.skip(
+            f"Não foi possível importar/instanciar app.db.token_db.TokenDBManager: {e}."
+        )
+
     return cfg
 
 
@@ -300,7 +312,10 @@ def limpar_banco(_test_schema):
     try:
         with conn.cursor() as cur:
             cur.execute("SET FOREIGN_KEY_CHECKS=0")
-            for tabela in ("equipment_peripherals", "history", "items", "peripherals", "usuarios"):
+            for tabela in (
+                "equipment_peripherals", "history", "items", "peripherals", "usuarios",
+                "revoked_tokens",
+            ):
                 cur.execute(f"TRUNCATE TABLE `{tabela}`")
             cur.execute("SET FOREIGN_KEY_CHECKS=1")
         conn.commit()
@@ -348,6 +363,16 @@ def user_manager(_test_schema, limpar_banco):
     from app.db.user_manager_db import UserDBManager
 
     return UserDBManager()
+
+
+@pytest.fixture
+def token_db(_test_schema, limpar_banco):
+    """T2 (novo): acesso direto à tabela de tokens revogados (revoked_tokens), para
+    os testes de revogação/rotação de refresh token em test_auth.py conferirem o
+    estado do banco sem depender só das respostas HTTP."""
+    from app.db.token_db import TokenDBManager
+
+    return TokenDBManager()
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -475,6 +500,28 @@ def forcar_devolucao_iniciada(_test_schema):
             conn.close()
 
     return _forcar
+
+
+@pytest.fixture
+def executar_sql(_test_schema):
+    """Executa uma instrução SQL crua diretamente no banco de teste (infra de teste,
+    NÃO é código de produção) -- útil para forçar estados que a camada de aplicação
+    não expõe uma forma direta de alcançar (ex.: rebaixar o role de um usuário sem
+    um endpoint de troca de role, usado em test_users.py::TestProtecaoDeLockout
+    para exercitar o ramo "último Gestor" isoladamente do ramo "não remove a si
+    mesmo", que normalmente dispara primeiro)."""
+    cfg = _test_schema
+
+    def _executar(sql: str, params=None):
+        conn = _conectar_direto(cfg, database=cfg.name)
+        try:
+            with conn.cursor() as cur:
+                cur.execute(sql, params or ())
+            conn.commit()
+        finally:
+            conn.close()
+
+    return _executar
 
 
 @pytest.fixture

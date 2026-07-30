@@ -15,12 +15,23 @@ pytestmark = pytest.mark.integration
 
 ARQUIVO_PDF = {"signed_pdf": ("termo.pdf", b"conteudo-fake-pdf", "application/pdf")}
 
+# MUDANÇA INTENCIONAL (T7, validação de domínio migrou para o schema): este corpo
+# usava o CPF "11122233344", que NUNCA foi um CPF de fato válido — os dígitos
+# verificadores não conferem (11144477735 é o exemplo clássico de CPF válido para
+# testes: 111.444.777-35). Antes da migração, `issue()`/`InventoryDBManager` não
+# validavam CPF, então o valor "furado" passava despercebido. Agora `LoanRequest`
+# (Pydantic, via `validar_cpf()`) valida o corpo inteiro ANTES do router, e todo
+# POST /api/loans com um CPF inválido leva 422 mesmo em cenários que deveriam
+# testar outra coisa (item pendente, item indisponível, data no futuro etc.) —
+# por isso a troca para um CPF válido aqui, no helper compartilhado.
+CPF_VALIDO_TESTE = "11144477735"
+
 
 def _corpo_emprestimo(item_id: int, data_issue: str = None) -> dict:
     return {
         "item_id": item_id,
         "usuario": "Fulano de Tal",
-        "cpf": "11122233344",
+        "cpf": CPF_VALIDO_TESTE,
         "center_cost": "101 - Puxada",
         "cargo": "Analista",
         "setor": "TI",
@@ -84,11 +95,20 @@ class TestIniciarEmprestimoTransicoesInvalidas:
         assert resp.json()["detail"] == "Item não encontrado."
 
     def test_data_de_emprestimo_em_formato_invalido(self, client_gestor, item_disponivel):
+        """
+        MUDANÇA INTENCIONAL (T7): a validação do FORMATO dd/mm/aaaa de `date_issue`
+        saiu de `InventoryDBManager.issue()` (400, mensagem própria) e foi para
+        `LoanRequest` (Pydantic, via `validar_data_br`). Agora é 422, com o handler
+        global reduzindo a lista de erros do Pydantic a uma frase única citando o
+        rótulo amigável do campo ("Data do empréstimo").
+        """
         resp = client_gestor.post(
             "/api/loans", json=_corpo_emprestimo(item_disponivel["id"], data_issue="2026-01-01")
         )
-        assert resp.status_code == 400
-        assert resp.json()["detail"] == "Data de empréstimo inválida (use dd/mm/aaaa)."
+        assert resp.status_code == 422
+        body = resp.json()
+        assert body["detail"] == "Data do empréstimo: Formato de data de empréstimo inválido. Use dd/mm/aaaa."
+        assert isinstance(body["errors"], list) and body["errors"]
 
     def test_data_de_emprestimo_no_futuro(self, client_gestor, item_disponivel):
         amanha = (datetime.now() + timedelta(days=1)).strftime("%d/%m/%Y")
@@ -155,42 +175,37 @@ class TestIniciarDevolucaoTransicoesInvalidas:
         assert resp.status_code == 400
         assert resp.json()["detail"] == self.MSG_APENAS_INDISPONIVEL
 
-    @pytest.mark.mudanca_esperada
-    def test_iniciar_devolucao_com_modelo_ausente_retorna_erro_tecnico_nao_amigavel(
-        self, client_gestor, item_indisponivel, termo_devolucao_disponivel
+    def test_iniciar_devolucao_com_arquivo_de_modelo_ausente_retorna_mensagem_amigavel(
+        self, client_gestor, item_indisponivel, monkeypatch
     ):
         """
-        BUG CONHECIDO, MUDANÇA ESPERADA NESTE CICLO (ver docs/TESTES.md): para uma
-        revenda VÁLIDA (presente em TERMO_DEVOLUCAO_MODELOS), generate_return_term_bytes()
-        só cai no ramo de mensagem amigável ("Modelo de termo de devolução não
-        encontrado para {revenda}.") quando TERMO_DEVOLUCAO_MODELOS.get(revenda) já é
-        None/vazio — ou seja, quando a revenda é desconhecida. Se a revenda é conhecida
-        mas o ARQUIVO .docx correspondente não existe (ou está corrompido) no disco, o
-        código pula direto para `Document(modelo_path)`, que levanta uma exceção técnica
-        capturada genericamente e devolvida crua ao usuário como
-        "Erro ao gerar documento: {e}" — sem a checagem amigável de existência do
-        arquivo ser feita antes.
+        CORRIGIDO NESTE CICLO (era o item nº 3 de "Mudanças esperadas", ver
+        docs/TESTES.md): antes, para uma revenda VÁLIDA (presente em
+        TERMO_DEVOLUCAO_MODELOS), `generate_return_term_bytes()` só caía no ramo
+        amigável ("Modelo de termo de devolução não encontrado para {revenda}.")
+        quando a revenda era desconhecida — se o .docx de uma revenda válida
+        estivesse ausente/corrompido, a função pulava direto para `Document(modelo_path)`
+        e devolvia a exceção técnica crua ("Erro ao gerar documento: {e}"). O código
+        atual (`app/db/inventory_manager_db.py::generate_return_term_bytes`) chama
+        `os.path.exists(modelo_path)` incondicionalmente, então o ramo amigável agora
+        dispara também para revenda válida com arquivo ausente.
 
-        O Módulo 2 está corrigindo isso neste mesmo ciclo: a checagem amigável deixará
-        de ser código morto para revenda válida e passará a disparar de verdade quando
-        o arquivo não existir, devolvendo "Modelo de termo de devolução não encontrado
-        para {revenda}." também neste caso (não mais só para revenda desconhecida). Este
-        teste continua afirmando o comportamento ATUAL (mensagem técnica crua) de
-        propósito — não o atualize para o comportamento novo. Depois do merge com o
-        Módulo 2, ele deve passar a FALHAR na asserção de `startswith("Erro ao gerar
-        documento:")`; isso é o sinal esperado de que a correção chegou, não uma
-        regressão. Quando isso acontecer, reescreva o teste para afirmar a nova
-        mensagem amigável e troque este comentário por uma nota de "corrigido em
-        <commit/PR>".
+        Este teste não depende mais de o ambiente ter ou não os .docx reais (o
+        worktree deste módulo já os tem, ao contrário do Módulo 7a que escreveu a
+        suíte original) — usa `monkeypatch` para forçar, de forma determinística, o
+        caminho do modelo de uma revenda válida e conhecida para um arquivo que não
+        existe, e confere que a mensagem amigável aparece (não mais a crua).
         """
-        if termo_devolucao_disponivel:
-            pytest.skip(
-                "Modelo de termo de devolução presente nesta máquina; este teste "
-                "caracteriza especificamente o caso em que o arquivo está ausente."
-            )
+        from app.db import inventory_manager_db
+
+        monkeypatch.setitem(
+            inventory_manager_db.TERMO_DEVOLUCAO_MODELOS,
+            "Revalle Juazeiro",
+            "/caminho/inexistente/termo_devolucao_juazeiro.docx",
+        )
         resp = client_gestor.post(f"/api/loans/{item_indisponivel['id']}/return/initiate")
         assert resp.status_code == 400
-        assert resp.json()["detail"].startswith("Erro ao gerar documento:")
+        assert resp.json()["detail"] == "Modelo de termo de devolução não encontrado para Revalle Juazeiro."
         # E, importante: a transação não é aplicada -- o item continua Indisponível.
         assert client_gestor.get(f"/api/items/{item_indisponivel['id']}").json()["status"] == "Indisponível"
 
