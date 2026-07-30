@@ -48,6 +48,14 @@ _ROTULOS_DE_CAMPO = {
     "role": "Função",
     "new_password": "Nova senha",
     "reason": "Motivo",
+    # Campos de Unidade
+    "nome": "Nome da unidade",
+    "razao_social": "Razão social",
+    "cnpj": "CNPJ",
+    "endereco": "Endereço",
+    "cep": "CEP",
+    "cidade": "Cidade",
+    "uf": "UF",
 }
 
 
