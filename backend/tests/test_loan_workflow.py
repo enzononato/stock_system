@@ -181,13 +181,23 @@ class TestIniciarDevolucaoTransicoesInvalidas:
         CORRIGIDO NESTE CICLO (era o item nº 3 de "Mudanças esperadas", ver
         docs/TESTES.md): antes, para uma revenda VÁLIDA (presente em
         TERMO_DEVOLUCAO_MODELOS), `generate_return_term_bytes()` só caía no ramo
-        amigável ("Modelo de termo de devolução não encontrado para {revenda}.")
-        quando a revenda era desconhecida — se o .docx de uma revenda válida
-        estivesse ausente/corrompido, a função pulava direto para `Document(modelo_path)`
-        e devolvia a exceção técnica crua ("Erro ao gerar documento: {e}"). O código
-        atual (`app/db/inventory_manager_db.py::generate_return_term_bytes`) chama
-        `os.path.exists(modelo_path)` incondicionalmente, então o ramo amigável agora
-        dispara também para revenda válida com arquivo ausente.
+        amigável quando a revenda era desconhecida — se o .docx de uma revenda
+        válida estivesse ausente/corrompido, a função pulava direto para
+        `Document(modelo_path)` e devolvia a exceção técnica crua ("Erro ao gerar
+        documento: {e}"). O código atual (`app/db/inventory_manager_db.py::
+        generate_return_term_bytes`) chama `os.path.exists(modelo_path)`
+        incondicionalmente, então o ramo amigável agora dispara também para
+        revenda válida com arquivo ausente.
+
+        MENSAGEM AJUSTADA PELO MÓDULO 10 (T4): agora que unidades podem ser
+        cadastradas pela tela, uma unidade nova não tem entrada em
+        TERMO_DEVOLUCAO_MODELOS, e a mensagem antiga ("Modelo de termo de
+        devolução não encontrado para {revenda}.") não dizia o que fazer a
+        respeito. `generate_return_term_bytes` agora distingue as duas causas
+        (revenda sem entrada no dicionário vs. arquivo cadastrado mas ausente em
+        disco) e cada uma tem uma mensagem própria, mais acionável — por isso a
+        string exata aqui mudou; o comportamento (400 + mensagem amigável, sem
+        aplicar a transação) continua o mesmo.
 
         Este teste não depende mais de o ambiente ter ou não os .docx reais (o
         worktree deste módulo já os tem, ao contrário do Módulo 7a que escreveu a
@@ -197,14 +207,19 @@ class TestIniciarDevolucaoTransicoesInvalidas:
         """
         from app.db import inventory_manager_db
 
+        modelo_ausente = "/caminho/inexistente/termo_devolucao_juazeiro.docx"
         monkeypatch.setitem(
             inventory_manager_db.TERMO_DEVOLUCAO_MODELOS,
             "Revalle Juazeiro",
-            "/caminho/inexistente/termo_devolucao_juazeiro.docx",
+            modelo_ausente,
         )
         resp = client_gestor.post(f"/api/loans/{item_indisponivel['id']}/return/initiate")
         assert resp.status_code == 400
-        assert resp.json()["detail"] == "Modelo de termo de devolução não encontrado para Revalle Juazeiro."
+        assert resp.json()["detail"] == (
+            "O modelo de termo de devolução cadastrado para 'Revalle Juazeiro' não foi "
+            f"encontrado em {modelo_ausente}. Verifique se o arquivo .docx está presente "
+            "em backend/modelos/devolucao/."
+        )
         # E, importante: a transação não é aplicada -- o item continua Indisponível.
         assert client_gestor.get(f"/api/items/{item_indisponivel['id']}").json()["status"] == "Indisponível"
 
@@ -212,12 +227,21 @@ class TestIniciarDevolucaoTransicoesInvalidas:
         self, client_gestor, inv_manager, item_indisponivel
     ):
         """Caracterização determinística (não depende de arquivos em disco): uma revenda
-        que não existe em TERMO_DEVOLUCAO_MODELOS sempre cai no ramo amigável."""
+        que não existe em TERMO_DEVOLUCAO_MODELOS sempre cai no ramo amigável.
+
+        MENSAGEM AJUSTADA PELO MÓDULO 10 (T4) — ver docstring do teste anterior:
+        esta é exatamente a situação que motivou a mudança (unidade nova, sem
+        modelo de devolução cadastrado), então a mensagem agora explica que é
+        preciso providenciar o .docx e registrá-lo em TERMO_DEVOLUCAO_MODELOS."""
         inv_manager.update_item(item_indisponivel["id"], {"revenda": "Revenda Sem Modelo Cadastrado"}, "teste")
         resp = client_gestor.post(f"/api/loans/{item_indisponivel['id']}/return/initiate")
         assert resp.status_code == 400
         assert resp.json()["detail"] == (
-            "Modelo de termo de devolução não encontrado para Revenda Sem Modelo Cadastrado."
+            "Não há modelo de termo de devolução cadastrado para a unidade "
+            "'Revenda Sem Modelo Cadastrado'. Esta é provavelmente uma unidade nova, "
+            "criada pela tela de unidades: providencie o arquivo .docx do termo de "
+            "devolução dessa unidade e registre-o em TERMO_DEVOLUCAO_MODELOS "
+            "(backend/app/core/config.py) antes de devolver equipamentos vinculados a ela."
         )
 
 

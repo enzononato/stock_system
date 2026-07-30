@@ -174,15 +174,13 @@ def _modelo_path(filename: str) -> str:
         base = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "modelos")
     return os.path.join(base, filename)
 
-TERMO_MODELOS = {
-    "Revalle Juazeiro":     _modelo_path("termo_juazeiro.docx"),
-    "Revalle Bonfim":       _modelo_path("termo_bonfim.docx"),
-    "Revalle Petrolina":    _modelo_path("termo_petrolina.docx"),
-    "Revalle Ribeira":      _modelo_path("termo_ribeira.docx"),
-    "Revalle Paulo Afonso": _modelo_path("termo_pauloafonso.docx"),
-    "Revalle Alagoinhas":   _modelo_path("termo_alagoinhas.docx"),
-    "Revalle Serrinha":     _modelo_path("termo_serrinha.docx"),
-}
+# Os 7 templates de termo de EMPRÉSTIMO por revenda foram substituídos por um único
+# modelo (backend/modelos/termo.docx), cujo bloco do EMPREGADOR é preenchido em tempo
+# de geração com os dados da unidade cadastrada no banco (ver
+# UnidadeDBManager.get_unidade_por_nome em app/db/unidade_db.py e
+# InventoryDBManager.generate_loan_term_bytes). TERMO_MODELOS deixa de ser um
+# dicionário por revenda — passa a apontar diretamente para o template único.
+TERMO_MODELOS = _modelo_path("termo.docx")
 
 TERMO_DEVOLUCAO_MODELOS = {
     "Revalle Juazeiro":     _modelo_path("devolucao/termo_devolucao_juazeiro.docx"),
