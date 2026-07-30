@@ -268,3 +268,93 @@ class TestConfirmarDevolucaoTransicoesInvalidas:
         resp = client_gestor.post(f"/api/loans/{item_indisponivel['id']}/return/confirm", files=ARQUIVO_PDF)
         assert resp.status_code == 200
         assert resp.json()["detail"] == f"Devolução do item {item_indisponivel['id']} confirmada."
+
+
+class TestTogglePessoaJuridica:
+    """Correção do defeito do documento original do termo: o parágrafo do
+    empregado dizia sempre "pessoa jurídica de direito privado", ao lado do
+    campo CPF (inconsistente — pessoa jurídica não tem CPF). O padrão passou a
+    ser "pessoa física", com um campo pessoa_juridica no corpo de POST
+    /api/loans (desmarcado por padrão no formulário) para o caso em que o
+    recebedor é de fato representante de pessoa jurídica.
+
+    Estes testes cobrem a persistência do valor em items/history — não a
+    substituição no .docx em si, que é responsabilidade de test_termos.py.
+    """
+
+    def test_omitir_o_campo_assume_pessoa_fisica(self, client_gestor, item_disponivel, inv_manager):
+        corpo = _corpo_emprestimo(item_disponivel["id"])
+        assert "pessoa_juridica" not in corpo
+        resp = client_gestor.post("/api/loans", json=corpo)
+        assert resp.status_code == 200
+        item = inv_manager.find(item_disponivel["id"])
+        assert not item["pessoa_juridica"]
+
+    def test_toggle_explicitamente_falso_e_persistido(self, client_gestor, item_disponivel, inv_manager):
+        corpo = {**_corpo_emprestimo(item_disponivel["id"]), "pessoa_juridica": False}
+        resp = client_gestor.post("/api/loans", json=corpo)
+        assert resp.status_code == 200
+        item = inv_manager.find(item_disponivel["id"])
+        assert not item["pessoa_juridica"]
+
+    def test_toggle_ligado_e_persistido_no_item_e_no_historico(
+        self, client_gestor, item_disponivel, inv_manager
+    ):
+        corpo = {**_corpo_emprestimo(item_disponivel["id"]), "pessoa_juridica": True}
+        resp = client_gestor.post("/api/loans", json=corpo)
+        assert resp.status_code == 200
+
+        item = inv_manager.find(item_disponivel["id"])
+        assert item["pessoa_juridica"]
+
+        rows, _total = inv_manager.list_history()
+        entrada = next(
+            h for h in rows if h["item_id"] == item_disponivel["id"] and h["operation"] == "Empréstimo"
+        )
+        assert entrada["pessoa_juridica"]
+
+    def test_estornar_emprestimo_zera_o_toggle(self, client_gestor, item_disponivel, inv_manager):
+        """Estornar o Empréstimo devolve o item a Disponível, e o próximo
+        empréstimo desse item não deve herdar o toggle de um ciclo anterior."""
+        corpo = {**_corpo_emprestimo(item_disponivel["id"]), "pessoa_juridica": True}
+        client_gestor.post("/api/loans", json=corpo)
+
+        rows, _total = inv_manager.list_history()
+        entrada = next(
+            h for h in rows if h["item_id"] == item_disponivel["id"] and h["operation"] == "Empréstimo"
+        )
+        resp = client_gestor.post(
+            f"/api/history/{entrada['id']}/reverse", json={"password": "SenhaForte#123"}
+        )
+        assert resp.status_code == 200
+
+        item = inv_manager.find(item_disponivel["id"])
+        assert not item["pessoa_juridica"]
+
+    def test_estornar_devolucao_restaura_o_toggle_do_emprestimo_original(
+        self, client_gestor, item_disponivel, inv_manager, forcar_devolucao_iniciada
+    ):
+        """confirm_return() zera pessoa_juridica no item. Se a Devolução for
+        estornada depois, o item volta para Indisponível com os dados do
+        empréstimo original — pessoa_juridica precisa voltar junto, e só volta
+        porque issue() também grava o valor no histórico (ver
+        InventoryDBManager.issue), não só no item."""
+        item_id = item_disponivel["id"]
+        corpo = {**_corpo_emprestimo(item_id), "pessoa_juridica": True}
+        client_gestor.post("/api/loans", json=corpo)
+        client_gestor.post(f"/api/loans/{item_id}/confirm", files=ARQUIVO_PDF)
+
+        forcar_devolucao_iniciada(item_id)
+        rows, _total = inv_manager.list_history()
+        entrada_devolucao = next(
+            h for h in rows if h["item_id"] == item_id and h["operation"] == "Devolução"
+        )
+
+        resp = client_gestor.post(
+            f"/api/history/{entrada_devolucao['id']}/reverse", json={"password": "SenhaForte#123"}
+        )
+        assert resp.status_code == 200
+
+        item = inv_manager.find(item_id)
+        assert item["status"] == "Indisponível"
+        assert item["pessoa_juridica"]

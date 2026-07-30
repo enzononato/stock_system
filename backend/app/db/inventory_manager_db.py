@@ -190,7 +190,8 @@ class InventoryDBManager:
                 codigo_patrimonial VARCHAR(100), responsavel VARCHAR(100), local_instalacao VARCHAR(150),
                 poe ENUM('Sim','Não'), quantidade_portas VARCHAR(10),
                 date_registered DATETIME NOT NULL, date_issued DATETIME,
-                is_active TINYINT(1) DEFAULT 1
+                is_active TINYINT(1) DEFAULT 1,
+                pessoa_juridica TINYINT(1) DEFAULT 0
             )
             """)
             cur.execute("""
@@ -211,9 +212,25 @@ class InventoryDBManager:
                 tipo VARCHAR(50), brand VARCHAR(100), model VARCHAR(100), identificador VARCHAR(100),
                 nota_fiscal VARCHAR(50), poe ENUM('Sim','Não'), quantidade_portas VARCHAR(10),
                 operacao_anexo VARCHAR(255) NULL, termo_assinado_anexo VARCHAR(255) NULL,
+                pessoa_juridica TINYINT(1) DEFAULT 0,
                 FOREIGN KEY(item_id) REFERENCES items(id) ON DELETE SET NULL
             )
             """)
+
+            # Migração leve para bancos onde a tabela 'items'/'history' já existia
+            # antes deste campo ser criado: CREATE TABLE IF NOT EXISTS não altera
+            # uma tabela existente, então a coluna não apareceria sozinha num banco
+            # com dados reais (como o de produção). Idempotente — não corre risco
+            # de tentar adicionar a coluna duas vezes.
+            for tabela in ("items", "history"):
+                cur.execute(
+                    "SELECT COUNT(*) FROM information_schema.columns "
+                    "WHERE table_schema = DATABASE() AND table_name = %s "
+                    "AND column_name = 'pessoa_juridica'",
+                    (tabela,),
+                )
+                if cur.fetchone()[0] == 0:
+                    cur.execute(f"ALTER TABLE {tabela} ADD COLUMN pessoa_juridica TINYINT(1) DEFAULT 0")
             cur.execute("""
             CREATE TABLE IF NOT EXISTS peripherals (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -529,7 +546,10 @@ class InventoryDBManager:
 
     # ── Loan workflow ──────────────────────────────────────────────────────────
 
-    def issue(self, pid, user, cpf, center_cost, cargo, setor, revenda, date_issue, logged_user: str):
+    def issue(
+        self, pid, user, cpf, center_cost, cargo, setor, revenda, date_issue, logged_user: str,
+        pessoa_juridica: bool = False,
+    ):
         item = self.find(pid)
         if not item:
             return False, "Item não encontrado."
@@ -552,13 +572,16 @@ class InventoryDBManager:
         try:
             with get_cursor(dict_cursor=False) as cur:
                 cur.execute(
-                    "UPDATE items SET status='Pendente', assigned_to=%s, cpf=%s, date_issued=%s, revenda=%s WHERE id=%s",
-                    (user, cpf, dt_issue, revenda, pid),
+                    "UPDATE items SET status='Pendente', assigned_to=%s, cpf=%s, date_issued=%s, revenda=%s, pessoa_juridica=%s WHERE id=%s",
+                    (user, cpf, dt_issue, revenda, pessoa_juridica, pid),
                 )
+                # pessoa_juridica também vai para o histórico (não só para items):
+                # é o que permite reverse_history_entry() restaurar o valor correto
+                # se uma Devolução for estornada depois (ver esse método mais abaixo).
                 cur.execute(
-                    """INSERT INTO history (item_id, operador, usuario, cpf, cargo, center_cost, setor, revenda, fornecedor, data_operacao, operation)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Empréstimo')""",
-                    (pid, logged_user, user, cpf, cargo, center_cost, setor, revenda, item.get("fornecedor"), dt_issue),
+                    """INSERT INTO history (item_id, operador, usuario, cpf, cargo, center_cost, setor, revenda, fornecedor, data_operacao, operation, pessoa_juridica)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Empréstimo',%s)""",
+                    (pid, logged_user, user, cpf, cargo, center_cost, setor, revenda, item.get("fornecedor"), dt_issue, pessoa_juridica),
                 )
             return True, f"Empréstimo do item {pid} para {user} iniciado. Status: Pendente."
         except pymysql.MySQLError:
@@ -574,7 +597,7 @@ class InventoryDBManager:
         try:
             with get_cursor() as cur:
                 cur.execute(
-                    """SELECT id, usuario, cpf, cargo, center_cost, revenda FROM history
+                    """SELECT id, usuario, cpf, cargo, center_cost, revenda, pessoa_juridica FROM history
                     WHERE item_id=%s AND operation='Empréstimo' AND is_reversed=0
                     ORDER BY data_operacao DESC, id DESC LIMIT 1""",
                     (item_id,),
@@ -598,13 +621,14 @@ class InventoryDBManager:
                     cur.execute("UPDATE peripherals SET status='Em Uso' WHERE id=%s", (p_id,))
 
                 cur.execute(
-                    """INSERT INTO history (item_id, operador, usuario, cpf, cargo, center_cost, revenda, data_operacao, operation, termo_assinado_anexo)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'Confirmação Empréstimo',%s)""",
+                    """INSERT INTO history (item_id, operador, usuario, cpf, cargo, center_cost, revenda, data_operacao, operation, termo_assinado_anexo, pessoa_juridica)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'Confirmação Empréstimo',%s,%s)""",
                     (
                         item_id, logged_user,
                         last_loan.get("usuario"), last_loan.get("cpf"),
                         last_loan.get("cargo"), last_loan.get("center_cost"),
                         last_loan.get("revenda"), datetime.now(), storage_key,
+                        last_loan.get("pessoa_juridica") or 0,
                     ),
                 )
             return True, f"Empréstimo do item {item_id} confirmado."
@@ -724,7 +748,7 @@ class InventoryDBManager:
         try:
             with get_cursor() as cur:
                 cur.execute(
-                    "UPDATE items SET status='Disponível', assigned_to=NULL, cpf=NULL, date_issued=NULL WHERE id=%s",
+                    "UPDATE items SET status='Disponível', assigned_to=NULL, cpf=NULL, date_issued=NULL, pessoa_juridica=0 WHERE id=%s",
                     (item_id,),
                 )
 
@@ -833,6 +857,13 @@ class InventoryDBManager:
             "{{cep}}": cep,  # rede de segurança: nunca deixa o token cru se o segmento acima não bater
             "{{cnpj}}": unidade.get("cnpj") or "",
             "{{nome}}": user or "",
+            # Corrige um defeito do documento original: o parágrafo do empregado
+            # dizia sempre "pessoa jurídica de direito privado", mas o campo ao
+            # lado é CPF — empregado é pessoa física na esmagadora maioria dos
+            # casos. O padrão agora é "pessoa física"; o toggle pessoa_juridica
+            # (desmarcado por padrão no formulário de empréstimo) permite marcar
+            # o caso em que o recebedor é de fato representante de pessoa jurídica.
+            "{{tipo_pessoa}}": "pessoa jurídica de direito privado" if item.get("pessoa_juridica") else "pessoa física",
             "{{cpf}}": format_cpf(item.get("cpf", "")),
             "{{tipo}}": item.get("tipo", "") or "",
             "{{marca_modelo}}": marca_modelo,
@@ -910,7 +941,7 @@ class InventoryDBManager:
                     COALESCE(i.nota_fiscal, h.nota_fiscal) as nota_fiscal,
                     COALESCE(i.fornecedor, h.fornecedor) as fornecedor,
                     h.usuario, h.cpf, h.cargo, h.center_cost, h.setor, h.revenda,
-                    h.operacao_anexo, h.termo_assinado_anexo,
+                    h.operacao_anexo, h.termo_assinado_anexo, h.pessoa_juridica,
                     h.data_operacao, h.operation
                 {origem}
                 ORDER BY h.data_operacao DESC, h.id DESC
@@ -979,12 +1010,16 @@ class InventoryDBManager:
                 if op == "Confirmação Empréstimo":
                     cur.execute("UPDATE items SET status='Pendente' WHERE id=%s", (item_id,))
                 elif op == "Empréstimo":
-                    cur.execute("UPDATE items SET status='Disponível', assigned_to=NULL, cpf=NULL, date_issued=NULL WHERE id=%s", (item_id,))
+                    cur.execute("UPDATE items SET status='Disponível', assigned_to=NULL, cpf=NULL, date_issued=NULL, pessoa_juridica=0 WHERE id=%s", (item_id,))
                 elif op == "Confirmação Devolução":
                     cur.execute("UPDATE items SET status='Pendente Devolução' WHERE id=%s", (item_id,))
                 elif op == "Devolução":
+                    # pessoa_juridica também é restaurado a partir do histórico do
+                    # empréstimo original — confirm_return() zera esse campo em
+                    # items, então sem essa leitura o estorno da devolução perderia
+                    # a informação de que o empréstimo era de pessoa jurídica.
                     cur.execute("""
-                        SELECT usuario, cpf, data_operacao FROM history
+                        SELECT usuario, cpf, data_operacao, pessoa_juridica FROM history
                         WHERE item_id=%s AND operation IN ('Empréstimo','Confirmação Empréstimo') AND id<%s AND is_reversed=0
                         ORDER BY data_operacao DESC, id DESC LIMIT 1
                     """, (item_id, history_id))
@@ -992,8 +1027,8 @@ class InventoryDBManager:
                     if not last_loan:
                         return False, "Não foi possível encontrar o empréstimo original."
                     cur.execute(
-                        "UPDATE items SET status='Indisponível', assigned_to=%s, cpf=%s, date_issued=%s WHERE id=%s",
-                        (last_loan["usuario"], last_loan["cpf"], last_loan["data_operacao"], item_id),
+                        "UPDATE items SET status='Indisponível', assigned_to=%s, cpf=%s, date_issued=%s, pessoa_juridica=%s WHERE id=%s",
+                        (last_loan["usuario"], last_loan["cpf"], last_loan["data_operacao"], last_loan.get("pessoa_juridica") or 0, item_id),
                     )
                 elif op == "Cadastro":
                     cur.execute("UPDATE items SET is_active=0 WHERE id=%s", (item_id,))

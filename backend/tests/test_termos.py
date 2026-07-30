@@ -208,6 +208,41 @@ class TestGeracaoDoTermoDeEmprestimo:
         assert "99.888.777/0001-66" in texto
         assert "Paulo Afonso/BA" in texto
 
+    def test_sem_o_toggle_o_termo_diz_pessoa_fisica(self, monkeypatch):
+        """Correção do defeito do documento original: o parágrafo do empregado
+        dizia sempre "pessoa jurídica de direito privado", ao lado do campo CPF
+        — inconsistente, já que pessoa jurídica não tem CPF. O padrão agora é
+        "pessoa física", e é o que sai quando o item não carrega
+        pessoa_juridica (chave ausente, como faria um item nunca emprestado com
+        o toggle, ou emprestado antes desta mudança existir)."""
+        item = _item_padrao()
+        assert "pessoa_juridica" not in item  # doc padrão não define a chave de propósito
+        ok, resultado, _ = _gerar_termo_emprestimo(monkeypatch, item, _unidade_padrao())
+        assert ok, resultado
+        texto = _texto_completo(DocxDocument(io.BytesIO(resultado)))
+        assert "EMPREGADO(A): Fulano de Tal, pessoa física, inscrita no CPF" in texto
+        assert "pessoa jurídica de direito privado" not in texto
+
+    def test_toggle_desligado_produz_pessoa_fisica(self, monkeypatch):
+        ok, resultado, _ = _gerar_termo_emprestimo(
+            monkeypatch, _item_padrao(pessoa_juridica=False), _unidade_padrao()
+        )
+        assert ok, resultado
+        texto = _texto_completo(DocxDocument(io.BytesIO(resultado)))
+        assert "pessoa física" in texto
+        assert "pessoa jurídica de direito privado" not in texto
+
+    def test_toggle_ligado_produz_pessoa_juridica(self, monkeypatch):
+        ok, resultado, _ = _gerar_termo_emprestimo(
+            monkeypatch, _item_padrao(pessoa_juridica=True), _unidade_padrao()
+        )
+        assert ok, resultado
+        texto = _texto_completo(DocxDocument(io.BytesIO(resultado)))
+        assert "pessoa jurídica de direito privado" in texto
+        # "pessoa física" não deve aparecer isolado nesse trecho — checa que a
+        # frase inteira do toggle ligado está presente, não uma mistura dos dois.
+        assert "EMPREGADO(A): Fulano de Tal, pessoa jurídica de direito privado, inscrita no CPF" in texto
+
     def test_negrito_do_rotulo_tipo_de_equipamento_e_preservado(self, monkeypatch):
         """Regressão do bug corrigido pela T1: `paragraph.text = ...` colapsava
         todos os runs num único run sem formatação, e o rótulo em negrito

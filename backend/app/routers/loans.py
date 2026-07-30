@@ -37,6 +37,7 @@ def initiate_loan(
         body.revenda,
         body.date_issue,
         current_user.username,
+        pessoa_juridica=body.pessoa_juridica,
     )
     if not ok:
         raise HTTPException(status_code=400, detail=msg)

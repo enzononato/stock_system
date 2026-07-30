@@ -31,6 +31,10 @@ export default function LoanPage() {
   const [setor, setSetor] = useState('')
   const [cargo, setCargo] = useState('')
   const [revenda, setRevenda] = useState('')
+  // Desmarcado por padrão: o termo assume "pessoa física" (o caso comum, já
+  // que o campo ao lado no termo é CPF). Marcar apenas quando o recebedor for
+  // de fato representante de pessoa jurídica.
+  const [pessoaJuridica, setPessoaJuridica] = useState(false)
   const [dateIssue, setDateIssue] = useState(() => {
     const d = new Date()
     return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`
@@ -66,7 +70,10 @@ export default function LoanPage() {
     // antiga só checava a contagem de dígitos e aceitava sequências como
     // 111.111.111-11, que nunca são CPFs reais.
     if (!isValidCpf(cpf)) { toast('CPF inválido.', 'error'); return }
-    loanMutation.mutate({ item_id: Number(selectedItemId), usuario, cpf, center_cost: centerCost, cargo, setor, revenda, date_issue: dateIssue })
+    loanMutation.mutate({
+      item_id: Number(selectedItemId), usuario, cpf, center_cost: centerCost, cargo, setor, revenda,
+      date_issue: dateIssue, pessoa_juridica: pessoaJuridica,
+    })
   }
 
   const pendingColumns: ColumnDef<Item, unknown>[] = [
@@ -119,6 +126,15 @@ export default function LoanPage() {
           <div className="flex flex-col gap-1.5">
             <Label>CPF *</Label>
             <Input value={cpf} onChange={e => setCpf(maskCpfInput(e.target.value))} placeholder="000.000.000-00" maxLength={14} required />
+            <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none mt-1">
+              <input
+                type="checkbox"
+                checked={pessoaJuridica}
+                onChange={(e) => setPessoaJuridica(e.target.checked)}
+                className="rounded border-slate-300"
+              />
+              É pessoa jurídica
+            </label>
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Cargo *</Label>

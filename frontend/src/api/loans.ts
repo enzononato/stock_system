@@ -9,6 +9,12 @@ export async function initiateLoan(data: {
   setor: string
   revenda: string
   date_issue: string
+  /**
+   * Desmarcado por padrão: o termo assume "pessoa física" (o caso comum, já
+   * que o campo ao lado no termo é CPF). Marque apenas quando o recebedor for
+   * de fato representante de pessoa jurídica.
+   */
+  pessoa_juridica?: boolean
 }) {
   const res = await api.post('/loans', data)
   return res.data

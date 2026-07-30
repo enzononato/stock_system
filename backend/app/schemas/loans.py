@@ -12,6 +12,10 @@ class LoanRequest(BaseModel):
     setor: str
     revenda: str
     date_issue: str  # dd/mm/yyyy
+    # Desmarcado por padrão: o termo assume "pessoa física" (o caso comum, já que
+    # o campo ao lado é CPF). Marcar apenas quando o recebedor for de fato
+    # representante de pessoa jurídica.
+    pessoa_juridica: bool = False
 
     @field_validator("cpf")
     @classmethod
