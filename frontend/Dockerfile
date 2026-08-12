@@ -17,5 +17,22 @@ RUN npm run build
 # Etapa 2: servidor Nginx
 FROM nginx:alpine
 COPY --from=build /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Template (não config final): a imagem oficial roda envsubst sobre todo
+# arquivo em /etc/nginx/templates/*.template na inicialização, gravando o
+# resultado em /etc/nginx/conf.d/ com o mesmo nome sem o sufixo .template.
+# Só substitui as variáveis realmente definidas no ambiente do container, e
+# nunca as variáveis nativas do nginx ($host, $remote_addr etc.), que usam a
+# mesma sintaxe $NOME — por isso é seguro usar num arquivo cheio delas.
+#
+# Os defaults abaixo reproduzem o nome/porta do serviço no docker-compose.yml
+# deste repo, então `docker compose up` continua funcionando sem nenhuma
+# variável extra. Numa plataforma que não permita nomear o serviço do backend
+# como "backend" (ex.: EasyPanel, Railway), sobrescreva BACKEND_HOST (e
+# BACKEND_PORT, se a porta interna não for 8000) nas variáveis de ambiente do
+# serviço do frontend — sem precisar tocar nesta imagem.
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+ENV BACKEND_HOST=backend
+ENV BACKEND_PORT=8000
+
 EXPOSE 80
