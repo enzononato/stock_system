@@ -25,8 +25,20 @@ export async function generateAndDownloadLoanTerm(itemId: number): Promise<void>
     a.download = `termo_emprestimo_${itemId}.docx`
     a.click()
     URL.revokeObjectURL(url)
-  } catch {
-    toast('Erro ao gerar termo.', 'error')
+  } catch (err: any) {
+    let msg = 'Erro ao gerar termo.'
+    if (err.response?.data instanceof Blob) {
+      try {
+        const text = await err.response.data.text()
+        const json = JSON.parse(text)
+        if (json.detail) msg = json.detail
+      } catch {
+        // fallback para mensagem padrão
+      }
+    } else if (err.response?.data?.detail) {
+      msg = err.response.data.detail
+    }
+    toast(msg, 'error')
   }
 }
 

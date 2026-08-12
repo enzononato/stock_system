@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import { toast } from '@/components/ui/toast'
 import { DataTable } from '@/components/ui/DataTable'
 import { ConfirmacaoTermo, generateAndDownloadLoanTerm } from '@/components/equipment/ConfirmacaoTermo'
@@ -106,16 +107,17 @@ export default function LoanPage() {
       <form onSubmit={handleLoanSubmit} className="bg-white rounded-xl border p-6 space-y-4">
         <div className="flex flex-col gap-1.5">
           <Label>Equipamento *</Label>
-          <Select value={selectedItemId} onValueChange={setSelectedItemId} required>
-            <SelectTrigger><SelectValue placeholder="Selecione um item disponível" /></SelectTrigger>
-            <SelectContent>
-              {disponivel.map(i => (
-                <SelectItem key={i.id} value={String(i.id)}>
-                  #{i.id} — {i.tipo} {i.brand} {i.model}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SearchableSelect
+            options={disponivel.map((i) => ({
+              value: String(i.id),
+              label: `#${i.id} — ${i.tipo} ${i.brand || ''} ${i.model || ''}`,
+              subtitle: [i.revenda, i.identificador].filter(Boolean).join(' • '),
+            }))}
+            value={selectedItemId}
+            onValueChange={setSelectedItemId}
+            placeholder="Selecione ou busque um equipamento disponível..."
+            searchPlaceholder="Buscar por ID, tipo, marca, modelo, patrimônio..."
+          />
         </div>
 
         <div className="grid grid-cols-2 gap-4">

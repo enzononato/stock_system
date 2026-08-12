@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { FileUpload } from '@/components/ui/FileUpload'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import { toast } from '@/components/ui/toast'
 import { Link2, Unlink, RefreshCw } from 'lucide-react'
 
@@ -157,18 +158,19 @@ export default function LinkPeripheralPage() {
       {/* Seletor de equipamento */}
       <div className="bg-white rounded-xl border p-4 flex flex-col gap-2">
         <Label>Selecione o Equipamento</Label>
-        <Select value={selectedItemId} onValueChange={setSelectedItemId}>
-          <SelectTrigger className="max-w-md">
-            <SelectValue placeholder="Selecione um equipamento..." />
-          </SelectTrigger>
-          <SelectContent>
-            {linkableItems.map(i => (
-              <SelectItem key={i.id} value={String(i.id)}>
-                #{i.id} — {i.tipo} {i.brand} {i.model} ({i.revenda})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="max-w-md">
+          <SearchableSelect
+            options={linkableItems.map((i) => ({
+              value: String(i.id),
+              label: `#${i.id} — ${i.tipo} ${i.brand || ''} ${i.model || ''}`,
+              subtitle: [i.revenda, i.identificador].filter(Boolean).join(' • '),
+            }))}
+            value={selectedItemId}
+            onValueChange={setSelectedItemId}
+            placeholder="Selecione ou busque um equipamento..."
+            searchPlaceholder="Buscar por ID, tipo, marca, modelo, patrimônio..."
+          />
+        </div>
         {selectedItem && (
           <p className="text-sm text-slate-500">
             Status: <strong>{selectedItem.status}</strong> · Revenda: <strong>{selectedItem.revenda}</strong>

@@ -4,6 +4,7 @@ import { listItemsPaginated, removeItem } from '@/api/items'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import { FileUpload } from '@/components/ui/FileUpload'
 import { toast } from '@/components/ui/toast'
 import { useConstants } from '@/hooks/useConstants'
@@ -66,16 +67,17 @@ export default function RemovePage() {
       <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-red-100 p-6 space-y-4">
         <div className="flex flex-col gap-1.5">
           <Label>Equipamento *</Label>
-          <Select value={selectedId} onValueChange={setSelectedId} required>
-            <SelectTrigger><SelectValue placeholder="Selecione um item" /></SelectTrigger>
-            <SelectContent>
-              {disponiveis.map(i => (
-                <SelectItem key={i.id} value={String(i.id)}>
-                  #{i.id} — {i.tipo} {i.brand} {i.model} ({i.revenda})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SearchableSelect
+            options={disponiveis.map((i) => ({
+              value: String(i.id),
+              label: `#${i.id} — ${i.tipo} ${i.brand || ''} ${i.model || ''}`,
+              subtitle: [i.revenda, i.identificador].filter(Boolean).join(' • '),
+            }))}
+            value={selectedId}
+            onValueChange={setSelectedId}
+            placeholder="Selecione ou busque um equipamento..."
+            searchPlaceholder="Buscar por ID, tipo, marca, modelo, patrimônio..."
+          />
         </div>
 
         <div className="flex flex-col gap-1.5">

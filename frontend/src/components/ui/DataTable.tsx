@@ -11,31 +11,14 @@ import {
 import { Input } from './input'
 import { Button } from './button'
 import { cn } from '@/lib/utils'
-import { ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ArrowUpDown, ChevronLeft, ChevronRight, Search, X } from 'lucide-react'
 
-/**
- * Paginação server-side opcional do `DataTable` (ver `DataTableProps.pagination`).
- * Quando fornecida, `data` deve conter apenas os registros da página atual
- * (ex.: o `items` de `listHistoryPaginated({ limit, offset })`), e `total` é a
- * contagem real no servidor — não `data.length`.
- */
 export interface DataTablePaginationProps {
-  /** Total de registros no servidor (não apenas os da página atual). */
   total: number
-  /** Página atual, base 0. */
   pageIndex: number
-  /** Quantidade de registros por página. */
   pageSize: number
-  /** Chamado com o novo `pageIndex` quando o usuário navega (Anterior/Próxima). */
   onPageChange: (index: number) => void
-  /** Termo de busca atual, controlado por quem faz a query. */
   search?: string
-  /**
-   * Habilita a busca server-side. Quando informado, o campo de busca volta a
-   * aparecer e o termo é repassado para cá em vez de filtrar no cliente — que,
-   * com paginação, só varreria a página carregada. Sem este callback o campo
-   * fica oculto, para não oferecer uma busca que mentiria sobre o alcance.
-   */
   onSearchChange?: (termo: string) => void
 }
 
@@ -44,23 +27,8 @@ interface DataTableProps<TData> {
   columns: ColumnDef<TData, unknown>[]
   searchPlaceholder?: string
   className?: string
-  /**
-   * Ausente (padrão): comportamento inalterado — client-side, `data` é a lista
-   * inteira, filtro/ordenação rodam no navegador e o rodapé mostra "N de M
-   * registros" com base em `data.length`. Nenhum chamador existente precisa
-   * mudar.
-   *
-   * Presente: assume que `data` é só a página atual vinda do servidor. Desliga
-   * o rodapé de contagem client-side e renderiza controles de navegação
-   * (Anterior/Próxima + "Página X de Y") usando `total`/`pageIndex`/`pageSize`.
-   * Ordenação por coluna continua ativa, mas só age sobre a página atual.
-   *
-   * A busca por texto livre no cliente é desativada nesse modo, porque
-   * filtraria apenas a página carregada e passaria a impressão falsa de ter
-   * varrido tudo. Para oferecer busca de verdade, passe `onSearchChange` no
-   * objeto `pagination`: o campo reaparece e o termo vai para o servidor.
-   */
   pagination?: DataTablePaginationProps
+  onRowClick?: (row: TData) => void
 }
 
 export function DataTable<TData>({
@@ -69,6 +37,7 @@ export function DataTable<TData>({
   searchPlaceholder = 'Buscar...',
   className,
   pagination,
+  onRowClick,
 }: DataTableProps<TData>) {
   const [globalFilter, setGlobalFilter] = useState('')
   const [sorting, setSorting] = useState<SortingState>([])
@@ -86,80 +55,117 @@ export function DataTable<TData>({
 
   const rows = table.getRowModel().rows
 
-  // Controles de paginação server-side (só fazem sentido quando `pagination` é passado).
   const pageSize = pagination?.pageSize || 1
   const pageCount = pagination ? Math.max(1, Math.ceil(pagination.total / pageSize)) : 0
   const currentPage = (pagination?.pageIndex ?? 0) + 1
   const rangeStart = pagination && pagination.total > 0 ? pagination.pageIndex * pageSize + 1 : 0
   const rangeEnd = pagination ? Math.min(pagination.total, (pagination.pageIndex + 1) * pageSize) : 0
 
+  const currentValue = pagination ? (pagination.search ?? '') : globalFilter
+  const handleSearchInput = (val: string) => {
+    if (pagination?.onSearchChange) {
+      pagination.onSearchChange(val)
+    } else {
+      setGlobalFilter(val)
+    }
+  }
+
+  const showSearchInput = pagination ? Boolean(pagination.onSearchChange) : true
+
   return (
-    <div className={cn('space-y-3', className)}>
-      {pagination ? (
-        // Busca server-side: o termo sobe para quem controla a query, que passa
-        // a varrer todos os registros e não só a página carregada.
-        pagination.onSearchChange && (
-          <Input
-            placeholder={searchPlaceholder}
-            value={pagination.search ?? ''}
-            onChange={(e) => pagination.onSearchChange!(e.target.value)}
-            className="max-w-sm"
-          />
-        )
-      ) : (
-        <Input
-          placeholder={searchPlaceholder}
-          value={globalFilter}
-          onChange={(e) => setGlobalFilter(e.target.value)}
-          className="max-w-sm"
-        />
+    <div className={cn('glass-card rounded-2xl p-5 border border-slate-200/80 space-y-4 shadow-sm', className)}>
+      {/* Search Header Bar */}
+      {showSearchInput && (
+        <div className="flex items-center justify-between gap-4">
+          <div className="relative max-w-md w-full">
+            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <Input
+              placeholder={searchPlaceholder}
+              value={currentValue}
+              onChange={(e) => handleSearchInput(e.target.value)}
+              className="pl-10 pr-9 bg-white/90 border-slate-200 focus-visible:ring-indigo-500/30 rounded-xl"
+            />
+            {currentValue && (
+              <button
+                onClick={() => handleSearchInput('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-100"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        </div>
       )}
-      <div className="rounded-md border overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 border-b">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <th
-                    key={header.id}
-                    className="px-4 py-3 text-left font-medium text-slate-600 whitespace-nowrap select-none"
-                    onClick={header.column.getToggleSortingHandler()}
-                    style={{ cursor: header.column.getCanSort() ? 'pointer' : 'default' }}
-                  >
-                    <div className="flex items-center gap-1">
-                      {flexRender(header.column.columnDef.header, header.getContext())}
-                      {header.column.getCanSort() && <ArrowUpDown size={12} className="opacity-40" />}
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            ))}
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={columns.length} className="px-4 py-8 text-center text-slate-400">
-                  Nenhum resultado encontrado.
-                </td>
-              </tr>
-            ) : (
-              rows.map((row) => (
-                <tr key={row.id} className="hover:bg-slate-50 transition-colors">
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-4 py-2.5 whitespace-nowrap">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
+
+      {/* Table Container */}
+      <div className="rounded-xl border border-slate-200/80 overflow-hidden bg-white/80 backdrop-blur-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-100/70 border-b border-slate-200/80">
+              {table.getHeaderGroups().map((headerGroup) => (
+                <tr key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <th
+                      key={header.id}
+                      className="px-4 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 whitespace-nowrap select-none"
+                      onClick={header.column.getToggleSortingHandler()}
+                      style={{ cursor: header.column.getCanSort() ? 'pointer' : 'default' }}
+                    >
+                      <div className="flex items-center gap-1.5 hover:text-indigo-600 transition-colors">
+                        {flexRender(header.column.columnDef.header, header.getContext())}
+                        {header.column.getCanSort() && <ArrowUpDown size={12} className="opacity-50" />}
+                      </div>
+                    </th>
                   ))}
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ))}
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={columns.length} className="px-4 py-12 text-center text-slate-400">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                        <Search size={20} />
+                      </div>
+                      <p className="text-sm font-medium text-slate-500">Nenhum resultado encontrado.</p>
+                      <p className="text-xs text-slate-400">Tente ajustar seus termos de busca ou filtros.</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                rows.map((row) => (
+                  <tr
+                    key={row.id}
+                    onClick={(e) => {
+                      const target = e.target as HTMLElement
+                      if (target.closest('button, a, input, select, [role="button"]')) {
+                        return
+                      }
+                      onRowClick?.(row.original)
+                    }}
+                    className={cn(
+                      'hover:bg-indigo-50/40 transition-colors duration-150 group',
+                      onRowClick && 'cursor-pointer'
+                    )}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <td key={cell.id} className="px-4 py-3 whitespace-nowrap text-slate-700 font-medium text-xs">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
+      {/* Pagination Footer */}
       {pagination ? (
-        <div className="flex items-center justify-between gap-4">
-          <p className="text-xs text-slate-400 whitespace-nowrap">
+        <div className="flex items-center justify-between gap-4 pt-1">
+          <p className="text-xs font-semibold text-slate-500 whitespace-nowrap">
             {pagination.total === 0 ? '0 registros' : `${rangeStart}–${rangeEnd} de ${pagination.total} registros`}
           </p>
           <div className="flex items-center gap-2">
@@ -169,10 +175,11 @@ export function DataTable<TData>({
               size="sm"
               onClick={() => pagination.onPageChange(pagination.pageIndex - 1)}
               disabled={pagination.pageIndex <= 0}
+              className="rounded-lg text-xs"
             >
               <ChevronLeft size={14} className="mr-1" />Anterior
             </Button>
-            <span className="text-xs text-slate-500 px-1 whitespace-nowrap">
+            <span className="text-xs font-bold text-slate-600 px-2 py-1 rounded-md bg-slate-100 whitespace-nowrap">
               Página {currentPage} de {pageCount}
             </span>
             <Button
@@ -181,16 +188,20 @@ export function DataTable<TData>({
               size="sm"
               onClick={() => pagination.onPageChange(pagination.pageIndex + 1)}
               disabled={pagination.pageIndex + 1 >= pageCount}
+              className="rounded-lg text-xs"
             >
               Próxima<ChevronRight size={14} className="ml-1" />
             </Button>
           </div>
         </div>
       ) : (
-        <p className="text-xs text-slate-400">
-          {table.getFilteredRowModel().rows.length} de {data.length} registros
-        </p>
+        <div className="flex items-center justify-between pt-1">
+          <p className="text-xs font-semibold text-slate-500">
+            {table.getFilteredRowModel().rows.length} de {data.length} registros
+          </p>
+        </div>
       )}
     </div>
   )
 }
+

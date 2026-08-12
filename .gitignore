@@ -59,3 +59,6 @@ frontend/coverage/
 # Termo de origem enviado pelo usuário: contém dados pessoais reais (nome e CPF)
 # de um funcionário. O template derivado, sem PII, é backend/modelos/termo.docx.
 /Termo.docx
+
+# Backup manual do projeto (não deve ser versionado)
+/stock_system.rar
