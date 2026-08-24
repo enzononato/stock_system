@@ -1,0 +1,88 @@
+.outer-container {
+  display: flex;
+  min-height: 100%;
+  flex: 1 1 0%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.step-circle-container {
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+  border-radius: 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+}
+
+.step-indicator-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  padding: 1.5rem 1.5rem 0;
+}
+
+.step-content-default { position: relative; overflow: hidden; }
+.step-default { padding: 1.5rem; }
+
+.footer-container { padding: 0 1.5rem 1.5rem; }
+.footer-nav { margin-top: 1.5rem; display: flex; }
+.footer-nav.spread { justify-content: space-between; }
+.footer-nav.end { justify-content: flex-end; }
+
+.back-button {
+  transition: color 200ms;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+}
+.back-button:hover { color: var(--foreground); }
+.back-button.inactive { pointer-events: none; opacity: 0.5; }
+
+.next-button {
+  transition: opacity 200ms;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  font-weight: 500;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+  padding: 8px 18px;
+  cursor: pointer;
+  border: none;
+}
+.next-button:hover { opacity: 0.9; }
+
+.step-indicator { position: relative; cursor: pointer; outline: none; }
+.step-indicator-inner {
+  display: flex;
+  height: 28px;
+  width: 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  font-weight: 600;
+}
+.active-dot { height: 8px; width: 8px; border-radius: 9999px; background-color: currentColor; }
+.step-number { font-size: 12px; }
+
+.step-connector {
+  position: relative;
+  margin: 0 8px;
+  height: 2px;
+  flex: 1;
+  overflow: hidden;
+  border-radius: 4px;
+  background-color: var(--secondary);
+}
+.step-connector-inner { position: absolute; left: 0; top: 0; height: 100%; }
+.check-icon { height: 14px; width: 14px; }

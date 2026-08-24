@@ -4,23 +4,26 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center whitespace-nowrap rounded-xl text-sm font-semibold ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98] select-none',
+  'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md text-[13px] font-medium tracking-[-0.01em] ring-offset-background transition-all duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-40 active:scale-[0.98] select-none',
   {
     variants: {
       variant: {
-        default: 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-md shadow-indigo-600/20',
-        gradient: 'bg-gradient-to-r from-indigo-600 via-indigo-500 to-violet-600 text-white hover:from-indigo-500 hover:to-violet-500 shadow-md shadow-indigo-500/25 border border-white/20',
-        destructive: 'bg-rose-600 text-white hover:bg-rose-500 shadow-md shadow-rose-600/20',
-        outline: 'border border-slate-200 bg-white/80 hover:bg-slate-100 hover:text-slate-900 shadow-sm backdrop-blur-sm',
-        secondary: 'bg-slate-100 text-slate-900 hover:bg-slate-200/80',
-        ghost: 'hover:bg-slate-100 hover:text-slate-900',
-        link: 'text-indigo-600 underline-offset-4 hover:underline',
+        default:
+          'bg-primary text-primary-foreground shadow-[0_1px_0_rgba(255,255,255,0.08)_inset,0_1px_2px_rgba(0,0,0,0.3)] hover:brightness-[1.08] hover:shadow-[0_1px_0_rgba(255,255,255,0.1)_inset,0_2px_8px_-2px_var(--primary)]',
+        destructive:
+          'bg-destructive text-destructive-foreground shadow-[0_1px_2px_rgba(0,0,0,0.3)] hover:brightness-[1.08]',
+        outline:
+          'border border-border bg-transparent text-foreground hover:bg-accent hover:border-border/80 shadow-[0_1px_2px_rgba(0,0,0,0.15)]',
+        secondary:
+          'bg-secondary text-secondary-foreground border border-border/60 hover:bg-accent shadow-[0_1px_2px_rgba(0,0,0,0.15)]',
+        ghost: 'text-muted-foreground hover:bg-accent hover:text-foreground',
+        link: 'text-primary underline-offset-4 hover:underline p-0 h-auto',
       },
       size: {
-        default: 'h-10 px-4 py-2',
-        sm: 'h-8 rounded-lg px-3 text-xs font-semibold',
-        lg: 'h-11 rounded-xl px-7 text-base font-bold',
-        icon: 'h-9 w-9 rounded-lg',
+        default: 'h-9 px-3.5',
+        sm: 'h-8 rounded-md px-2.5 text-xs',
+        lg: 'h-10 rounded-md px-5 text-sm',
+        icon: 'h-9 w-9 rounded-md',
       },
     },
     defaultVariants: { variant: 'default', size: 'default' },
@@ -42,4 +45,3 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 Button.displayName = 'Button'
 
 export { Button, buttonVariants }
-

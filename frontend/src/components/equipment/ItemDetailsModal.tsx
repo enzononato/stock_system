@@ -333,7 +333,7 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
 
             {hasRole('Gestor', 'Técnico') && (
               <Button
-                variant="gradient"
+                variant="default"
                 size="sm"
                 onClick={() => {
                   onClose()

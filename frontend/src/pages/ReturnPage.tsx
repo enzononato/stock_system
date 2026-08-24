@@ -101,13 +101,13 @@ export default function ReturnPage() {
     <div className="space-y-8 max-w-4xl">
       <div>
         <h2 className="text-xl font-semibold">Devolver Equipamento</h2>
-        <p className="text-sm text-slate-500">Gerencie as devoluções de equipamentos emprestados.</p>
+        <p className="text-sm text-muted-foreground">Gerencie as devoluções de equipamentos emprestados.</p>
       </div>
 
       {/* Empréstimos ativos */}
       <div className="space-y-3">
-        <h3 className="font-medium text-slate-700">Empréstimos Ativos ({indisponivel.length})</h3>
-        <p className="text-sm text-slate-500">Selecione um item para gerar o termo de devolução.</p>
+        <h3 className="font-medium text-foreground">Empréstimos Ativos ({indisponivel.length})</h3>
+        <p className="text-sm text-muted-foreground">Selecione um item para gerar o termo de devolução.</p>
         <DataTable data={indisponivel} columns={activeColumns} searchPlaceholder="Buscar por usuário, item..." />
       </div>
 
@@ -135,7 +135,7 @@ export default function ReturnPage() {
       {/* Devoluções pendentes de confirmação */}
       {pendenteDevolucao.length > 0 && (
         <div className="space-y-3">
-          <h3 className="font-medium text-slate-700">Pendente de Confirmação ({pendenteDevolucao.length})</h3>
+          <h3 className="font-medium text-foreground">Pendente de Confirmação ({pendenteDevolucao.length})</h3>
           <DataTable data={pendenteDevolucao} columns={pendingColumns} searchPlaceholder="Buscar..." />
         </div>
       )}

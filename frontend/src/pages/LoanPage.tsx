@@ -101,10 +101,10 @@ export default function LoanPage() {
     <div className="space-y-8 max-w-3xl">
       <div>
         <h2 className="text-xl font-semibold">Emprestar Equipamento</h2>
-        <p className="text-sm text-slate-500">Preencha os dados e inicie o processo de empréstimo.</p>
+        <p className="text-sm text-muted-foreground">Preencha os dados e inicie o processo de empréstimo.</p>
       </div>
 
-      <form onSubmit={handleLoanSubmit} className="bg-white rounded-xl border p-6 space-y-4">
+      <form onSubmit={handleLoanSubmit} className="bg-card rounded-xl border p-6 space-y-4">
         <div className="flex flex-col gap-1.5">
           <Label>Equipamento *</Label>
           <SearchableSelect
@@ -128,12 +128,12 @@ export default function LoanPage() {
           <div className="flex flex-col gap-1.5">
             <Label>CPF *</Label>
             <Input value={cpf} onChange={e => setCpf(maskCpfInput(e.target.value))} placeholder="000.000.000-00" maxLength={14} required />
-            <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none mt-1">
+            <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none mt-1">
               <input
                 type="checkbox"
                 checked={pessoaJuridica}
                 onChange={(e) => setPessoaJuridica(e.target.checked)}
-                className="rounded border-slate-300"
+                className="rounded border-border"
               />
               É pessoa jurídica
             </label>
@@ -195,7 +195,7 @@ export default function LoanPage() {
       {/* Lista de empréstimos pendentes de confirmação */}
       {pendentes.length > 0 && (
         <div className="space-y-3">
-          <h3 className="font-medium text-slate-700">Empréstimos Pendentes de Confirmação</h3>
+          <h3 className="font-medium text-foreground">Empréstimos Pendentes de Confirmação</h3>
           <DataTable data={pendentes} columns={pendingColumns} searchPlaceholder="Buscar..." />
         </div>
       )}

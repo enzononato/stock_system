@@ -68,10 +68,10 @@ export default function ReportPage() {
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-semibold">Relatório Mensal</h2>
-        <p className="text-sm text-slate-500">Visualize todas as operações de um determinado mês.</p>
+        <p className="text-sm text-muted-foreground">Visualize todas as operações de um determinado mês.</p>
       </div>
 
-      <div className="flex items-end gap-4 bg-white rounded-xl border p-4">
+      <div className="flex items-end gap-4 bg-card rounded-xl border p-4">
         <div className="flex flex-col gap-1.5">
           <Label>Ano</Label>
           <Input value={year} onChange={e => setYear(e.target.value)} className="w-24" />
@@ -93,7 +93,7 @@ export default function ReportPage() {
       </div>
 
       {isLoading ? (
-        <div className="py-8 text-center text-slate-400">Gerando relatório...</div>
+        <div className="py-8 text-center text-muted-foreground">Gerando relatório...</div>
       ) : (
         <DataTable data={report} columns={columns} searchPlaceholder="Buscar no relatório..." />
       )}

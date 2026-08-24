@@ -8,33 +8,38 @@ interface BadgeProps {
 }
 
 const variantClasses = {
-  default: 'bg-slate-100/80 text-slate-700 border-slate-200/80',
-  success: 'bg-emerald-500/10 text-emerald-700 border-emerald-300/60 shadow-sm shadow-emerald-500/10',
-  warning: 'bg-amber-500/10 text-amber-700 border-amber-300/60 shadow-sm shadow-amber-500/10',
-  danger: 'bg-rose-500/10 text-rose-700 border-rose-300/60 shadow-sm shadow-rose-500/10',
-  info: 'bg-sky-500/10 text-sky-700 border-sky-300/60 shadow-sm shadow-sky-500/10',
-  purple: 'bg-purple-500/10 text-purple-700 border-purple-300/60 shadow-sm shadow-purple-500/10',
+  default: 'bg-secondary/70 text-muted-foreground border-border/70',
+  success: 'bg-success/10 text-success border-success/25',
+  warning: 'bg-warning/10 text-warning border-warning/25',
+  danger: 'bg-destructive/10 text-destructive border-destructive/25',
+  info: 'bg-info/10 text-info border-info/25',
+  purple: 'bg-purple/10 text-purple-light border-purple/25',
 }
 
 const dotClasses = {
-  default: 'bg-slate-400',
-  success: 'bg-emerald-500 animate-pulse',
-  warning: 'bg-amber-500 animate-pulse',
-  danger: 'bg-rose-500',
-  info: 'bg-sky-500',
-  purple: 'bg-purple-500 animate-pulse',
+  default: 'bg-muted-foreground',
+  success: 'bg-success',
+  warning: 'bg-warning',
+  danger: 'bg-destructive',
+  info: 'bg-info',
+  purple: 'bg-purple',
 }
 
 export function Badge({ children, className, variant = 'default', showDot = false }: BadgeProps) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold border backdrop-blur-md transition-all select-none',
+        'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium border select-none tracking-[-0.01em]',
         variantClasses[variant],
         className
       )}
     >
-      {showDot && <span className={cn('h-1.5 w-1.5 rounded-full', dotClasses[variant])} />}
+      {showDot && (
+        <span className="relative flex h-1.5 w-1.5">
+          <span className={cn('absolute inline-flex h-full w-full rounded-full opacity-60 animate-ping', dotClasses[variant])} />
+          <span className={cn('relative inline-flex h-1.5 w-1.5 rounded-full', dotClasses[variant])} />
+        </span>
+      )}
       {children}
     </span>
   )
@@ -49,4 +54,3 @@ export function StatusBadge({ status }: { status?: string }) {
   if (status.startsWith('Pendente')) return <Badge variant="warning" showDot>{status}</Badge>
   return <Badge variant="default">{status}</Badge>
 }
-

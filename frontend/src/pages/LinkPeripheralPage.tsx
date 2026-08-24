@@ -46,12 +46,12 @@ function PeripheralCard({
   variant?: 'default' | 'destructive'
 }) {
   return (
-    <div className="flex items-center justify-between rounded-lg border bg-white px-4 py-3 shadow-sm">
+    <div className="flex items-center justify-between rounded-lg border bg-card px-4 py-3 shadow-sm">
       <div className="flex flex-col gap-0.5">
-        <span className="text-sm font-medium text-slate-800">
+        <span className="text-sm font-medium text-foreground">
           {peripheral.tipo} — {peripheral.brand || '-'} {peripheral.model || ''}
         </span>
-        <span className="text-xs text-slate-400">S/N: {peripheral.identificador || '-'}</span>
+        <span className="text-xs text-muted-foreground">S/N: {peripheral.identificador || '-'}</span>
       </div>
       <div className="flex items-center gap-3">
         <Badge variant={peripheral.status === 'Disponível' ? 'success' : peripheral.status === 'Em Uso' ? 'warning' : 'danger'}>
@@ -152,11 +152,11 @@ export default function LinkPeripheralPage() {
     <div className="space-y-6 max-w-4xl">
       <div>
         <h2 className="text-xl font-semibold">Vincular Periféricos</h2>
-        <p className="text-sm text-slate-500">Associe periféricos a equipamentos como desktops, notebooks, switches e impressoras.</p>
+        <p className="text-sm text-muted-foreground">Associe periféricos a equipamentos como desktops, notebooks, switches e impressoras.</p>
       </div>
 
       {/* Seletor de equipamento */}
-      <div className="bg-white rounded-xl border p-4 flex flex-col gap-2">
+      <div className="bg-card rounded-xl border p-4 flex flex-col gap-2">
         <Label>Selecione o Equipamento</Label>
         <div className="max-w-md">
           <SearchableSelect
@@ -172,7 +172,7 @@ export default function LinkPeripheralPage() {
           />
         </div>
         {selectedItem && (
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-muted-foreground">
             Status: <strong>{selectedItem.status}</strong> · Revenda: <strong>{selectedItem.revenda}</strong>
           </p>
         )}
@@ -183,13 +183,13 @@ export default function LinkPeripheralPage() {
           {/* Periféricos vinculados */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="font-medium text-slate-700">Vinculados ({linkedPeripherals.length})</h3>
+              <h3 className="font-medium text-foreground">Vinculados ({linkedPeripherals.length})</h3>
               <Button size="sm" variant="ghost" onClick={() => refetchLinked()}>
                 <RefreshCw size={13} />
               </Button>
             </div>
             {linkedPeripherals.length === 0 ? (
-              <p className="text-sm text-slate-400 py-4 text-center border rounded-lg">Nenhum periférico vinculado.</p>
+              <p className="text-sm text-muted-foreground py-4 text-center border rounded-lg">Nenhum periférico vinculado.</p>
             ) : (
               <div className="space-y-2">
                 {linkedPeripherals.map(p => (
@@ -215,9 +215,9 @@ export default function LinkPeripheralPage() {
 
           {/* Periféricos disponíveis */}
           <div className="space-y-3">
-            <h3 className="font-medium text-slate-700">Disponíveis ({availablePeripherals.length})</h3>
+            <h3 className="font-medium text-foreground">Disponíveis ({availablePeripherals.length})</h3>
             {availablePeripherals.length === 0 ? (
-              <p className="text-sm text-slate-400 py-4 text-center border rounded-lg">Nenhum periférico disponível.</p>
+              <p className="text-sm text-muted-foreground py-4 text-center border rounded-lg">Nenhum periférico disponível.</p>
             ) : (
               <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
                 {availablePeripherals.map(p => (

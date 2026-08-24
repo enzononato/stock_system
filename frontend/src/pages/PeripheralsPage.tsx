@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { listPeripherals, createPeripheral, deletePeripheral } from '@/api/peripherals'
 import { DataTable } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/button'
+import { KpiCard } from '@/components/ui/KpiCard'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -118,16 +119,22 @@ export default function PeripheralsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-xl font-semibold">Periféricos</h2>
-        <p className="text-sm text-slate-500">Cadastre e gerencie periféricos como mouse, teclado, monitor etc.</p>
+        <h2 className="text-xl font-semibold tracking-tight text-foreground">Periféricos</h2>
+        <p className="text-sm text-muted-foreground">Cadastre e gerencie periféricos como mouse, teclado, monitor etc.</p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <KpiCard label="Total de Periféricos" value={peripherals.length} tone="primary" highlighted />
+        <KpiCard label="Vinculados" value={peripherals.filter((p) => p.link_id).length} tone="success" />
+        <KpiCard label="Disponíveis" value={peripherals.filter((p) => !p.link_id).length} tone="info" />
       </div>
 
       {/* Formulário de cadastro */}
       <form
         onSubmit={(e) => { e.preventDefault(); mutation.mutate({ tipo, brand, model, identificador }) }}
-        className="bg-white rounded-xl border p-6 space-y-4"
+        className="bg-card rounded-xl border p-6 space-y-4"
       >
-        <h3 className="font-medium text-slate-700">Cadastrar Periférico</h3>
+        <h3 className="font-medium text-foreground">Cadastrar Periférico</h3>
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
             <Label>Tipo *</Label>
@@ -160,7 +167,7 @@ export default function PeripheralsPage() {
 
       {/* Lista */}
       {isLoading ? (
-        <div className="py-8 text-center text-slate-400">Carregando...</div>
+        <div className="py-8 text-center text-muted-foreground">Carregando...</div>
       ) : (
         <DataTable data={peripherals} columns={columns} searchPlaceholder="Buscar periférico..." />
       )}

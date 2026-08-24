@@ -86,24 +86,24 @@ export default function TermsPage() {
     <div className="space-y-8 max-w-5xl">
       <div>
         <h2 className="text-xl font-semibold">Termos de Responsabilidade</h2>
-        <p className="text-sm text-slate-500">Gerencie os termos de empréstimo pendentes e confirmados.</p>
+        <p className="text-sm text-muted-foreground">Gerencie os termos de empréstimo pendentes e confirmados.</p>
       </div>
 
       {/* Pendentes de confirmação */}
       <div className="space-y-3">
         <div className="flex items-center gap-2">
-          <h3 className="font-medium text-slate-700">Pendentes de Confirmação</h3>
+          <h3 className="font-medium text-foreground">Pendentes de Confirmação</h3>
           {pendentes.length > 0 && (
             <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
               {pendentes.length}
             </span>
           )}
         </div>
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-muted-foreground">
           Gere o termo, imprima, colete a assinatura e confirme o empréstimo com o PDF assinado.
         </p>
         {pendentes.length === 0 ? (
-          <p className="text-sm text-slate-400 py-6 text-center border rounded-xl bg-white">
+          <p className="text-sm text-muted-foreground py-6 text-center border rounded-xl bg-card">
             Nenhum empréstimo pendente de confirmação.
           </p>
         ) : (
@@ -126,9 +126,9 @@ export default function TermsPage() {
 
       {/* Empréstimos ativos (termos já confirmados) */}
       <div className="space-y-3">
-        <h3 className="font-medium text-slate-700">Empréstimos Ativos ({ativos.length})</h3>
+        <h3 className="font-medium text-foreground">Empréstimos Ativos ({ativos.length})</h3>
         {ativos.length === 0 ? (
-          <p className="text-sm text-slate-400 py-6 text-center border rounded-xl bg-white">
+          <p className="text-sm text-muted-foreground py-6 text-center border rounded-xl bg-card">
             Nenhum empréstimo ativo no momento.
           </p>
         ) : (

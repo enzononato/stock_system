@@ -75,33 +75,33 @@ export default function ChartsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900 font-heading">
+          <h2 className="text-2xl font-bold tracking-tight text-foreground font-heading">
             Dashboard & Indicadores
           </h2>
-          <p className="text-sm text-slate-500 font-medium">
+          <p className="text-sm text-muted-foreground font-medium">
             Análise temporal de empréstimos, devoluções e novos cadastros de equipamentos
           </p>
         </div>
       </div>
 
       {/* Filter Control Bar */}
-      <div className="flex flex-wrap items-end gap-4 p-4 rounded-2xl bg-white/80 backdrop-blur-md border border-slate-200/80 shadow-sm">
-        <div className="flex items-center gap-2 text-indigo-600 font-bold text-xs uppercase tracking-wider pr-2">
+      <div className="flex flex-wrap items-end gap-4 p-4 rounded-2xl bg-card backdrop-blur-md border border-border shadow-sm">
+        <div className="flex items-center gap-2 text-primary font-bold text-xs uppercase tracking-wider pr-2">
           <Filter size={16} />
           <span>Filtrar Período</span>
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label className="text-xs font-semibold text-slate-600">Ano</Label>
+          <Label className="text-xs font-semibold text-muted-foreground">Ano</Label>
           <Input
             value={year}
             onChange={(e) => setYear(e.target.value)}
-            className="w-28 rounded-xl bg-white border-slate-200"
+            className="w-28 rounded-xl bg-card border-border"
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label className="text-xs font-semibold text-slate-600">Mês</Label>
+          <Label className="text-xs font-semibold text-muted-foreground">Mês</Label>
           <Select value={month} onValueChange={setMonth}>
-            <SelectTrigger className="w-44 rounded-xl bg-white border-slate-200">
+            <SelectTrigger className="w-44 rounded-xl bg-card border-border">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -114,7 +114,7 @@ export default function ChartsPage() {
           </Select>
         </div>
         <Button
-          variant="gradient"
+          variant="default"
           onClick={() => setParams({ year: Number(year), month: Number(month) })}
           className="rounded-xl"
         >
@@ -125,52 +125,52 @@ export default function ChartsPage() {
 
       {/* Summary KPI Cards for Selected Month */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="glass-card rounded-2xl p-5 flex items-center gap-4">
-          <div className="h-12 w-12 rounded-xl bg-indigo-500/10 text-indigo-600 flex items-center justify-center font-bold">
+        <div className="surface rounded-lg rounded-2xl p-5 flex items-center gap-4">
+          <div className="h-12 w-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
             <ArrowUpRight size={24} />
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Empréstimos no Mês</p>
-            <p className="text-2xl font-bold text-indigo-600 font-heading">{totalEmprestimos}</p>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Empréstimos no Mês</p>
+            <p className="text-2xl font-bold text-primary font-heading">{totalEmprestimos}</p>
           </div>
         </div>
 
-        <div className="glass-card rounded-2xl p-5 flex items-center gap-4">
+        <div className="surface rounded-lg rounded-2xl p-5 flex items-center gap-4">
           <div className="h-12 w-12 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold">
             <ArrowDownLeft size={24} />
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Devoluções no Mês</p>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Devoluções no Mês</p>
             <p className="text-2xl font-bold text-emerald-600 font-heading">{totalDevolucoes}</p>
           </div>
         </div>
 
-        <div className="glass-card rounded-2xl p-5 flex items-center gap-4">
+        <div className="surface rounded-lg rounded-2xl p-5 flex items-center gap-4">
           <div className="h-12 w-12 rounded-xl bg-purple-500/10 text-purple-600 flex items-center justify-center font-bold">
             <PackagePlus size={24} />
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Cadastros no Mês</p>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cadastros no Mês</p>
             <p className="text-2xl font-bold text-purple-600 font-heading">{totalCadastros}</p>
           </div>
         </div>
       </div>
 
       {/* Gráfico 1: Empréstimos x Devoluções */}
-      <div className="glass-card rounded-2xl p-6 space-y-4">
+      <div className="surface rounded-lg rounded-2xl p-6 space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-base font-bold text-slate-800 font-heading">
+            <h3 className="text-base font-bold text-foreground font-heading">
               Movimentação de Empréstimos × Devoluções por Dia
             </h3>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-muted-foreground">
               Comparativo de saídas e retornos de equipamentos em {MONTHS[params.month - 1]} de {params.year}
             </p>
           </div>
         </div>
 
         {loansLoading ? (
-          <div className="h-72 flex items-center justify-center text-slate-400 text-sm">Carregando gráfico...</div>
+          <div className="h-72 flex items-center justify-center text-muted-foreground text-sm">Carregando gráfico...</div>
         ) : (
           <ResponsiveContainer width="100%" height={320}>
             <BarChart data={buildLoansChartData()} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -197,18 +197,18 @@ export default function ChartsPage() {
       </div>
 
       {/* Gráfico 2: Novos Cadastros */}
-      <div className="glass-card rounded-2xl p-6 space-y-4">
+      <div className="surface rounded-lg rounded-2xl p-6 space-y-4">
         <div>
-          <h3 className="text-base font-bold text-slate-800 font-heading">
+          <h3 className="text-base font-bold text-foreground font-heading">
             Novos Cadastros de Equipamentos por Dia
           </h3>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-muted-foreground">
             Volume de inclusões de patrimônios no acervo em {MONTHS[params.month - 1]} de {params.year}
           </p>
         </div>
 
         {regLoading ? (
-          <div className="h-72 flex items-center justify-center text-slate-400 text-sm">Carregando gráfico...</div>
+          <div className="h-72 flex items-center justify-center text-muted-foreground text-sm">Carregando gráfico...</div>
         ) : (
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={buildRegChartData()} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>

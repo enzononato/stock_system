@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { KpiCard } from '@/components/ui/KpiCard'
 import { toast } from '@/components/ui/toast'
 import { useAuth } from '@/contexts/AuthContext'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -56,7 +57,7 @@ function AttachmentCell({
   if (entry.operacao_anexo) attachments.push({ key: entry.operacao_anexo, label: 'Comprovante' })
   if (entry.termo_assinado_anexo) attachments.push({ key: entry.termo_assinado_anexo, label: 'Termo' })
 
-  if (attachments.length === 0) return <span className="text-slate-400">-</span>
+  if (attachments.length === 0) return <span className="text-muted-foreground">-</span>
 
   return (
     <div className="flex flex-col items-start gap-1">
@@ -66,7 +67,7 @@ function AttachmentCell({
           type="button"
           size="sm"
           variant="ghost"
-          className="h-7 px-2 text-slate-600 hover:text-slate-900"
+          className="h-7 px-2 text-muted-foreground hover:text-foreground"
           disabled={downloadingKey === key}
           onClick={() => onDownload(key)}
         >
@@ -108,6 +109,10 @@ export default function HistoryPage() {
 
   const history = data?.items ?? []
   const total = data?.total ?? 0
+
+  const emprestimos = history.filter((h) => h.operation?.includes('Empréstimo')).length
+  const devolucoes = history.filter((h) => h.operation?.includes('Devolução')).length
+  const estornos = history.filter((h) => h.operation === 'Estorno').length
 
   // Se um estorno (ou qualquer outra invalidação) reduzir o total de
   // registros a ponto da página atual deixar de existir (ex.: estornar o
@@ -211,7 +216,7 @@ export default function HistoryPage() {
           <Button
             size="sm"
             variant="ghost"
-            className="text-red-600 hover:text-red-700"
+            className="text-destructive hover:text-destructive/80"
             onClick={() => openReverseConfirm(row.original)}
           >
             <RotateCcw size={14} className="mr-1" />Estornar
@@ -223,15 +228,22 @@ export default function HistoryPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-xl font-semibold">Histórico</h2>
-        <p className="text-sm text-slate-500">Registro completo de todas as operações.</p>
+        <h2 className="text-xl font-semibold tracking-tight text-foreground">Histórico de Ações</h2>
+        <p className="text-sm text-muted-foreground">Registro completo de todas as operações do sistema</p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard label="Total de Registros" value={total} tone="primary" highlighted />
+        <KpiCard label="Empréstimos (página)" value={emprestimos} tone="info" />
+        <KpiCard label="Devoluções (página)" value={devolucoes} tone="success" />
+        <KpiCard label="Estornos (página)" value={estornos} tone="danger" />
       </div>
 
       {/* Confirmação de estorno — exige a senha do operador logado (T4) */}
       {reversingEntry && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 space-y-4">
-          <h3 className="font-medium text-amber-800">Confirmar Estorno — Operação #{reversingEntry.id}</h3>
-          <p className="text-sm text-amber-700">
+        <div className="bg-warning/10 border border-warning/25 rounded-lg p-6 space-y-4">
+          <h3 className="font-medium text-warning">Confirmar Estorno — Operação #{reversingEntry.id}</h3>
+          <p className="text-sm text-foreground/80">
             Isso desfará a operação <strong>&quot;{reversingEntry.operation ?? '-'}&quot;</strong>
             {reversingEntry.item_id != null && ` do item #${reversingEntry.item_id}`}
             {reversingEntry.peripheral_id != null && ` do periférico #${reversingEntry.peripheral_id}`}
@@ -248,7 +260,7 @@ export default function HistoryPage() {
               autoFocus
             />
           </div>
-          {reverseError && <p className="text-sm text-red-600">{reverseError}</p>}
+          {reverseError && <p className="text-sm text-destructive">{reverseError}</p>}
           <div className="flex gap-3">
             <Button
               variant="destructive"
@@ -263,7 +275,7 @@ export default function HistoryPage() {
       )}
 
       {isLoading ? (
-        <div className="py-8 text-center text-slate-400">Carregando...</div>
+        <div className="py-8 text-center text-muted-foreground">Carregando...</div>
       ) : (
         <DataTable
           data={history}

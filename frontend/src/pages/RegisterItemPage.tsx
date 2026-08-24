@@ -102,7 +102,7 @@ export default function RegisterItemPage({ mode }: Props) {
   }
 
   if (mode === 'edit' && loadingItem) {
-    return <div className="py-12 text-center text-slate-400">Carregando...</div>
+    return <div className="py-12 text-center text-muted-foreground">Carregando...</div>
   }
 
   return (
@@ -114,7 +114,7 @@ export default function RegisterItemPage({ mode }: Props) {
         <h2 className="text-xl font-semibold">{mode === 'create' ? 'Cadastrar Item' : 'Editar Item'}</h2>
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-xl border p-6 space-y-4">
+      <form onSubmit={handleSubmit} className="bg-card rounded-xl border p-6 space-y-4">
         {/* Tipo */}
         <div className="flex flex-col gap-1.5">
           <Label>Tipo *</Label>
@@ -178,7 +178,7 @@ export default function RegisterItemPage({ mode }: Props) {
         {/* Campos específicos do tipo */}
         {tipo && (
           <div className="border-t pt-4 space-y-4">
-            <p className="text-sm font-medium text-slate-600">Informações específicas — {tipo}</p>
+            <p className="text-sm font-medium text-muted-foreground">Informações específicas — {tipo}</p>
             <TypeSpecificFields
               tipo={tipo}
               values={specificFields}

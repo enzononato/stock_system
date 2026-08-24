@@ -73,22 +73,22 @@ export function DataTable<TData>({
   const showSearchInput = pagination ? Boolean(pagination.onSearchChange) : true
 
   return (
-    <div className={cn('glass-card rounded-2xl p-5 border border-slate-200/80 space-y-4 shadow-sm', className)}>
+    <div className={cn('surface rounded-lg p-4 space-y-4', className)}>
       {/* Search Header Bar */}
       {showSearchInput && (
         <div className="flex items-center justify-between gap-4">
           <div className="relative max-w-md w-full">
-            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
               placeholder={searchPlaceholder}
               value={currentValue}
               onChange={(e) => handleSearchInput(e.target.value)}
-              className="pl-10 pr-9 bg-white/90 border-slate-200 focus-visible:ring-indigo-500/30 rounded-xl"
+              className="pl-10 pr-9 bg-secondary/50 border-border focus-visible:ring-primary/30 rounded-md"
             />
             {currentValue && (
               <button
                 onClick={() => handleSearchInput('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-100"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5 rounded-full hover:bg-accent"
               >
                 <X size={14} />
               </button>
@@ -98,20 +98,20 @@ export function DataTable<TData>({
       )}
 
       {/* Table Container */}
-      <div className="rounded-xl border border-slate-200/80 overflow-hidden bg-white/80 backdrop-blur-sm">
+      <div className="rounded-lg border border-border overflow-hidden bg-card">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-slate-100/70 border-b border-slate-200/80">
+            <thead className="bg-secondary/40 border-b border-border">
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
                   {headerGroup.headers.map((header) => (
                     <th
                       key={header.id}
-                      className="px-4 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 whitespace-nowrap select-none"
+                      className="px-4 py-3.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap select-none"
                       onClick={header.column.getToggleSortingHandler()}
                       style={{ cursor: header.column.getCanSort() ? 'pointer' : 'default' }}
                     >
-                      <div className="flex items-center gap-1.5 hover:text-indigo-600 transition-colors">
+                      <div className="flex items-center gap-1.5 hover:text-primary transition-colors">
                         {flexRender(header.column.columnDef.header, header.getContext())}
                         {header.column.getCanSort() && <ArrowUpDown size={12} className="opacity-50" />}
                       </div>
@@ -120,16 +120,16 @@ export function DataTable<TData>({
                 </tr>
               ))}
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-border/60">
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={columns.length} className="px-4 py-12 text-center text-slate-400">
+                  <td colSpan={columns.length} className="px-4 py-16 text-center text-muted-foreground">
                     <div className="flex flex-col items-center justify-center gap-2">
-                      <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                      <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center text-muted-foreground">
                         <Search size={20} />
                       </div>
-                      <p className="text-sm font-medium text-slate-500">Nenhum resultado encontrado.</p>
-                      <p className="text-xs text-slate-400">Tente ajustar seus termos de busca ou filtros.</p>
+                      <p className="text-sm font-medium text-foreground">Nenhum resultado encontrado.</p>
+                      <p className="text-xs text-muted-foreground">Tente ajustar seus termos de busca ou filtros.</p>
                     </div>
                   </td>
                 </tr>
@@ -145,12 +145,12 @@ export function DataTable<TData>({
                       onRowClick?.(row.original)
                     }}
                     className={cn(
-                      'hover:bg-indigo-50/40 transition-colors duration-150 group',
+                      'hover:bg-accent/60 transition-colors duration-150 group',
                       onRowClick && 'cursor-pointer'
                     )}
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="px-4 py-3 whitespace-nowrap text-slate-700 font-medium text-xs">
+                      <td key={cell.id} className="px-4 py-2.5 whitespace-nowrap text-foreground/90 text-xs">
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </td>
                     ))}
@@ -165,7 +165,7 @@ export function DataTable<TData>({
       {/* Pagination Footer */}
       {pagination ? (
         <div className="flex items-center justify-between gap-4 pt-1">
-          <p className="text-xs font-semibold text-slate-500 whitespace-nowrap">
+          <p className="text-xs font-medium text-muted-foreground whitespace-nowrap">
             {pagination.total === 0 ? '0 registros' : `${rangeStart}–${rangeEnd} de ${pagination.total} registros`}
           </p>
           <div className="flex items-center gap-2">
@@ -179,7 +179,7 @@ export function DataTable<TData>({
             >
               <ChevronLeft size={14} className="mr-1" />Anterior
             </Button>
-            <span className="text-xs font-bold text-slate-600 px-2 py-1 rounded-md bg-slate-100 whitespace-nowrap">
+            <span className="text-xs font-semibold text-foreground px-2 py-1 rounded-md bg-secondary whitespace-nowrap">
               Página {currentPage} de {pageCount}
             </span>
             <Button
@@ -196,7 +196,7 @@ export function DataTable<TData>({
         </div>
       ) : (
         <div className="flex items-center justify-between pt-1">
-          <p className="text-xs font-semibold text-slate-500">
+          <p className="text-xs font-medium text-muted-foreground">
             {table.getFilteredRowModel().rows.length} de {data.length} registros
           </p>
         </div>

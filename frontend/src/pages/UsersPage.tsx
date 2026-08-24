@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { listUsers, createUser, removeUser, updatePassword, type User } from '@/api/users'
 import { Button } from '@/components/ui/button'
+import { KpiCard } from '@/components/ui/KpiCard'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -127,14 +128,20 @@ export default function UsersPage() {
   return (
     <div className="space-y-8 max-w-2xl">
       <div>
-        <h2 className="text-xl font-semibold">Usuários</h2>
-        <p className="text-sm text-slate-500">Gerencie os usuários do sistema.</p>
+        <h2 className="text-xl font-semibold tracking-tight text-foreground">Gestão de Usuários</h2>
+        <p className="text-sm text-muted-foreground">Gerencie os usuários e permissões do sistema</p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <KpiCard label="Total de Usuários" value={users.length} tone="primary" highlighted />
+        <KpiCard label="Gestores" value={users.filter((u) => u.role === 'Gestor').length} tone="info" />
+        <KpiCard label="Técnicos" value={users.filter((u) => u.role === 'Técnico').length} tone="success" />
       </div>
 
       {/* Criar usuário */}
       <form
         onSubmit={(e) => { e.preventDefault(); createMutation.mutate() }}
-        className="bg-white rounded-xl border p-6 space-y-4"
+        className="bg-card rounded-xl border p-6 space-y-4"
       >
         <h3 className="font-medium flex items-center gap-2"><UserPlus size={16} />Novo Usuário</h3>
         <div className="grid grid-cols-2 gap-4">

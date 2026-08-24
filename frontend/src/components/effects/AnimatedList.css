@@ -1,0 +1,57 @@
+.animated-list-container {
+  position: relative;
+  width: 100%;
+}
+
+.animated-list {
+  max-height: 420px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.animated-list::-webkit-scrollbar { width: 6px; }
+.animated-list::-webkit-scrollbar-track { background: transparent; }
+.animated-list::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+.animated-list-item {
+  padding: 10px 12px;
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.animated-list-item.selected {
+  border-color: var(--primary);
+  background-color: var(--accent);
+}
+
+.animated-list-item-text {
+  color: var(--foreground);
+  margin: 0;
+  font-size: 13px;
+}
+
+.animated-list-top-gradient,
+.animated-list-bottom-gradient {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 32px;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+.animated-list-top-gradient {
+  top: 0;
+  background: linear-gradient(to bottom, var(--card), transparent);
+}
+.animated-list-bottom-gradient {
+  bottom: 0;
+  background: linear-gradient(to top, var(--card), transparent);
+}

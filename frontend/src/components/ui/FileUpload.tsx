@@ -41,26 +41,26 @@ export function FileUpload({
       className={cn(
         'group relative flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-7 cursor-pointer transition-all duration-200 backdrop-blur-sm select-none',
         isDragActive
-          ? 'border-indigo-500 bg-indigo-500/10 shadow-glow-indigo scale-[1.01]'
+          ? 'border-primary bg-primary/100/10 shadow-glow-indigo scale-[1.01]'
           : file
           ? 'border-emerald-400/80 bg-emerald-50/50'
-          : 'border-slate-300/80 bg-slate-50/50 hover:border-indigo-400 hover:bg-indigo-50/30',
+          : 'border-border/80 bg-muted/50 hover:border-primary hover:bg-primary/10/30',
         className
       )}
     >
       <input {...getInputProps()} />
       {file ? (
-        <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-white shadow-sm border border-emerald-200 animate-scale-in">
+        <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-popover shadow-sm border border-emerald-200 animate-scale-in">
           <div className="h-8 w-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center">
             <CheckCircle2 size={18} />
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="text-xs font-bold text-slate-800 truncate max-w-xs">{file.name}</span>
+            <span className="text-xs font-bold text-foreground truncate max-w-xs">{file.name}</span>
             <span className="text-[10px] font-semibold text-emerald-600">Arquivo Pronto</span>
           </div>
           <button
             onClick={clear}
-            className="ml-2 text-slate-400 hover:text-rose-500 p-1 rounded-lg hover:bg-slate-100 transition-colors"
+            className="ml-2 text-muted-foreground hover:text-rose-500 p-1 rounded-lg hover:bg-secondary transition-colors"
             title="Remover arquivo"
           >
             <X size={16} />
@@ -68,12 +68,12 @@ export function FileUpload({
         </div>
       ) : (
         <>
-          <div className="h-12 w-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:scale-110 transition-transform shadow-sm">
+          <div className="h-12 w-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center group-hover:scale-110 transition-transform shadow-sm">
             <Upload size={22} />
           </div>
           <div className="text-center space-y-1">
-            <p className="text-xs font-bold text-slate-700">{label}</p>
-            <p className="text-[11px] font-medium text-slate-400">Suporta apenas documentos em formato PDF</p>
+            <p className="text-xs font-bold text-foreground">{label}</p>
+            <p className="text-[11px] font-medium text-muted-foreground">Suporta apenas documentos em formato PDF</p>
           </div>
         </>
       )}

@@ -12,6 +12,7 @@ import {
   type IndicadoresUnidade,
 } from '@/api/unidades'
 import { Button } from '@/components/ui/button'
+import { KpiCard } from '@/components/ui/KpiCard'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
@@ -109,9 +110,9 @@ const STATUS_ORDER = ['Disponível', 'Indisponível', 'Pendente', 'Pendente Devo
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border bg-slate-50 p-3">
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className="text-lg font-semibold text-slate-800">{value}</p>
+    <div className="rounded-lg border bg-muted p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-lg font-semibold text-foreground">{value}</p>
     </div>
   )
 }
@@ -140,7 +141,7 @@ function IndicadoresPanel({ dados }: { dados: IndicadoresUnidade }) {
       </div>
 
       <div>
-        <p className="text-sm font-medium text-slate-600 mb-2">Itens por Status</p>
+        <p className="text-sm font-medium text-muted-foreground mb-2">Itens por Status</p>
         <div className="flex flex-wrap gap-2">
           {STATUS_ORDER.map((status) => (
             <Badge key={status}>
@@ -151,7 +152,7 @@ function IndicadoresPanel({ dados }: { dados: IndicadoresUnidade }) {
       </div>
 
       {semMovimento && (
-        <p className="text-sm text-slate-400 italic">
+        <p className="text-sm text-muted-foreground italic">
           Esta unidade ainda não tem nenhuma movimentação registrada.
         </p>
       )}
@@ -346,7 +347,7 @@ export default function UnidadesPage() {
       header: 'Nome',
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
-          <span className={row.original.is_active ? '' : 'text-slate-400 line-through'}>
+          <span className={row.original.is_active ? '' : 'text-muted-foreground line-through'}>
             {row.original.nome}
           </span>
           {!row.original.is_active && <Badge variant="danger">Inativa</Badge>}
@@ -360,7 +361,7 @@ export default function UnidadesPage() {
       header: 'Cidade/UF',
       cell: ({ row }) => {
         const { cidade, uf } = row.original
-        if (!cidade && !uf) return <span className="text-slate-400">—</span>
+        if (!cidade && !uf) return <span className="text-muted-foreground">—</span>
         return <span>{cidade || '—'}/{uf || '—'}</span>
       },
     },
@@ -437,14 +438,20 @@ export default function UnidadesPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-xl font-semibold">Unidades</h2>
-        <p className="text-sm text-slate-500">
-          Dados jurídicos e fiscais das unidades (antigas "revendas") e indicadores por unidade.
+        <h2 className="text-xl font-semibold tracking-tight text-foreground">Unidades de Revenda</h2>
+        <p className="text-sm text-muted-foreground">
+          Dados jurídicos e fiscais das unidades (antigas "revendas") e indicadores por unidade
         </p>
       </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <KpiCard label="Unidades Cadastradas" value={unidades.length} tone="primary" highlighted />
+        <KpiCard label="Ativas" value={unidades.filter((u) => u.is_active !== false).length} tone="success" />
+        <KpiCard label="Inativas" value={unidades.filter((u) => u.is_active === false).length} tone="warning" />
+      </div>
+
       {/* Criar / editar unidade */}
-      <form onSubmit={handleSubmit} className="bg-white rounded-xl border p-6 space-y-4 max-w-3xl">
+      <form onSubmit={handleSubmit} className="bg-card rounded-xl border p-6 space-y-4 max-w-3xl">
         <h3 className="font-medium flex items-center gap-2">
           <Building2 size={16} />
           {editingId !== null ? `Editar Unidade #${editingId}` : 'Nova Unidade'}
@@ -568,26 +575,26 @@ export default function UnidadesPage() {
 
       {/* Lista */}
       <div className="flex items-center justify-between">
-        <h3 className="font-medium text-slate-700">Unidades cadastradas</h3>
-        <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
+        <h3 className="font-medium text-foreground">Unidades cadastradas</h3>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
           <input
             type="checkbox"
             checked={showInactive}
             onChange={(e) => setShowInactive(e.target.checked)}
-            className="rounded border-slate-300"
+            className="rounded border-border"
           />
           Mostrar unidades inativas
         </label>
       </div>
       {isLoading ? (
-        <div className="py-8 text-center text-slate-400">Carregando...</div>
+        <div className="py-8 text-center text-muted-foreground">Carregando...</div>
       ) : (
         <DataTable data={unidades} columns={columns} searchPlaceholder="Buscar unidade..." />
       )}
 
       {/* Indicadores */}
       {indicadoresUnidadeId !== null && (
-        <div className="bg-white rounded-xl border p-6 space-y-4">
+        <div className="bg-card rounded-xl border p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-medium flex items-center gap-2">
               <BarChart3 size={16} />
@@ -599,11 +606,11 @@ export default function UnidadesPage() {
           </div>
 
           {indicadoresLoading ? (
-            <p className="text-sm text-slate-400">Carregando indicadores...</p>
+            <p className="text-sm text-muted-foreground">Carregando indicadores...</p>
           ) : indicadores ? (
             <IndicadoresPanel dados={indicadores} />
           ) : (
-            <p className="text-sm text-slate-400">Não foi possível carregar os indicadores.</p>
+            <p className="text-sm text-muted-foreground">Não foi possível carregar os indicadores.</p>
           )}
         </div>
       )}
