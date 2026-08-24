@@ -17,8 +17,9 @@
     --popover-foreground: #f5f5f5;
 
     /* Brand / primary action — cyan, with purple as secondary accent */
-    --primary: #38bdf8;
-    --primary-foreground: #0b1020;
+   --primary: #38bdf8;
+--primary-rgb: 56 189 248;
+--primary-foreground: #0b1020;
 
     --secondary: #111827;
     --secondary-foreground: #e4e4e7;
