@@ -28,57 +28,46 @@ export default {
         ring: 'var(--ring)',
         background: 'var(--background)',
         foreground: 'var(--foreground)',
-
         primary: {
-          DEFAULT: 'rgb(var(--primary-rgb) / <alpha-value>)',
+          DEFAULT: 'var(--primary)',
           foreground: 'var(--primary-foreground)',
         },
-
         secondary: {
           DEFAULT: 'var(--secondary)',
           foreground: 'var(--secondary-foreground)',
         },
-
         destructive: {
           DEFAULT: 'var(--destructive)',
           foreground: 'var(--destructive-foreground)',
         },
-
         success: {
           DEFAULT: 'var(--success)',
           foreground: 'var(--success-foreground)',
         },
-
         warning: {
           DEFAULT: 'var(--warning)',
           foreground: 'var(--warning-foreground)',
         },
-
         info: {
           DEFAULT: 'var(--info)',
           foreground: 'var(--info-foreground)',
         },
-
         muted: {
           DEFAULT: 'var(--muted)',
           foreground: 'var(--muted-foreground)',
         },
-
         accent: {
           DEFAULT: 'var(--accent)',
           foreground: 'var(--accent-foreground)',
         },
-
         card: {
           DEFAULT: 'var(--card)',
           foreground: 'var(--card-foreground)',
         },
-
         popover: {
           DEFAULT: 'var(--popover)',
           foreground: 'var(--popover-foreground)',
         },
-
         sidebar: {
           DEFAULT: 'var(--sidebar)',
           foreground: 'var(--sidebar-foreground)',
@@ -88,64 +77,43 @@ export default {
           'accent-foreground': 'var(--sidebar-accent-foreground)',
           border: 'var(--sidebar-border)',
         },
-
         purple: {
           DEFAULT: 'var(--accent-purple)',
           light: 'var(--accent-purple-light)',
         },
-
         pink: {
           DEFAULT: 'var(--accent-pink)',
         },
       },
-
       transitionDuration: {
         micro: '150ms',
         hover: '200ms',
         DEFAULT: '250ms',
         major: '300ms',
       },
-
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
       },
-
       keyframes: {
         'accordion-down': {
           from: { height: '0' },
           to: { height: 'var(--radix-accordion-content-height)' },
         },
-
         'accordion-up': {
           from: { height: 'var(--radix-accordion-content-height)' },
           to: { height: '0' },
         },
-
         'fade-in': {
-          from: {
-            opacity: '0',
-            transform: 'translateY(6px)',
-          },
-          to: {
-            opacity: '1',
-            transform: 'translateY(0)',
-          },
+          from: { opacity: '0', transform: 'translateY(6px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
         },
-
         'scale-in': {
-          from: {
-            opacity: '0',
-            transform: 'scale(0.96)',
-          },
-          to: {
-            opacity: '1',
-            transform: 'scale(1)',
-          },
+          from: { opacity: '0', transform: 'scale(0.96)' },
+          to: { opacity: '1', transform: 'scale(1)' },
         },
       },
-
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
@@ -154,6 +122,5 @@ export default {
       },
     },
   },
-
   plugins: [require('tailwindcss-animate')],
 }

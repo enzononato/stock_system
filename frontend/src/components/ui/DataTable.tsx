@@ -99,6 +99,19 @@ export function DataTable<TData>({
 
       {/* Table Container */}
       <div className="rounded-lg border border-border overflow-hidden bg-card">
+        {rows.length === 0 ? (
+          // Rendered outside the horizontally-scrollable table: with many
+          // columns the table can be wider than the viewport, which pushed
+          // this centered content off to one side. A full-width block here
+          // centers correctly regardless of column count.
+          <div className="flex flex-col items-center justify-center gap-2 px-4 py-16 text-center text-muted-foreground">
+            <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center text-muted-foreground">
+              <Search size={20} />
+            </div>
+            <p className="text-sm font-medium text-foreground">Nenhum resultado encontrado.</p>
+            <p className="text-xs text-muted-foreground">Tente ajustar seus termos de busca ou filtros.</p>
+          </div>
+        ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-secondary/40 border-b border-border">
@@ -121,54 +134,41 @@ export function DataTable<TData>({
               ))}
             </thead>
             <tbody className="divide-y divide-border/60">
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={columns.length} className="px-4 py-16 text-center text-muted-foreground">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                      <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center text-muted-foreground">
-                        <Search size={20} />
-                      </div>
-                      <p className="text-sm font-medium text-foreground">Nenhum resultado encontrado.</p>
-                      <p className="text-xs text-muted-foreground">Tente ajustar seus termos de busca ou filtros.</p>
-                    </div>
-                  </td>
+              {rows.map((row) => (
+                <tr
+                  key={row.id}
+                  onClick={(e) => {
+                    const target = e.target as HTMLElement
+                    if (target.closest('button, a, input, select, [role="button"]')) {
+                      return
+                    }
+                    onRowClick?.(row.original)
+                  }}
+                  className={cn(
+                    'hover:bg-accent/60 transition-colors duration-150 group',
+                    onRowClick && 'cursor-pointer'
+                  )}
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <td key={cell.id} className="px-4 py-2.5 whitespace-nowrap text-foreground/90 text-xs">
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </td>
+                  ))}
                 </tr>
-              ) : (
-                rows.map((row) => (
-                  <tr
-                    key={row.id}
-                    onClick={(e) => {
-                      const target = e.target as HTMLElement
-                      if (target.closest('button, a, input, select, [role="button"]')) {
-                        return
-                      }
-                      onRowClick?.(row.original)
-                    }}
-                    className={cn(
-                      'hover:bg-accent/60 transition-colors duration-150 group',
-                      onRowClick && 'cursor-pointer'
-                    )}
-                  >
-                    {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="px-4 py-2.5 whitespace-nowrap text-foreground/90 text-xs">
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              )}
+              ))}
             </tbody>
           </table>
         </div>
+        )}
       </div>
 
       {/* Pagination Footer */}
       {pagination ? (
-        <div className="flex items-center justify-between gap-4 pt-1">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 pt-1">
           <p className="text-xs font-medium text-muted-foreground whitespace-nowrap">
             {pagination.total === 0 ? '0 registros' : `${rangeStart}–${rangeEnd} de ${pagination.total} registros`}
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 justify-self-center">
             <Button
               type="button"
               variant="outline"
@@ -193,6 +193,7 @@ export function DataTable<TData>({
               Próxima<ChevronRight size={14} className="ml-1" />
             </Button>
           </div>
+          <div aria-hidden />
         </div>
       ) : (
         <div className="flex items-center justify-between pt-1">

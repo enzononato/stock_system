@@ -151,8 +151,8 @@ export default function LinkPeripheralPage() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
-        <h2 className="text-xl font-semibold">Vincular Periféricos</h2>
-        <p className="text-sm text-muted-foreground">Associe periféricos a equipamentos como desktops, notebooks, switches e impressoras.</p>
+        <h2 className="text-h1">Vincular Periféricos</h2>
+        <p className="text-caption mt-1">Associe periféricos a equipamentos como desktops, notebooks, switches e impressoras.</p>
       </div>
 
       {/* Seletor de equipamento */}
@@ -172,7 +172,7 @@ export default function LinkPeripheralPage() {
           />
         </div>
         {selectedItem && (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-caption mt-1">
             Status: <strong>{selectedItem.status}</strong> · Revenda: <strong>{selectedItem.revenda}</strong>
           </p>
         )}

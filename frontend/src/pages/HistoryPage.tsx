@@ -228,8 +228,8 @@ export default function HistoryPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-xl font-semibold tracking-tight text-foreground">Histórico de Ações</h2>
-        <p className="text-sm text-muted-foreground">Registro completo de todas as operações do sistema</p>
+        <h2 className="text-h1 text-foreground">Histórico de Ações</h2>
+        <p className="text-caption mt-1">Registro completo de todas as operações do sistema</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">

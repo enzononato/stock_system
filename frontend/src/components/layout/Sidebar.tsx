@@ -2,10 +2,11 @@ import { useCallback, useRef } from 'react'
 import { NavLink } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
-  Package, PackagePlus, Cpu, Link2,
+  Package, PackagePlus, Cpu,
   ArrowRightLeft, Undo2, Trash2, History, BarChart2, LineChart,
-  FileText, Users, Building2, Boxes, PanelLeftClose, PanelLeftOpen
+  FileText, Users, Building2, PanelLeftClose, PanelLeftOpen
 } from 'lucide-react'
 
 interface NavItem {
@@ -33,7 +34,6 @@ const navGroups: NavGroup[] = [
     items: [
       { to: '/register', label: 'Cadastrar Equipamento', icon: <PackagePlus size={17} />, roles: ['Gestor', 'Técnico'] },
       { to: '/peripherals', label: 'Periféricos', icon: <Cpu size={17} />, roles: ['Gestor', 'Técnico'] },
-      { to: '/link', label: 'Vincular Periférico', icon: <Link2 size={17} />, roles: ['Gestor', 'Técnico'] },
       { to: '/loan', label: 'Emprestar', icon: <ArrowRightLeft size={17} />, roles: ['Gestor', 'Técnico'] },
       { to: '/return', label: 'Devolver', icon: <Undo2 size={17} />, roles: ['Gestor', 'Técnico'] },
       { to: '/terms', label: 'Termos de Resp.', icon: <FileText size={17} />, roles: ['Gestor', 'Técnico'] },
@@ -59,11 +59,15 @@ const navGroups: NavGroup[] = [
 interface SidebarProps {
   collapsed: boolean
   onToggle: () => void
+  /** When true, ignores the `hidden lg:flex` breakpoint gate — used when the
+   *  Sidebar is rendered inside the mobile drawer, which must always be visible
+   *  regardless of viewport width. */
+  forceVisible?: boolean
 }
 
 const PROXIMITY_RADIUS = 70
 
-export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export default function Sidebar({ collapsed, onToggle, forceVisible }: SidebarProps) {
   const { user } = useAuth()
   const navRef = useRef<HTMLElement>(null)
 
@@ -92,20 +96,23 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   return (
     <aside
       className={cn(
-        'hidden lg:flex flex-col min-h-screen bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex-shrink-0 select-none transition-[width] duration-200',
-        collapsed ? 'w-[76px]' : 'w-64'
+        'flex-col min-h-screen bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex-shrink-0 select-none transition-[width] duration-200',
+        forceVisible ? 'flex w-full h-full' : 'hidden lg:flex',
+        !forceVisible && (collapsed ? 'w-[76px]' : 'w-64')
       )}
     >
-      {/* Brand Header */}
+      {/* Brand Header — logo real da Revalle */}
       <div
         className={cn(
           'flex items-center h-[64px] border-b border-sidebar-border/80',
-          collapsed ? 'justify-center px-0' : 'gap-3 px-4'
+          collapsed ? 'justify-center px-0' : 'gap-2.5 px-4'
         )}
       >
-        <div className="h-8 w-8 shrink-0 rounded-md bg-primary text-primary-foreground flex items-center justify-center">
-          <Boxes size={18} className="stroke-[2.2]" />
-        </div>
+        <img
+          src="/logo-revalle.jpg"
+          alt="Revalle"
+          className={cn('shrink-0 rounded-md object-cover', collapsed ? 'h-8 w-8' : 'h-9 w-9')}
+        />
         {!collapsed && (
           <div className="min-w-0">
             <p className="text-sm font-semibold tracking-tight text-foreground truncate">Revalle</p>
@@ -138,39 +145,50 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 {group.title}
               </p>
               <div className="space-y-0.5">
-                {visibleItems.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    data-nav-item
-                    to={item.to}
-                    end={item.to === '/'}
-                    title={collapsed ? item.label : undefined}
-                    style={{
-                      transform: 'translateX(calc(var(--proximity, 0) * 3px))',
-                    }}
-                    className={({ isActive }) =>
-                      cn(
-                        'group flex items-center gap-3 rounded-md px-3 h-9 text-[13px] font-medium transition-[background-color,color] duration-150',
-                        collapsed && 'justify-center px-0',
-                        isActive
-                          ? 'bg-sidebar-primary/15 text-sidebar-primary'
-                          : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-                      )
-                    }
-                  >
-                    {({ isActive }) => (
-                      <>
-                        <span className={isActive ? 'text-sidebar-primary' : 'text-sidebar-foreground/60'}>
-                          {item.icon}
-                        </span>
-                        {!collapsed && <span className="truncate">{item.label}</span>}
-                        {isActive && !collapsed && (
-                          <span className="ml-auto h-1.5 w-1.5 rounded-full bg-sidebar-primary" />
-                        )}
-                      </>
-                    )}
-                  </NavLink>
-                ))}
+                {visibleItems.map((item) => {
+                  const link = (
+                    <NavLink
+                      key={item.to}
+                      data-nav-item
+                      to={item.to}
+                      end={item.to === '/'}
+                      style={{
+                        transform: 'translateX(calc(var(--proximity, 0) * 3px))',
+                      }}
+                      className={({ isActive }) =>
+                        cn(
+                          'relative group flex items-center gap-3 rounded-md px-3 h-9 text-[13px] font-medium transition-[background-color,color] duration-150',
+                          collapsed && 'justify-center px-0',
+                          isActive
+                            ? 'bg-sidebar-primary/15 text-sidebar-primary'
+                            : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                        )
+                      }
+                    >
+                      {({ isActive }) => (
+                        <>
+                          {isActive && (
+                            <span className="absolute left-0 top-1.5 bottom-1.5 w-[2.5px] rounded-full bg-sidebar-primary" />
+                          )}
+                          <span className={isActive ? 'text-sidebar-primary' : 'text-sidebar-foreground/60'}>
+                            {item.icon}
+                          </span>
+                          {!collapsed && <span className="truncate">{item.label}</span>}
+                          {isActive && !collapsed && (
+                            <span className="ml-auto h-1.5 w-1.5 rounded-full bg-sidebar-primary" />
+                          )}
+                        </>
+                      )}
+                    </NavLink>
+                  )
+                  if (!collapsed) return link
+                  return (
+                    <Tooltip key={item.to} delayDuration={200}>
+                      <TooltipTrigger asChild>{link}</TooltipTrigger>
+                      <TooltipContent side="right">{item.label}</TooltipContent>
+                    </Tooltip>
+                  )
+                })}
               </div>
             </div>
           )

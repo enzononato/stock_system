@@ -106,14 +106,15 @@ export default function RegisterItemPage({ mode }: Props) {
   }
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-4xl space-y-6">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
           <ArrowLeft size={16} />
         </Button>
-        <h2 className="text-xl font-semibold">{mode === 'create' ? 'Cadastrar Item' : 'Editar Item'}</h2>
+        <h2 className="text-h1">{mode === 'create' ? 'Cadastrar Item' : 'Editar Item'}</h2>
       </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-5 items-start">
       <form onSubmit={handleSubmit} className="bg-card rounded-xl border p-6 space-y-4">
         {/* Tipo */}
         <div className="flex flex-col gap-1.5">
@@ -194,6 +195,28 @@ export default function RegisterItemPage({ mode }: Props) {
           </Button>
         </div>
       </form>
+
+      {/* Painel de contexto — orienta o preenchimento e evita a área vazia ao lado do formulário */}
+      <div className="surface rounded-lg p-4 space-y-3 sticky top-4">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Checklist</h3>
+        <ul className="space-y-2 text-xs">
+          <li className={`flex items-center gap-2 ${tipo ? 'text-success' : 'text-muted-foreground'}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${tipo ? 'bg-success' : 'bg-border'}`} /> Tipo selecionado
+          </li>
+          <li className={`flex items-center gap-2 ${brand && model ? 'text-success' : 'text-muted-foreground'}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${brand && model ? 'bg-success' : 'bg-border'}`} /> Marca e modelo
+          </li>
+          <li className={`flex items-center gap-2 ${revenda ? 'text-success' : 'text-muted-foreground'}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${revenda ? 'bg-success' : 'bg-border'}`} /> Revenda definida
+          </li>
+        </ul>
+        <div className="pt-3 border-t border-border">
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            Campos com <span className="text-foreground font-medium">*</span> são obrigatórios. Após o tipo ser selecionado, campos específicos do equipamento aparecem automaticamente no formulário.
+          </p>
+        </div>
+      </div>
+      </div>
     </div>
   )
 }

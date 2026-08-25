@@ -125,7 +125,7 @@ export default function ChartsPage() {
 
       {/* Summary KPI Cards for Selected Month */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="surface rounded-lg rounded-2xl p-5 flex items-center gap-4">
+        <div className="surface rounded-lg p-5 flex items-center gap-4">
           <div className="h-12 w-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
             <ArrowUpRight size={24} />
           </div>
@@ -135,29 +135,29 @@ export default function ChartsPage() {
           </div>
         </div>
 
-        <div className="surface rounded-lg rounded-2xl p-5 flex items-center gap-4">
-          <div className="h-12 w-12 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold">
+        <div className="surface rounded-lg p-5 flex items-center gap-4">
+          <div className="h-12 w-12 rounded-xl bg-success/10 text-success flex items-center justify-center font-bold">
             <ArrowDownLeft size={24} />
           </div>
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Devoluções no Mês</p>
-            <p className="text-2xl font-bold text-emerald-600 font-heading">{totalDevolucoes}</p>
+            <p className="text-2xl font-bold text-success font-heading">{totalDevolucoes}</p>
           </div>
         </div>
 
-        <div className="surface rounded-lg rounded-2xl p-5 flex items-center gap-4">
-          <div className="h-12 w-12 rounded-xl bg-purple-500/10 text-purple-600 flex items-center justify-center font-bold">
+        <div className="surface rounded-lg p-5 flex items-center gap-4">
+          <div className="h-12 w-12 rounded-xl bg-purple/10 text-purple-light flex items-center justify-center font-bold">
             <PackagePlus size={24} />
           </div>
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cadastros no Mês</p>
-            <p className="text-2xl font-bold text-purple-600 font-heading">{totalCadastros}</p>
+            <p className="text-2xl font-bold text-purple-light font-heading">{totalCadastros}</p>
           </div>
         </div>
       </div>
 
       {/* Gráfico 1: Empréstimos x Devoluções */}
-      <div className="surface rounded-lg rounded-2xl p-6 space-y-4">
+      <div className="surface rounded-lg p-6 space-y-4">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-base font-bold text-foreground font-heading">
@@ -171,33 +171,39 @@ export default function ChartsPage() {
 
         {loansLoading ? (
           <div className="h-72 flex items-center justify-center text-muted-foreground text-sm">Carregando gráfico...</div>
+        ) : buildLoansChartData().every((d) => !d.Empréstimos && !d.Devoluções) ? (
+          <div className="h-72 flex flex-col items-center justify-center gap-2 text-muted-foreground text-sm">
+            <PackagePlus size={22} className="opacity-40" />
+            Nenhuma movimentação registrada em {MONTHS[params.month - 1]} de {params.year}.
+          </div>
         ) : (
           <ResponsiveContainer width="100%" height={320}>
             <BarChart data={buildLoansChartData()} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-              <XAxis dataKey="dia" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
-              <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+              <XAxis dataKey="dia" tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#0f172a',
-                  borderColor: '#334155',
-                  borderRadius: '12px',
-                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3)',
-                  color: '#fff',
+                  backgroundColor: 'var(--popover)',
+                  borderColor: 'var(--border)',
+                  borderRadius: '10px',
+                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.4)',
+                  color: 'var(--foreground)',
                   fontSize: '12px',
                   fontWeight: '600',
                 }}
+                labelStyle={{ color: 'var(--foreground)' }}
               />
-              <Legend wrapperStyle={{ paddingTop: '10px', fontSize: '12px', fontWeight: '600' }} />
-              <Bar dataKey="Empréstimos" fill="#6366f1" radius={[6, 6, 0, 0]} maxBarSize={28} />
-              <Bar dataKey="Devoluções" fill="#10b981" radius={[6, 6, 0, 0]} maxBarSize={28} />
+              <Legend wrapperStyle={{ paddingTop: '10px', fontSize: '12px', fontWeight: '600', color: 'var(--muted-foreground)' }} />
+              <Bar dataKey="Empréstimos" fill="#38bdf8" radius={[6, 6, 0, 0]} maxBarSize={28} />
+              <Bar dataKey="Devoluções" fill="#34d399" radius={[6, 6, 0, 0]} maxBarSize={28} />
             </BarChart>
           </ResponsiveContainer>
         )}
       </div>
 
       {/* Gráfico 2: Novos Cadastros */}
-      <div className="surface rounded-lg rounded-2xl p-6 space-y-4">
+      <div className="surface rounded-lg p-6 space-y-4">
         <div>
           <h3 className="text-base font-bold text-foreground font-heading">
             Novos Cadastros de Equipamentos por Dia
@@ -209,24 +215,30 @@ export default function ChartsPage() {
 
         {regLoading ? (
           <div className="h-72 flex items-center justify-center text-muted-foreground text-sm">Carregando gráfico...</div>
+        ) : buildRegChartData().every((d) => !d.Cadastros) ? (
+          <div className="h-72 flex flex-col items-center justify-center gap-2 text-muted-foreground text-sm">
+            <PackagePlus size={22} className="opacity-40" />
+            Nenhum cadastro registrado em {MONTHS[params.month - 1]} de {params.year}.
+          </div>
         ) : (
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={buildRegChartData()} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-              <XAxis dataKey="dia" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
-              <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+              <XAxis dataKey="dia" tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#0f172a',
-                  borderColor: '#334155',
-                  borderRadius: '12px',
-                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3)',
-                  color: '#fff',
+                  backgroundColor: 'var(--popover)',
+                  borderColor: 'var(--border)',
+                  borderRadius: '10px',
+                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.4)',
+                  color: 'var(--foreground)',
                   fontSize: '12px',
                   fontWeight: '600',
                 }}
+                labelStyle={{ color: 'var(--foreground)' }}
               />
-              <Bar dataKey="Cadastros" fill="#8b5cf6" radius={[6, 6, 0, 0]} maxBarSize={32} />
+              <Bar dataKey="Cadastros" fill="#A855F7" radius={[6, 6, 0, 0]} maxBarSize={32} />
             </BarChart>
           </ResponsiveContainer>
         )}

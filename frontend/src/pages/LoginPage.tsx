@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import SpecularButton from '@/components/effects/SpecularButton'
-import { Boxes, Eye, EyeOff, Lock, User, ShieldCheck } from 'lucide-react'
+import { Eye, EyeOff, Lock, User, ShieldCheck } from 'lucide-react'
 
 export default function LoginPage() {
   const [username, setUsername] = useState('')
@@ -46,10 +46,8 @@ export default function LoginPage() {
         <div className="rounded-xl surface shadow-2xl p-8 sm:p-10 backdrop-blur-sm">
           {/* Logo & Header */}
           <div className="flex flex-col items-center mb-8 text-center">
-            <div className="h-14 w-14 rounded-lg bg-primary text-primary-foreground flex items-center justify-center shadow-lg mb-4">
-              <Boxes size={30} className="stroke-[2.2]" />
-            </div>
-            <h1 className="text-xl font-semibold tracking-tight text-foreground">
+            <img src="/logo-revalle.jpg" alt="Revalle" className="h-14 w-14 rounded-lg shadow-lg mb-4 object-cover" />
+            <h1 className="text-h1 text-foreground">
               Controle de Estoque
             </h1>
             <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1.5">

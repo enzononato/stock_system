@@ -100,8 +100,8 @@ export default function ReturnPage() {
   return (
     <div className="space-y-8 max-w-4xl">
       <div>
-        <h2 className="text-xl font-semibold">Devolver Equipamento</h2>
-        <p className="text-sm text-muted-foreground">Gerencie as devoluções de equipamentos emprestados.</p>
+        <h2 className="text-h1">Devolver Equipamento</h2>
+        <p className="text-caption mt-1">Gerencie as devoluções de equipamentos emprestados.</p>
       </div>
 
       {/* Empréstimos ativos */}

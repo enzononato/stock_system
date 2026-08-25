@@ -438,8 +438,8 @@ export default function UnidadesPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-xl font-semibold tracking-tight text-foreground">Unidades de Revenda</h2>
-        <p className="text-sm text-muted-foreground">
+        <h2 className="text-h1 text-foreground">Unidades de Revenda</h2>
+        <p className="text-caption mt-1">
           Dados jurídicos e fiscais das unidades (antigas "revendas") e indicadores por unidade
         </p>
       </div>
@@ -451,20 +451,20 @@ export default function UnidadesPage() {
       </div>
 
       {/* Criar / editar unidade */}
-      <form onSubmit={handleSubmit} className="bg-card rounded-xl border p-6 space-y-4 max-w-3xl">
+      <form onSubmit={handleSubmit} className="bg-card rounded-xl border p-6 space-y-4 max-w-5xl">
         <h3 className="font-medium flex items-center gap-2">
           <Building2 size={16} />
           {editingId !== null ? `Editar Unidade #${editingId}` : 'Nova Unidade'}
         </h3>
 
         {editingId !== null && (
-          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+          <p className="text-xs text-warning bg-warning/10 border border-warning/25 rounded-md px-3 py-2">
             O nome da unidade liga os equipamentos e todo o histórico a ela. Alterá-lo atualiza
             automaticamente essas referências — confirme antes de salvar se for esse o caso.
           </p>
         )}
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="unidade-nome">Nome *</Label>
             <Input
@@ -606,11 +606,11 @@ export default function UnidadesPage() {
           </div>
 
           {indicadoresLoading ? (
-            <p className="text-sm text-muted-foreground">Carregando indicadores...</p>
+            <p className="text-caption mt-1">Carregando indicadores...</p>
           ) : indicadores ? (
             <IndicadoresPanel dados={indicadores} />
           ) : (
-            <p className="text-sm text-muted-foreground">Não foi possível carregar os indicadores.</p>
+            <p className="text-caption mt-1">Não foi possível carregar os indicadores.</p>
           )}
         </div>
       )}

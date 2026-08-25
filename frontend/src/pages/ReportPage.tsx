@@ -19,11 +19,17 @@ export default function ReportPage() {
   const [month, setMonth] = useState(String(currentDate.getMonth() + 1))
   const [queryParams, setQueryParams] = useState({ year: currentDate.getFullYear(), month: currentDate.getMonth() + 1 })
   const [isExporting, setIsExporting] = useState(false)
+  const [filterRevenda, setFilterRevenda] = useState('all')
 
   const { data: report = [], isLoading, refetch } = useQuery({
     queryKey: ['report', queryParams.year, queryParams.month],
     queryFn: () => getMonthlyReport(queryParams.year, queryParams.month),
   })
+
+  // Lista de revendas presentes no relatório do mês, para popular o filtro
+  // sem precisar de outro endpoint.
+  const revendaOptions = [...new Set(report.map((r) => r.revenda).filter(Boolean))] as string[]
+  const filteredReport = filterRevenda === 'all' ? report : report.filter((r) => r.revenda === filterRevenda)
 
   function handleGenerate() {
     setQueryParams({ year: Number(year), month: Number(month) })
@@ -67,8 +73,8 @@ export default function ReportPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold">Relatório Mensal</h2>
-        <p className="text-sm text-muted-foreground">Visualize todas as operações de um determinado mês.</p>
+        <h2 className="text-h1">Relatório Mensal</h2>
+        <p className="text-caption mt-1">Visualize todas as operações de um determinado mês.</p>
       </div>
 
       <div className="flex items-end gap-4 bg-card rounded-xl border p-4">
@@ -90,12 +96,22 @@ export default function ReportPage() {
           <Download size={14} className="mr-2" />
           {isExporting ? 'Exportando...' : 'Exportar CSV'}
         </Button>
+        <div className="flex flex-col gap-1.5 ml-auto">
+          <Label>Revenda</Label>
+          <Select value={filterRevenda} onValueChange={setFilterRevenda}>
+            <SelectTrigger className="w-48"><SelectValue placeholder="Todas as revendas" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as revendas</SelectItem>
+              {revendaOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {isLoading ? (
         <div className="py-8 text-center text-muted-foreground">Gerando relatório...</div>
       ) : (
-        <DataTable data={report} columns={columns} searchPlaceholder="Buscar no relatório..." />
+        <DataTable data={filteredReport} columns={columns} searchPlaceholder="Buscar no relatório..." />
       )}
     </div>
   )

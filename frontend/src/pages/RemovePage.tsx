@@ -58,13 +58,14 @@ export default function RemovePage() {
   }
 
   return (
-    <div className="max-w-xl space-y-6">
+    <div className="max-w-4xl space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-red-700">Remover Equipamento</h2>
-        <p className="text-sm text-muted-foreground">Remove permanentemente o item do estoque. Esta ação não pode ser desfeita.</p>
+        <h2 className="text-h1 text-destructive">Remover Equipamento</h2>
+        <p className="text-caption mt-1">Remove permanentemente o item do estoque. Esta ação não pode ser desfeita.</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-card rounded-xl border border-red-100 p-6 space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-5 items-start">
+      <form onSubmit={handleSubmit} className="bg-card rounded-xl border border-destructive/25 p-6 space-y-4">
         <div className="flex flex-col gap-1.5">
           <Label>Equipamento *</Label>
           <SearchableSelect
@@ -108,6 +109,17 @@ export default function RemovePage() {
           {mutation.isPending ? 'Removendo...' : 'Confirmar Remoção'}
         </Button>
       </form>
+
+      <div className="rounded-lg border border-destructive/25 bg-destructive/5 p-4 space-y-2 sticky top-4">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-destructive">Atenção</h3>
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          A remoção é permanente e não pode ser desfeita. Use "Estorno" apenas para reverter operações recentes registradas por engano — para remoção definitiva de um item do acervo, esta é a tela correta.
+        </p>
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          Alguns motivos exigem comprovante anexado antes da confirmação.
+        </p>
+      </div>
+      </div>
     </div>
   )
 }

@@ -1,4 +1,5 @@
 import { createPortal } from 'react-dom'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { type Item } from '@/api/items'
@@ -17,9 +18,7 @@ import {
   Building2,
   HardDrive,
   Monitor,
-  Calendar,
   Network,
-  ShieldCheck,
   Zap,
   Info,
   Tag,
@@ -30,16 +29,53 @@ interface ItemDetailsModalProps {
   onClose: () => void
 }
 
+function Field({ label, value, mono, accent }: { label: string; value?: string | null; mono?: boolean; accent?: boolean }) {
+  return (
+    <div>
+      <p className="text-label mb-0.5">{label}</p>
+      <p className={`text-body font-medium ${mono ? 'font-mono' : ''} ${accent ? 'text-primary' : 'text-foreground'}`}>
+        {value || '-'}
+      </p>
+    </div>
+  )
+}
+
+function Section({ icon: Icon, iconClass, title, children }: { icon: typeof Info; iconClass: string; title: string; children: React.ReactNode }) {
+  return (
+    <div className="surface rounded-lg p-4 space-y-3">
+      <div className="flex items-center gap-2 border-b border-border pb-2 text-foreground font-semibold text-xs">
+        <Icon size={14} className={iconClass} />
+        <span>{title}</span>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">{children}</div>
+    </div>
+  )
+}
+
+/** Drawer lateral (desliza da direita) — substitui o modal centralizado
+ *  anterior, seguindo o padrão do design system para telas de detalhe. */
 export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
   const navigate = useNavigate()
   const { hasRole } = useAuth()
+  const [visible, setVisible] = useState(false)
 
-  // Busca os periféricos vinculados caso existam
   const { data: peripherals = [] } = useQuery({
     queryKey: ['item-peripherals', item?.id],
     queryFn: () => listItemPeripherals(item!.id),
     enabled: Boolean(item?.id && item.peripheral_count && item.peripheral_count > 0),
   })
+
+  useEffect(() => {
+    if (item) requestAnimationFrame(() => setVisible(true))
+    else setVisible(false)
+  }, [item])
+
+  useEffect(() => {
+    if (!item) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [item, onClose])
 
   if (!item) return null
 
@@ -48,23 +84,32 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
   const isSwitch = item.tipo === 'Switch'
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-950/75 backdrop-blur-md animate-fade-in select-none">
-      <div className="relative w-full max-w-3xl max-h-[90vh] flex flex-col rounded-3xl bg-white shadow-2xl border border-slate-200/80 overflow-hidden animate-scale-in">
-        {/* Header Bar */}
-        <div className="flex items-center justify-between px-6 py-4 bg-slate-950 text-white border-b border-slate-800">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 flex items-center justify-center font-bold">
-              <Monitor size={20} />
+    <div className="fixed inset-0 z-50 select-none" role="dialog" aria-modal="true">
+      {/* Backdrop */}
+      <div
+        className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-200 ${visible ? 'opacity-100' : 'opacity-0'}`}
+        onClick={onClose}
+      />
+
+      {/* Drawer panel */}
+      <div
+        className={`absolute right-0 top-0 h-full w-full sm:w-[480px] bg-background border-l border-border shadow-2xl flex flex-col transition-transform duration-250 ease-out ${visible ? 'translate-x-0' : 'translate-x-full'}`}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-card shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="h-10 w-10 rounded-lg bg-primary/15 border border-primary/25 text-primary flex items-center justify-center shrink-0">
+              <Monitor size={18} />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] font-mono font-semibold px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
                   #{item.id}
                 </span>
-                <span className="text-xs font-bold text-slate-400">{item.tipo}</span>
+                <span className="text-[11px] font-medium text-muted-foreground">{item.tipo}</span>
                 <StatusBadge status={item.status} />
               </div>
-              <h2 className="text-lg font-bold text-white tracking-tight mt-0.5 font-heading">
+              <h2 className="text-h3 text-foreground mt-0.5 truncate">
                 {item.brand} {item.model}
               </h2>
             </div>
@@ -72,277 +117,138 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
 
           <button
             onClick={onClose}
-            className="h-9 w-9 rounded-full bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center transition-colors"
+            className="h-8 w-8 shrink-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent flex items-center justify-center transition-colors"
           >
-            <X size={18} />
+            <X size={16} />
           </button>
         </div>
 
-        {/* Modal Scrollable Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5 bg-slate-50/50">
-          {/* Top Info Highlights Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="glass-card rounded-2xl p-3.5 flex items-center gap-3">
-              <div className="h-9 w-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                <Building2 size={18} />
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {/* Highlights */}
+          <div className="grid grid-cols-1 gap-2">
+            <div className="surface rounded-lg p-3 flex items-center gap-3">
+              <div className="h-8 w-8 rounded-md bg-info/10 text-info flex items-center justify-center shrink-0">
+                <Building2 size={15} />
               </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Unidade</p>
-                <p className="text-xs font-bold text-slate-800 truncate">{item.revenda || 'Não definida'}</p>
-              </div>
-            </div>
-
-            <div className="glass-card rounded-2xl p-3.5 flex items-center gap-3">
-              <div className="h-9 w-9 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center">
-                <User size={18} />
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Usuário Atual</p>
-                <p className="text-xs font-bold text-slate-800 truncate">{item.assigned_to || 'Nenhum'}</p>
+              <div className="min-w-0">
+                <p className="text-label">Unidade</p>
+                <p className="text-xs font-medium text-foreground truncate">{item.revenda || 'Não definida'}</p>
               </div>
             </div>
-
-            <div className="glass-card rounded-2xl p-3.5 flex items-center gap-3">
-              <div className="h-9 w-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-                <Tag size={18} />
+            <div className="surface rounded-lg p-3 flex items-center gap-3">
+              <div className="h-8 w-8 rounded-md bg-success/10 text-success flex items-center justify-center shrink-0">
+                <User size={15} />
               </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Identificador / NF</p>
-                <p className="text-xs font-bold text-slate-800 truncate">
-                  {item.identificador || item.nota_fiscal || '-'}
-                </p>
+              <div className="min-w-0">
+                <p className="text-label">Usuário Atual</p>
+                <p className="text-xs font-medium text-foreground truncate">{item.assigned_to || 'Nenhum'}</p>
+              </div>
+            </div>
+            <div className="surface rounded-lg p-3 flex items-center gap-3">
+              <div className="h-8 w-8 rounded-md bg-purple/10 text-purple-light flex items-center justify-center shrink-0">
+                <Tag size={15} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-label">Identificador / NF</p>
+                <p className="text-xs font-medium text-foreground truncate">{item.identificador || item.nota_fiscal || '-'}</p>
               </div>
             </div>
           </div>
 
-          {/* Section 1: Dados Gerais & Patrimônio */}
-          <div className="glass-card rounded-2xl p-4 space-y-3">
-            <div className="flex items-center gap-2 border-b border-slate-100 pb-2 text-slate-800 font-bold text-xs">
-              <Info size={15} className="text-indigo-600" />
-              <span>Informações Cadastrais</span>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 text-xs">
-              <div>
-                <p className="text-slate-400 font-medium">Marca</p>
-                <p className="font-semibold text-slate-800">{item.brand || '-'}</p>
-              </div>
-              <div>
-                <p className="text-slate-400 font-medium">Modelo</p>
-                <p className="font-semibold text-slate-800">{item.model || '-'}</p>
-              </div>
-              <div>
-                <p className="text-slate-400 font-medium">Nota Fiscal</p>
-                <p className="font-semibold text-slate-800">{item.nota_fiscal || '-'}</p>
-              </div>
-              <div>
-                <p className="text-slate-400 font-medium">Código Patrimonial</p>
-                <p className="font-semibold text-slate-800">{item.codigo_patrimonial || '-'}</p>
-              </div>
-              <div>
-                <p className="text-slate-400 font-medium">Fornecedor</p>
-                <p className="font-semibold text-slate-800">{item.fornecedor || '-'}</p>
-              </div>
-              <div>
-                <p className="text-slate-400 font-medium">Data de Cadastro</p>
-                <p className="font-semibold text-slate-800">{formatDate(item.date_registered)}</p>
-              </div>
-            </div>
-          </div>
+          <Section icon={Info} iconClass="text-primary" title="Informações Cadastrais">
+            <Field label="Marca" value={item.brand} />
+            <Field label="Modelo" value={item.model} />
+            <Field label="Nota Fiscal" value={item.nota_fiscal} />
+            <Field label="Código Patrimonial" value={item.codigo_patrimonial} />
+            <Field label="Fornecedor" value={item.fornecedor} />
+            <Field label="Data de Cadastro" value={formatDate(item.date_registered)} />
+          </Section>
 
-          {/* Section 2: Alocação & Colaborador */}
-          <div className="glass-card rounded-2xl p-4 space-y-3">
-            <div className="flex items-center gap-2 border-b border-slate-100 pb-2 text-slate-800 font-bold text-xs">
-              <User size={15} className="text-sky-600" />
-              <span>Dados de Alocação</span>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 text-xs">
-              <div>
-                <p className="text-slate-400 font-medium">Funcionário Alocado</p>
-                <p className="font-semibold text-slate-800">{item.assigned_to || '-'}</p>
-              </div>
-              <div>
-                <p className="text-slate-400 font-medium">CPF do Colaborador</p>
-                <p className="font-semibold text-slate-800">{item.cpf || '-'}</p>
-              </div>
-              <div>
-                <p className="text-slate-400 font-medium">Setor</p>
-                <p className="font-semibold text-slate-800">{item.setor || '-'}</p>
-              </div>
-              <div>
-                <p className="text-slate-400 font-medium">Data do Empréstimo</p>
-                <p className="font-semibold text-slate-800">{formatDate(item.date_issued)}</p>
-              </div>
-              <div>
-                <p className="text-slate-400 font-medium">Responsável Técnico</p>
-                <p className="font-semibold text-slate-800">{item.responsavel || '-'}</p>
-              </div>
-              <div>
-                <p className="text-slate-400 font-medium">Local de Instalação</p>
-                <p className="font-semibold text-slate-800">{item.local_instalacao || '-'}</p>
-              </div>
-            </div>
-          </div>
+          <Section icon={User} iconClass="text-info" title="Dados de Alocação">
+            <Field label="Funcionário Alocado" value={item.assigned_to} />
+            <Field label="CPF do Colaborador" value={item.cpf} />
+            <Field label="Setor" value={item.setor} />
+            <Field label="Data do Empréstimo" value={formatDate(item.date_issued)} />
+          </Section>
 
-          {/* Section 3: Hardware & Rede (Computadores / Notebooks) */}
           {isLaptopOrPC && (
-            <div className="glass-card rounded-2xl p-4 space-y-3">
-              <div className="flex items-center gap-2 border-b border-slate-100 pb-2 text-slate-800 font-bold text-xs">
-                <HardDrive size={15} className="text-violet-600" />
-                <span>Especificações de Hardware & Sistema</span>
+            <Section icon={HardDrive} iconClass="text-purple-light" title="Hardware & Sistema">
+              <Field label="Host / Nome da Máquina" value={item.host} mono accent />
+              <Field label="Processador (CPU)" value={item.cpu} />
+              <Field label="Memória RAM" value={item.ram} />
+              <Field label="Armazenamento" value={item.storage} />
+              <Field label="Sistema Operacional" value={item.sistema} />
+              <Field label="Domínio Corporativo" value={item.dominio} />
+              <Field label="Endereço MAC / Físico" value={item.endereco_fisico || item.mac} mono />
+              <Field label="Endereço IP" value={item.ip} mono />
+              <Field label="AnyDesk ID" value={item.anydesk} mono />
+              <div className="col-span-2">
+                <Field label="Licença do Windows" value={item.licenca} mono />
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 text-xs">
-                <div>
-                  <p className="text-slate-400 font-medium">Host / Nome da Máquina</p>
-                  <p className="font-mono font-bold text-indigo-600">{item.host || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 font-medium">Processador (CPU)</p>
-                  <p className="font-semibold text-slate-800">{item.cpu || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 font-medium">Memória RAM</p>
-                  <p className="font-semibold text-slate-800">{item.ram || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 font-medium">Armazenamento</p>
-                  <p className="font-semibold text-slate-800">{item.storage || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 font-medium">Sistema Operacional</p>
-                  <p className="font-semibold text-slate-800">{item.sistema || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 font-medium">Domínio Corporativo</p>
-                  <p className="font-semibold text-slate-800">{item.dominio || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 font-medium">Endereço MAC / Físico</p>
-                  <p className="font-mono text-slate-700">{item.endereco_fisico || item.mac || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 font-medium">Endereço IP</p>
-                  <p className="font-mono text-slate-700">{item.ip || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 font-medium">AnyDesk ID</p>
-                  <p className="font-mono font-bold text-slate-800">{item.anydesk || '-'}</p>
-                </div>
-                <div className="col-span-2">
-                  <p className="text-slate-400 font-medium">Licença do Windows</p>
-                  <p className="font-mono text-xs text-slate-600 truncate">{item.licenca || '-'}</p>
-                </div>
-              </div>
-            </div>
+            </Section>
           )}
 
-          {/* Section 4: Especificações Nobreak ou Switch */}
           {(isNobreak || isSwitch) && (
-            <div className="glass-card rounded-2xl p-4 space-y-3">
-              <div className="flex items-center gap-2 border-b border-slate-100 pb-2 text-slate-800 font-bold text-xs">
-                <Zap size={15} className="text-amber-600" />
-                <span>Especificações de Infraestrutura</span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 text-xs">
-                {isNobreak && (
-                  <>
-                    <div>
-                      <p className="text-slate-400 font-medium">Potência Nominal</p>
-                      <p className="font-semibold text-slate-800">{item.potencia_nominal || '-'}</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-400 font-medium">Autonomia Estimada</p>
-                      <p className="font-semibold text-slate-800">{item.autonomia_estimada || '-'}</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-400 font-medium">IP da Placa SNMP</p>
-                      <p className="font-mono text-slate-700">{item.ip_snmp || '-'}</p>
-                    </div>
-                  </>
-                )}
-                {isSwitch && (
-                  <>
-                    <div>
-                      <p className="text-slate-400 font-medium">Quantidade de Portas</p>
-                      <p className="font-semibold text-slate-800">{item.quantidade_portas || '-'}</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-400 font-medium">Suporte PoE</p>
-                      <p className="font-semibold text-slate-800">{item.poe || '-'}</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-400 font-medium">Endereço IP</p>
-                      <p className="font-mono text-slate-700">{item.ip || '-'}</p>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
+            <Section icon={Zap} iconClass="text-warning" title="Infraestrutura">
+              {isNobreak && (
+                <>
+                  <Field label="Potência Nominal" value={item.potencia_nominal} />
+                  <Field label="Autonomia Estimada" value={item.autonomia_estimada} />
+                  <Field label="IP da Placa SNMP" value={item.ip_snmp} mono />
+                </>
+              )}
+              {isSwitch && (
+                <>
+                  <Field label="Quantidade de Portas" value={item.quantidade_portas} />
+                  <Field label="Suporte PoE" value={item.poe} />
+                  <Field label="Endereço IP" value={item.ip} mono />
+                </>
+              )}
+            </Section>
           )}
 
-          {/* Section 5: Periféricos Vinculados */}
           {Boolean(item.peripheral_count && item.peripheral_count > 0) && (
-            <div className="glass-card rounded-2xl p-4 space-y-3">
-              <div className="flex items-center gap-2 border-b border-slate-100 pb-2 text-slate-800 font-bold text-xs">
-                <Cpu size={15} className="text-emerald-600" />
+            <div className="surface rounded-lg p-4 space-y-3">
+              <div className="flex items-center gap-2 border-b border-border pb-2 text-foreground font-semibold text-xs">
+                <Cpu size={14} className="text-success" />
                 <span>Periféricos Vinculados ({item.peripheral_count})</span>
               </div>
               {peripherals.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="space-y-1.5">
                   {peripherals.map((p: Peripheral) => (
-                    <div
-                      key={p.id}
-                      className="flex items-center justify-between p-2.5 rounded-xl bg-white border border-slate-200/80 text-xs"
-                    >
+                    <div key={p.id} className="flex items-center justify-between p-2 rounded-md bg-secondary/50 border border-border text-xs">
                       <div className="flex items-center gap-2 min-w-0">
-                        <Cpu size={14} className="text-indigo-500 flex-shrink-0" />
-                        <span className="font-semibold text-slate-700 truncate">
-                          {p.tipo}: {p.brand} {p.model}
-                        </span>
+                        <Network size={13} className="text-primary shrink-0" />
+                        <span className="font-medium text-foreground truncate">{p.tipo}: {p.brand} {p.model}</span>
                       </div>
-                      <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">
+                      <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 bg-secondary text-muted-foreground rounded shrink-0">
                         #{p.id}
                       </span>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-slate-400">Carregando periféricos...</p>
+                <p className="text-xs text-muted-foreground">Carregando periféricos...</p>
               )}
             </div>
           )}
         </div>
 
-        {/* Modal Footer Actions */}
-        <div className="flex items-center justify-between px-6 py-3.5 bg-white border-t border-slate-200/80">
-          <Button variant="outline" size="sm" onClick={onClose} className="rounded-xl">
-            Fechar
-          </Button>
-
+        {/* Footer actions */}
+        <div className="flex items-center justify-between px-5 py-3.5 border-t border-border bg-card shrink-0">
+          <Button variant="outline" size="sm" onClick={onClose}>Fechar</Button>
           <div className="flex items-center gap-2">
             {item.status?.startsWith('Pendente') && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => generateAndDownloadLoanTerm(item.id)}
-                className="rounded-xl border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100"
-              >
+              <Button variant="outline" size="sm" onClick={() => generateAndDownloadLoanTerm(item.id)}>
                 <FileDown size={14} className="mr-1.5" />
                 Baixar Termo
               </Button>
             )}
-
             {hasRole('Gestor', 'Técnico') && (
-              <Button
-                variant="default"
-                size="sm"
-                onClick={() => {
-                  onClose()
-                  navigate(`/edit/${item.id}`)
-                }}
-                className="rounded-xl"
-              >
+              <Button variant="default" size="sm" onClick={() => { onClose(); navigate(`/edit/${item.id}`) }}>
                 <Pencil size={14} className="mr-1.5" />
-                Editar Equipamento
+                Editar
               </Button>
             )}
           </div>
@@ -352,4 +258,3 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
     document.body
   )
 }
-

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import type { ColumnDef } from '@tanstack/react-table'
 import { PieChart, Pie, Cell, ResponsiveContainer, AreaChart, Area, XAxis, Tooltip } from 'recharts'
 import { listItemsPaginated, type Item } from '@/api/items'
+import { listUnidades } from '@/api/unidades'
 import { getRegistrationsChart } from '@/api/reports'
 import { DataTable } from '@/components/ui/DataTable'
 import { StatusBadge } from '@/components/ui/badge'
@@ -28,15 +29,22 @@ export default function StockPage() {
   const { equipmentTypes, isLoading: constantsLoading } = useConstants()
   const [filterTipo, setFilterTipo] = useState('all')
   const [filterStatus, setFilterStatus] = useState('all')
+  const [filterRevenda, setFilterRevenda] = useState('all')
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [selectedItem, setSelectedItem] = useState<Item | null>(null)
 
+  const { data: unidades = [] } = useQuery({
+    queryKey: ['unidades-filter'],
+    queryFn: () => listUnidades(),
+  })
+
   const { data, isLoading, refetch, dataUpdatedAt } = useQuery({
-    queryKey: ['items', filterTipo, filterStatus],
+    queryKey: ['items', filterTipo, filterStatus, filterRevenda],
     queryFn: () =>
       listItemsPaginated({
         tipo: filterTipo !== 'all' ? filterTipo : undefined,
         status: filterStatus !== 'all' ? filterStatus : undefined,
+        revenda: filterRevenda !== 'all' ? filterRevenda : undefined,
         limit: FETCH_ALL_LIMIT,
       }),
   })
@@ -178,8 +186,8 @@ export default function StockPage() {
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight text-foreground">Estoque de Equipamentos</h2>
-          <p className="text-sm text-muted-foreground">Sincronização e visão geral do inventário de TI em tempo real</p>
+          <h2 className="text-h1 text-foreground">Estoque de Equipamentos</h2>
+          <p className="text-caption mt-1">Sincronização e visão geral do inventário de TI em tempo real</p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={handleRefresh}>
@@ -320,8 +328,19 @@ export default function StockPage() {
             ))}
           </SelectContent>
         </Select>
-        {(filterTipo !== 'all' || filterStatus !== 'all') && (
-          <Button variant="ghost" size="sm" onClick={() => { setFilterTipo('all'); setFilterStatus('all') }} className="text-xs text-muted-foreground hover:text-foreground">
+        <Select value={filterRevenda} onValueChange={setFilterRevenda}>
+          <SelectTrigger className="w-56">
+            <SelectValue placeholder="Unidade de Revenda" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas as unidades</SelectItem>
+            {unidades.map((u) => (
+              <SelectItem key={u.id} value={u.nome}>{u.nome}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {(filterTipo !== 'all' || filterStatus !== 'all' || filterRevenda !== 'all') && (
+          <Button variant="ghost" size="sm" onClick={() => { setFilterTipo('all'); setFilterStatus('all'); setFilterRevenda('all') }} className="text-xs text-muted-foreground hover:text-foreground">
             Limpar Filtros
           </Button>
         )}

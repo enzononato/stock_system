@@ -126,13 +126,13 @@ export default function UsersPage() {
   ]
 
   return (
-    <div className="space-y-8 max-w-2xl">
+    <div className="space-y-8">
       <div>
-        <h2 className="text-xl font-semibold tracking-tight text-foreground">Gestão de Usuários</h2>
-        <p className="text-sm text-muted-foreground">Gerencie os usuários e permissões do sistema</p>
+        <h2 className="text-h1 text-foreground">Gestão de Usuários</h2>
+        <p className="text-caption mt-1">Gerencie os usuários e permissões do sistema</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-3xl">
         <KpiCard label="Total de Usuários" value={users.length} tone="primary" highlighted />
         <KpiCard label="Gestores" value={users.filter((u) => u.role === 'Gestor').length} tone="info" />
         <KpiCard label="Técnicos" value={users.filter((u) => u.role === 'Técnico').length} tone="success" />
@@ -141,10 +141,10 @@ export default function UsersPage() {
       {/* Criar usuário */}
       <form
         onSubmit={(e) => { e.preventDefault(); createMutation.mutate() }}
-        className="bg-card rounded-xl border p-6 space-y-4"
+        className="bg-card rounded-xl border p-6 space-y-4 max-w-3xl"
       >
         <h3 className="font-medium flex items-center gap-2"><UserPlus size={16} />Novo Usuário</h3>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="flex flex-col gap-1.5">
             <Label>Nome de Usuário *</Label>
             <Input value={username} onChange={e => setUsername(e.target.value)} required />
@@ -170,8 +170,8 @@ export default function UsersPage() {
 
       {/* Alterar senha */}
       {changingPasswordId && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
-          <h3 className="font-medium text-amber-800">Alterar Senha — Usuário #{changingPasswordId}</h3>
+        <div className="bg-warning/10 border border-warning/25 rounded-xl p-4 space-y-3 max-w-3xl">
+          <h3 className="font-medium text-warning">Alterar Senha — Usuário #{changingPasswordId}</h3>
           <div className="flex gap-3">
             <Input
               type="password"

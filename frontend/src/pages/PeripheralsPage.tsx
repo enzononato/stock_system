@@ -119,8 +119,8 @@ export default function PeripheralsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-xl font-semibold tracking-tight text-foreground">Periféricos</h2>
-        <p className="text-sm text-muted-foreground">Cadastre e gerencie periféricos como mouse, teclado, monitor etc.</p>
+        <h2 className="text-h1 text-foreground">Periféricos</h2>
+        <p className="text-caption mt-1">Cadastre e gerencie periféricos como mouse, teclado, monitor etc.</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

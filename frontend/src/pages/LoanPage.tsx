@@ -97,13 +97,16 @@ export default function LoanPage() {
     },
   ]
 
+  const selectedItem = disponivel.find((i) => String(i.id) === selectedItemId)
+
   return (
-    <div className="space-y-8 max-w-3xl">
+    <div className="space-y-8 max-w-5xl">
       <div>
-        <h2 className="text-xl font-semibold">Emprestar Equipamento</h2>
-        <p className="text-sm text-muted-foreground">Preencha os dados e inicie o processo de empréstimo.</p>
+        <h2 className="text-h1">Emprestar Equipamento</h2>
+        <p className="text-caption mt-1">Preencha os dados e inicie o processo de empréstimo.</p>
       </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-5 items-start">
       <form onSubmit={handleLoanSubmit} className="bg-card rounded-xl border p-6 space-y-4">
         <div className="flex flex-col gap-1.5">
           <Label>Equipamento *</Label>
@@ -175,6 +178,27 @@ export default function LoanPage() {
           </Button>
         </div>
       </form>
+
+      {/* Preview do item selecionado — evita a área vazia ao lado do form */}
+      <div className="surface rounded-lg p-4 space-y-3 sticky top-4">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Equipamento Selecionado</h3>
+        {selectedItem ? (
+          <div className="space-y-2 text-xs">
+            <p className="text-sm font-medium text-foreground">{selectedItem.tipo} {selectedItem.brand} {selectedItem.model}</p>
+            <div className="flex justify-between text-muted-foreground"><span>ID</span><span className="text-foreground font-mono">#{selectedItem.id}</span></div>
+            {selectedItem.identificador && <div className="flex justify-between text-muted-foreground"><span>Patrimônio</span><span className="text-foreground">{selectedItem.identificador}</span></div>}
+            {selectedItem.revenda && <div className="flex justify-between text-muted-foreground"><span>Revenda atual</span><span className="text-foreground">{selectedItem.revenda}</span></div>}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">Selecione um equipamento disponível para ver os detalhes aqui.</p>
+        )}
+        <div className="pt-3 border-t border-border">
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            Após iniciar, o empréstimo fica pendente de confirmação até o termo assinado ser enviado.
+          </p>
+        </div>
+      </div>
+      </div>
 
       {/* Confirmação de empréstimo pendente (T5: painel compartilhado com TermsPage) */}
       {pendingItemId && (

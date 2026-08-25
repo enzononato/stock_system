@@ -1,36 +1,40 @@
 import { useAuth } from '@/contexts/AuthContext'
-import { useNavigate, useLocation } from 'react-router-dom'
-import { LogOut, User, Sparkles } from 'lucide-react'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
+import { LogOut, Menu, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
-const ROLE_BADGES: Record<string, string> = {
-  Gestor: 'bg-purple-50 text-purple-700 border-purple-200/80 shadow-sm shadow-purple-500/10',
-  'Técnico': 'bg-indigo-50 text-indigo-700 border-indigo-200/80 shadow-sm shadow-indigo-500/10',
-  'Jovem Aprendiz': 'bg-emerald-50 text-emerald-700 border-emerald-200/80 shadow-sm shadow-emerald-500/10',
+const ROLE_BADGE: Record<string, string> = {
+  Gestor: 'bg-purple/10 text-purple-light border-purple/25',
+  'Técnico': 'bg-info/10 text-info border-info/25',
+  'Jovem Aprendiz': 'bg-success/10 text-success border-success/25',
 }
 
-const PAGE_TITLES: Record<string, string> = {
-  '/': 'Visão Geral do Estoque',
-  '/register': 'Cadastrar Novo Equipamento',
-  '/peripherals': 'Gestão de Periféricos',
-  '/link': 'Vincular Periférico a Equipamento',
-  '/loan': 'Realizar Empréstimo',
-  '/return': 'Confirmar Devolução',
-  '/remove': 'Remover / Estornar Itens',
-  '/history': 'Histórico & Auditoria de Movimentações',
-  '/report': 'Relatórios Gerenciais BI',
-  '/charts': 'Dashboard & Análise de Gráficos',
-  '/terms': 'Termos de Responsabilidade',
-  '/users': 'Gestão de Usuários do Sistema',
-  '/unidades': 'Unidades Operacionais & Revendas',
+// path -> [breadcrumb trail, title]. Trail is what shows before the current
+// page (e.g. "Estoque / Cadastrar Equipamento").
+const PAGE_META: Record<string, { trail: string[]; title: string }> = {
+  '/': { trail: [], title: 'Visão Geral do Estoque' },
+  '/register': { trail: ['Estoque'], title: 'Cadastrar Novo Equipamento' },
+  '/peripherals': { trail: ['Estoque'], title: 'Gestão de Periféricos' },
+  '/link': { trail: ['Estoque', 'Periféricos'], title: 'Vincular Periférico' },
+  '/loan': { trail: ['Estoque'], title: 'Realizar Empréstimo' },
+  '/return': { trail: ['Estoque'], title: 'Confirmar Devolução' },
+  '/remove': { trail: ['Administração'], title: 'Remover / Estornar Itens' },
+  '/history': { trail: ['Relatórios'], title: 'Histórico & Auditoria' },
+  '/report': { trail: ['Relatórios'], title: 'Relatórios Gerenciais BI' },
+  '/charts': { trail: ['Estoque'], title: 'Dashboard & Análise de Gráficos' },
+  '/terms': { trail: ['Estoque'], title: 'Termos de Responsabilidade' },
+  '/users': { trail: ['Administração'], title: 'Gestão de Usuários' },
+  '/unidades': { trail: ['Administração'], title: 'Unidades Operacionais & Revendas' },
 }
 
-export default function TopBar({ title }: { title?: string }) {
+export default function TopBar({ title, onOpenMobileNav }: { title?: string; onOpenMobileNav?: () => void }) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
 
-  const activeTitle = title || PAGE_TITLES[location.pathname] || 'Controle de Estoque'
+  const meta = PAGE_META[location.pathname]
+  const activeTitle = title || meta?.title || 'Controle de Estoque'
+  const trail = meta?.trail ?? []
 
   async function handleLogout() {
     await logout()
@@ -38,49 +42,61 @@ export default function TopBar({ title }: { title?: string }) {
   }
 
   return (
-    <header className="sticky top-0 z-30 flex items-center justify-between px-6 py-3.5 h-16 bg-white/85 backdrop-blur-md border-b border-slate-200/80 shadow-sm transition-all">
-      {/* Title & Status */}
-      <div className="flex items-center gap-3">
-        <div>
-          <h1 className="text-base font-bold tracking-tight text-slate-800 font-heading">
-            {activeTitle}
-          </h1>
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            <span className="inline-flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[11px] font-medium text-slate-500">Sistema Conectado</span>
-            </span>
-          </div>
+    <header className="sticky top-0 z-30 flex items-center justify-between gap-3 px-4 sm:px-6 py-3 h-16 bg-card/90 backdrop-blur-md border-b border-border">
+      <div className="flex items-center gap-3 min-w-0">
+        {/* Mobile nav toggle — sidebar is hidden below lg, this is the only entry point */}
+        {onOpenMobileNav && (
+          <button
+            onClick={onOpenMobileNav}
+            className="lg:hidden h-9 w-9 shrink-0 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            aria-label="Abrir menu"
+          >
+            <Menu size={18} />
+          </button>
+        )}
+        <div className="min-w-0">
+          {trail.length > 0 && (
+            <div className="hidden sm:flex items-center gap-1 text-[11px] text-muted-foreground mb-0.5">
+              {trail.map((t, i) => (
+                <span key={i} className="flex items-center gap-1">
+                  {i > 0 && <ChevronRight size={10} />}
+                  {i === 0 && trail.length > 0 && <Link to="/" className="hover:text-foreground transition-colors">{t}</Link>}
+                  {i > 0 && <span>{t}</span>}
+                </span>
+              ))}
+              <ChevronRight size={10} />
+              <span className="text-foreground/70">{activeTitle}</span>
+            </div>
+          )}
+          <h1 className="text-h3 text-foreground truncate">{activeTitle}</h1>
+          {trail.length === 0 && (
+            <div className="flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+              <span className="text-[11px] font-medium text-muted-foreground">Sistema Conectado</span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* User Actions */}
       {user && (
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-white/90 border border-slate-200/80 shadow-sm">
-            <div className="h-6 w-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">
-              <User size={13} />
-            </div>
-            <span className="text-xs font-semibold text-slate-700">{user.username}</span>
-            <span
-              className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${ROLE_BADGES[user.role] || 'bg-slate-100 text-slate-700'}`}
-            >
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-full bg-secondary/60 border border-border">
+            <span className="text-xs font-medium text-foreground">{user.username}</span>
+            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${ROLE_BADGE[user.role] || 'bg-secondary text-muted-foreground border-border'}`}>
               {user.role}
             </span>
           </div>
-
           <Button
             variant="ghost"
-            size="sm"
+            size="icon"
             onClick={handleLogout}
             title="Sair do sistema"
-            className="h-9 w-9 p-0 rounded-full text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+            className="rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10"
           >
-            <LogOut size={17} />
+            <LogOut size={16} />
           </Button>
         </div>
       )}
     </header>
   )
 }
-
