@@ -13,9 +13,9 @@ export interface Peripheral {
 }
 
 export async function listPeripherals(params?: {
-  status?: string
-  tipo?: string
-  include_inactive?: boolean
+  status?: string | undefined
+  tipo?: string | undefined
+  include_inactive?: boolean | undefined
 }) {
   const res = await api.get('/peripherals', { params })
   return res.data as Peripheral[]

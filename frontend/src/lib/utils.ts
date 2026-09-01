@@ -110,3 +110,67 @@ export function isValidIp(ip: string | null | undefined): boolean {
     return n >= 0 && n <= 255
   })
 }
+
+/**
+ * Exporta um array de objetos como CSV, gerado inteiramente no cliente — usa
+ * os dados já carregados na tela (sem chamada extra ao backend). Só serve
+ * para listas que já estão 100% no estado do React; para relatórios paginados
+ * no servidor, prefira o endpoint de exportação dedicado quando ele existir.
+ *
+ * Formatação otimizada para Excel em pt-BR:
+ * - BOM UTF-8 para acentuação
+ * - Separador ponto-e-vírgula (`;`) — padrão Excel brasileiro
+ * - Datas no formato DD/MM/AAAA
+ * - Decimais com vírgula
+ */
+export function exportToCsv<T extends Record<string, unknown>>(
+  filename: string,
+  rows: T[],
+  columns?: { key: keyof T; label: string }[]
+): void {
+  const first = rows[0]
+  if (!first) return
+  const cols = columns ?? (Object.keys(first) as (keyof T)[]).map((key) => ({ key, label: String(key) }))
+
+  const formatValue = (value: unknown): string => {
+    if (value == null) return ''
+    // Datas ISO → DD/MM/AAAA HH:mm ou DD/MM/AAAA
+    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}(T|\s)/.test(value)) {
+      const d = new Date(value)
+      if (!isNaN(d.getTime())) {
+        const day = String(d.getDate()).padStart(2, '0')
+        const mon = String(d.getMonth() + 1).padStart(2, '0')
+        const yr = d.getFullYear()
+        const hr = String(d.getHours()).padStart(2, '0')
+        const mn = String(d.getMinutes()).padStart(2, '0')
+        return hr === '00' && mn === '00' ? `${day}/${mon}/${yr}` : `${day}/${mon}/${yr} ${hr}:${mn}`
+      }
+    }
+    // Números decimais → vírgula
+    if (typeof value === 'number' && !Number.isInteger(value)) {
+      return String(value).replace('.', ',')
+    }
+    return String(value)
+  }
+
+  const escape = (value: unknown) => {
+    const s = formatValue(value)
+    // Se contém separador, aspas ou quebra de linha, colocar entre aspas
+    return /[;";\n]/.test(s) || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s
+  }
+
+  const header = cols.map((c) => escape(c.label)).join(';')
+  const body = rows.map((row) => cols.map((c) => escape(row[c.key])).join(';')).join('\n')
+  const csv = '\uFEFF' + header + '\n' + body // BOM para acentuação abrir certo no Excel
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename.endsWith('.csv') ? filename : `${filename}.csv`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+

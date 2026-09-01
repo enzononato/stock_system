@@ -38,6 +38,10 @@ frontend/node_modules/
 frontend/dist/
 frontend/.vite/
 frontend/build/
+frontend/.output/
+frontend/.wrangler/
+.output/
+.wrangler/
 
 # Relatório de cobertura do Vitest (gerado por `npm run test:coverage`)
 frontend/coverage/
