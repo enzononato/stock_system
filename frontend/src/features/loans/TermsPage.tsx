@@ -20,7 +20,7 @@ export function TermsPage() {
   const { data, isLoading, error, refetch } = useQuery({ queryKey: ["items"], queryFn: () => listItemsPaginated({ limit: FETCH_ALL_LIMIT }) });
   const items = data?.items ?? [];
   const pendentes = items.filter((i) => i.status === "Pendente");
-  const ativos = items.filter((i) => i.status === "Indisponível");
+  const ativos = items.filter((i) => i.status === "Indisponível" && Boolean(i.assigned_to));
 
   async function handleViewSignedTerm(itemId: number) {
     try {

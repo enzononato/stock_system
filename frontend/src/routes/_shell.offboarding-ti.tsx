@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { TiOffboardingPage } from "@/features/offboarding/TiOffboardingPage";
+import { OffboardingHubPage } from "@/features/offboarding/OffboardingHubPage";
 
 export const Route = createFileRoute("/_shell/offboarding-ti")({
-  component: TiOffboardingPage,
+  component: OffboardingHubPage,
 });
+

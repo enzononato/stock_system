@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Download } from "lucide-react";
 
 import { getMonthlyReport, exportMonthlyReportCsv, type ReportRow } from "@/api/reports";
+import { listUnidades } from "@/api/unidades";
+import { useConstants } from "@/hooks/useConstants";
 import { DataTable, type Column } from "@/components/app/DataTable";
 import { PageHeader, Section } from "@/components/app/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -26,13 +28,24 @@ export function ReportPage() {
   const [isExporting, setIsExporting] = useState(false);
   const [filterRevenda, setFilterRevenda] = useState("all");
 
+  const { revendas = [] } = useConstants();
+  const { data: unidades = [] } = useQuery({ queryKey: ["unidades-report"], queryFn: () => listUnidades() });
+
   const { data: report = [], isLoading, error, refetch } = useQuery({
     queryKey: ["report", queryParams.year, queryParams.month],
     queryFn: () => getMonthlyReport(queryParams.year, queryParams.month),
   });
 
-  const revendaOptions = [...new Set(report.map((r) => r.revenda).filter(Boolean))] as string[];
+  const revendaOptions = useMemo(() => {
+    const set = new Set<string>();
+    revendas.forEach((r) => r && set.add(r));
+    unidades.forEach((u) => u.nome && set.add(u.nome));
+    report.forEach((r) => r.revenda && set.add(r.revenda));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [revendas, unidades, report]);
+
   const filteredReport = filterRevenda === "all" ? report : report.filter((r) => r.revenda === filterRevenda);
+
 
   function handleGenerate() {
     setQueryParams({ year: Number(year), month: Number(month) });

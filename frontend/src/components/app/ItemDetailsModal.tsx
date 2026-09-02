@@ -1,12 +1,15 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Cpu, User, Building2, HardDrive, Network, Zap, Info, Tag, Pencil, Save, Loader2, X } from "lucide-react";
+import { Cpu, User, Building2, HardDrive, Network, Zap, Info, Tag, Pencil, Save, Loader2, X, FileDown } from "lucide-react";
 import { toast } from "sonner";
 
 import type { Item } from "@/api/items";
 import { updateItem } from "@/api/items";
+import { downloadSignedTerm } from "@/api/loans";
+import { generateAndDownloadLoanTerm } from "@/components/app/ConfirmacaoTermo";
 import { listItemPeripherals, type Peripheral } from "@/api/peripherals";
+
 import {
   Dialog,
   DialogContent,
@@ -88,6 +91,21 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
   const [codigoPatrimonial, setCodigoPatrimonial] = useState("");
   const [fornecedor, setFornecedor] = useState("");
   const [specificFields, setSpecificFields] = useState<Record<string, string>>({});
+  const [downloadingTerm, setDownloadingTerm] = useState(false);
+
+  async function handleViewSignedTerm(itemId: number) {
+    try {
+      setDownloadingTerm(true);
+      const blob = await downloadSignedTerm(itemId);
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+      window.setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Termo assinado não encontrado."));
+    } finally {
+      setDownloadingTerm(false);
+    }
+  }
 
   // Hydrate edit state when item changes or entering edit mode
   useEffect(() => {
@@ -236,12 +254,39 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
                 )}
               </Section>
 
-              {/* Dados de Alocação (somente leitura) */}
+              {/* Dados de Alocação */}
               <Section icon={User} title="Dados de Alocação">
                 <Field label="Funcionário Alocado" value={item.assigned_to} />
                 <Field label="CPF do Colaborador" value={item.cpf} />
                 <Field label="Setor" value={item.setor} />
                 <Field label="Data do Empréstimo" value={formatDate(item.date_issued)} />
+                {Boolean(item.status === "Indisponível" && item.assigned_to) && (
+                  <div className="col-span-2 sm:col-span-3 pt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={downloadingTerm}
+                      onClick={() => handleViewSignedTerm(item.id)}
+                    >
+                      <FileDown className="size-3.5 mr-1.5" aria-hidden />
+                      {downloadingTerm ? "Baixando termo…" : "Ver Termo Assinado"}
+                    </Button>
+                  </div>
+                )}
+                {item.status === "Pendente" && (
+                  <div className="col-span-2 sm:col-span-3 pt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => generateAndDownloadLoanTerm(item.id)}
+                    >
+                      <FileDown className="size-3.5 mr-1.5" aria-hidden />
+                      Baixar Termo de Responsabilidade
+                    </Button>
+                  </div>
+                )}
               </Section>
 
               {/* Hardware & Sistema — editável para Notebook/Computador */}

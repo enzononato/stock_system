@@ -138,7 +138,7 @@ export function DataTable<T>({
   const handlePageChange = pagination ? pagination.onPageChange : setClientPage;
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-1 flex-col justify-between space-y-3">
       {/* Desktop / tablet */}
       {/* Desktop / tablet */}
       <div className="surface-panel hidden overflow-hidden sm:block">

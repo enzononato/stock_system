@@ -25,7 +25,7 @@ import { formatCpf, formatDateTime, exportToCsv } from "@/lib/utils";
 import { toast } from "sonner";
 
 const REVERSIBLE_OPS = ["Cadastro", "Empréstimo", "Confirmação Empréstimo", "Devolução", "Confirmação Devolução"];
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 7;
 
 function OperationBadge({ op }: { op?: string | undefined }) {
   if (!op) return <Badge variant="outline">-</Badge>;
