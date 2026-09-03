@@ -60,7 +60,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
     void initialize();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -92,12 +94,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       return;
     }
-    try { await apiLogout(); } finally { setAccessToken(null); setUser(null); }
+    try {
+      await apiLogout();
+    } finally {
+      setAccessToken(null);
+      setUser(null);
+    }
   }, []);
 
   const hasRole = useCallback((...roles: string[]) => !!user && roles.includes(user.role), [user]);
 
-  return <AuthContext.Provider value={{ user, isLoading, login, logout, hasRole }}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ user, isLoading, login, logout, hasRole }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {

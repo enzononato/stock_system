@@ -1,29 +1,29 @@
-import api, { type Paginated } from './client'
+import api, { type Paginated } from "./client";
 
 export interface HistoryEntry {
-  id: number
-  item_id?: number
-  peripheral_id?: number
-  operador?: string
-  operation?: string
-  revenda?: string
-  data_operacao?: string
-  tipo?: string
-  marca?: string
-  modelo?: string
-  nota_fiscal?: string
-  fornecedor?: string
-  identificador?: string
-  usuario?: string
-  cpf?: string
-  cargo?: string
-  center_cost?: string
-  setor?: string
-  details?: string
+  id: number;
+  item_id?: number;
+  peripheral_id?: number;
+  operador?: string;
+  operation?: string;
+  revenda?: string;
+  data_operacao?: string;
+  tipo?: string;
+  marca?: string;
+  modelo?: string;
+  nota_fiscal?: string;
+  fornecedor?: string;
+  identificador?: string;
+  usuario?: string;
+  cpf?: string;
+  cargo?: string;
+  center_cost?: string;
+  setor?: string;
+  details?: string;
   /** Nome/caminho do anexo vinculado à operação (ex.: comprovante de remoção), quando houver. */
-  operacao_anexo?: string
+  operacao_anexo?: string;
   /** Nome/caminho do termo assinado (empréstimo ou devolução) vinculado a esta entrada, quando houver. */
-  termo_assinado_anexo?: string
+  termo_assinado_anexo?: string;
 }
 
 export interface ListHistoryParams {
@@ -33,18 +33,20 @@ export interface ListHistoryParams {
    * filtro no cliente varreria apenas a página carregada e passaria a impressão
    * falsa de ter pesquisado o histórico inteiro.
    */
-  search?: string | undefined
-  limit?: number | undefined
-  offset?: number | undefined
+  search?: string | undefined;
+  limit?: number | undefined;
+  offset?: number | undefined;
 }
 
 /**
  * `GET /api/history` paginado: aceita `search`/`limit`/`offset` e devolve
  * `{ items, total }`. A busca é resolvida no servidor — ver `ListHistoryParams`.
  */
-export async function listHistoryPaginated(params?: ListHistoryParams): Promise<Paginated<HistoryEntry>> {
-  const res = await api.get('/history', { params })
-  return res.data as Paginated<HistoryEntry>
+export async function listHistoryPaginated(
+  params?: ListHistoryParams,
+): Promise<Paginated<HistoryEntry>> {
+  const res = await api.get("/history", { params });
+  return res.data as Paginated<HistoryEntry>;
 }
 
 /**
@@ -52,7 +54,6 @@ export async function listHistoryPaginated(params?: ListHistoryParams): Promise<
  * corpo: é uma operação destrutiva, e só o role não basta como autorização.
  */
 export async function reverseEntryWithPassword(historyId: number, password: string) {
-  const res = await api.post(`/history/${historyId}/reverse`, { password })
-  return res.data
+  const res = await api.post(`/history/${historyId}/reverse`, { password });
+  return res.data;
 }
-

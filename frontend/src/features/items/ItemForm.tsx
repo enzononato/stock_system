@@ -5,21 +5,47 @@ import { ArrowLeft, Save } from "lucide-react";
 import { toast } from "sonner";
 
 import { createItem, updateItem, type Item } from "@/api/items";
-import { TypeSpecificFields, validateTypeSpecificFields } from "@/components/app/TypeSpecificFields";
+import {
+  TypeSpecificFields,
+  validateTypeSpecificFields,
+} from "@/components/app/TypeSpecificFields";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useConstants } from "@/hooks/useConstants";
 import { getErrorMessage } from "@/lib/api-error";
 import { isValidNotaFiscal, maskNotaFiscalInput } from "@/lib/utils";
 
 const SPECIFIC_KEYS = [
-  "identificador", "dominio", "host", "endereco_fisico", "cpu", "ram", "storage",
-  "sistema", "licenca", "anydesk", "setor", "ip", "mac", "potencia_nominal",
-  "autonomia_estimada", "ip_snmp", "codigo_patrimonial", "responsavel",
-  "local_instalacao", "poe", "quantidade_portas",
+  "identificador",
+  "dominio",
+  "host",
+  "endereco_fisico",
+  "cpu",
+  "ram",
+  "storage",
+  "sistema",
+  "licenca",
+  "anydesk",
+  "setor",
+  "ip",
+  "mac",
+  "potencia_nominal",
+  "autonomia_estimada",
+  "ip_snmp",
+  "codigo_patrimonial",
+  "responsavel",
+  "local_instalacao",
+  "poe",
+  "quantidade_portas",
 ] as const;
 
 function todayBr(): string {
@@ -59,7 +85,9 @@ export function ItemForm({ mode, itemId, existingItem }: ItemFormProps) {
       if (existingItem.date_registered) {
         const d = new Date(existingItem.date_registered);
         if (!Number.isNaN(d.getTime())) {
-          setDateRegistered(`${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`);
+          setDateRegistered(
+            `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`,
+          );
         }
       }
       const fields: Record<string, string> = {};
@@ -78,7 +106,9 @@ export function ItemForm({ mode, itemId, existingItem }: ItemFormProps) {
       mode === "create" ? createItem(data) : updateItem(itemId as number, data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["items"] });
-      toast.success(mode === "create" ? "Item cadastrado com sucesso!" : "Item atualizado com sucesso!");
+      toast.success(
+        mode === "create" ? "Item cadastrado com sucesso!" : "Item atualizado com sucesso!",
+      );
       void navigate({ to: "/" });
     },
     onError: (err: unknown) => {
@@ -103,7 +133,10 @@ export function ItemForm({ mode, itemId, existingItem }: ItemFormProps) {
     }
 
     const data: Record<string, unknown> = {
-      tipo, brand, model, revenda,
+      tipo,
+      brand,
+      model,
+      revenda,
       nota_fiscal: notaFiscal,
       fornecedor,
       ...specificFields,
@@ -130,7 +163,10 @@ export function ItemForm({ mode, itemId, existingItem }: ItemFormProps) {
         }
       />
 
-      <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-border bg-card p-6">
+      <form
+        onSubmit={handleSubmit}
+        className="space-y-4 rounded-lg border border-border bg-card p-6"
+      >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="flex flex-col gap-1.5">
             <Label>Tipo *</Label>
@@ -185,7 +221,11 @@ export function ItemForm({ mode, itemId, existingItem }: ItemFormProps) {
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="fornecedor">Fornecedor</Label>
-            <Input id="fornecedor" value={fornecedor} onChange={(e) => setFornecedor(e.target.value)} />
+            <Input
+              id="fornecedor"
+              value={fornecedor}
+              onChange={(e) => setFornecedor(e.target.value)}
+            />
           </div>
         </div>
 
@@ -206,7 +246,9 @@ export function ItemForm({ mode, itemId, existingItem }: ItemFormProps) {
 
         {tipo && (
           <div className="space-y-4 border-t border-border pt-4">
-            <p className="text-sm font-medium text-muted-foreground">Informações específicas — {tipo}</p>
+            <p className="text-sm font-medium text-muted-foreground">
+              Informações específicas — {tipo}
+            </p>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <TypeSpecificFields
                 tipo={tipo}
@@ -220,7 +262,11 @@ export function ItemForm({ mode, itemId, existingItem }: ItemFormProps) {
         <div className="flex justify-end pt-2">
           <Button type="submit" disabled={mutation.isPending}>
             <Save className="mr-2 size-4" />
-            {mutation.isPending ? "Salvando..." : mode === "create" ? "Cadastrar" : "Salvar Alterações"}
+            {mutation.isPending
+              ? "Salvando..."
+              : mode === "create"
+                ? "Cadastrar"
+                : "Salvar Alterações"}
           </Button>
         </div>
       </form>

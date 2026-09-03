@@ -43,7 +43,7 @@ export default function ThreeLogoCanvas({ onError }: ThreeLogoCanvasProps) {
       38,
       container.clientWidth / container.clientHeight,
       0.1,
-      100
+      100,
     );
     // Modelo normalizado de tamanho ~2.0, posicionado em z=4.5 para enquadramento perfeito
     camera.position.set(0, 0, 4.5);
@@ -182,7 +182,7 @@ export default function ThreeLogoCanvas({ onError }: ThreeLogoCanvasProps) {
         console.warn("Falha ao carregar modelo 3D local, ativando fallback vetorial:", error);
         setHasError(true);
         onError?.();
-      }
+      },
     );
 
     // 1. Parallax global pelo movimento do mouse na tela inteira

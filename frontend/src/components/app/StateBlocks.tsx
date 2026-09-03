@@ -25,12 +25,17 @@ export function EmptyState({
         className,
       )}
     >
-      <div className="grid size-11 place-items-center rounded-full bg-muted text-muted-foreground" aria-hidden>
+      <div
+        className="grid size-11 place-items-center rounded-full bg-muted text-muted-foreground"
+        aria-hidden
+      >
         {icon ?? <Inbox className="size-5" />}
       </div>
       <div className="space-y-1">
         <p className="text-sm font-semibold text-foreground">{title}</p>
-        {description ? <p className="max-w-sm text-sm text-muted-foreground">{description}</p> : null}
+        {description ? (
+          <p className="max-w-sm text-sm text-muted-foreground">{description}</p>
+        ) : null}
       </div>
       {action}
     </div>
@@ -75,10 +80,19 @@ export function ErrorState({
   );
 }
 
-export function LoadingState({ label = "Carregando…", className }: { label?: string | undefined; className?: string | undefined }) {
+export function LoadingState({
+  label = "Carregando…",
+  className,
+}: {
+  label?: string | undefined;
+  className?: string | undefined;
+}) {
   return (
     <div
-      className={cn("flex items-center justify-center gap-2 px-6 py-14 text-muted-foreground", className)}
+      className={cn(
+        "flex items-center justify-center gap-2 px-6 py-14 text-muted-foreground",
+        className,
+      )}
       aria-live="polite"
       aria-busy="true"
     >

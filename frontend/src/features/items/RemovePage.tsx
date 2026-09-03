@@ -9,7 +9,13 @@ import { SearchableSelect } from "@/components/app/SearchableSelect";
 import { FileUpload } from "@/components/app/FileUpload";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useConstants } from "@/hooks/useConstants";
 import { getErrorMessage } from "@/lib/api-error";
 
@@ -75,7 +81,10 @@ export function RemovePage() {
         description="Remove permanentemente o item do estoque. Esta ação não pode ser desfeita."
       />
 
-      <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-destructive/25 bg-card p-6">
+      <form
+        onSubmit={handleSubmit}
+        className="space-y-4 rounded-lg border border-destructive/25 bg-card p-6"
+      >
         <div className="flex flex-col gap-1.5">
           <Label>Equipamento *</Label>
           <SearchableSelect
@@ -118,7 +127,12 @@ export function RemovePage() {
           </div>
         )}
 
-        <Button type="submit" variant="destructive" disabled={mutation.isPending} className="w-full">
+        <Button
+          type="submit"
+          variant="destructive"
+          disabled={mutation.isPending}
+          className="w-full"
+        >
           <Trash2 className="mr-2 size-4" />
           {mutation.isPending ? "Removendo..." : "Confirmar Remoção"}
         </Button>

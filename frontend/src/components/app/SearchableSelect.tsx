@@ -46,7 +46,8 @@ export function SearchableSelect({
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setIsOpen(false);
+      if (containerRef.current && !containerRef.current.contains(e.target as Node))
+        setIsOpen(false);
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -94,7 +95,9 @@ export function SearchableSelect({
             <>
               <span className="font-medium text-foreground">{selectedOption.label}</span>
               {selectedOption.subtitle ? (
-                <span className="ml-1.5 text-xs text-muted-foreground">{selectedOption.subtitle}</span>
+                <span className="ml-1.5 text-xs text-muted-foreground">
+                  {selectedOption.subtitle}
+                </span>
               ) : null}
             </>
           ) : (
@@ -102,7 +105,10 @@ export function SearchableSelect({
           )}
         </span>
         <ChevronDown
-          className={cn("size-4 shrink-0 text-muted-foreground transition-transform", isOpen && "rotate-180")}
+          className={cn(
+            "size-4 shrink-0 text-muted-foreground transition-transform",
+            isOpen && "rotate-180",
+          )}
           aria-hidden
         />
       </button>
@@ -110,7 +116,10 @@ export function SearchableSelect({
       {isOpen ? (
         <div className="absolute left-0 top-full z-50 mt-1 flex max-h-80 w-full flex-col gap-2 rounded-md border border-border bg-popover p-2 shadow-lg">
           <div className="relative shrink-0">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+            <Search
+              className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden
+            />
             <input
               ref={inputRef}
               type="text"

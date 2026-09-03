@@ -7,12 +7,7 @@ import { confirmLoan, generateLoanTerm } from "@/api/loans";
 import { getErrorMessage } from "@/lib/api-error";
 import { Button } from "@/components/ui/button";
 import { FileUpload } from "@/components/app/FileUpload";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 /**
  * Gera o termo de empréstimo (.docx) e dispara o download no navegador.

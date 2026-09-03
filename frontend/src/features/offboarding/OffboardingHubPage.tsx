@@ -25,9 +25,15 @@ export function OffboardingHubPage() {
   const all = useOffboardingProcesses();
   const [activeTab, setActiveTab] = useState("panorama");
 
-  const queueTi = all.filter((p) => !p.rejected && (p.currentStep === 4 || p.currentStep === 6)).length;
-  const queueRh = all.filter((p) => !p.rejected && (p.currentStep === 2 || p.currentStep === 8)).length;
-  const queueDp = all.filter((p) => !p.rejected && (p.currentStep === 3 || p.currentStep === 9)).length;
+  const queueTi = all.filter(
+    (p) => !p.rejected && (p.currentStep === 4 || p.currentStep === 6),
+  ).length;
+  const queueRh = all.filter(
+    (p) => !p.rejected && (p.currentStep === 2 || p.currentStep === 8),
+  ).length;
+  const queueDp = all.filter(
+    (p) => !p.rejected && (p.currentStep === 3 || p.currentStep === 9),
+  ).length;
   const queuePatrimonio = all.filter((p) => !p.rejected && p.currentStep === 7).length;
 
   return (

@@ -8,7 +8,8 @@ export type DemoUser = {
 };
 
 export const DEMO_API_ENABLED =
-  typeof import.meta !== "undefined" && Boolean(import.meta.env?.["VITE_ENABLE_DEMO_API"] === "true");
+  typeof import.meta !== "undefined" &&
+  Boolean(import.meta.env?.["VITE_ENABLE_DEMO_API"] === "true");
 
 export const DEMO_CREDENTIALS = {
   email: "demo@teste.com",
@@ -24,12 +25,18 @@ const DEMO_USER: DemoUser = {
 
 const DEMO_TOKEN = "demo-frontend-only-token";
 
-export function isDemoApiEnabled() { return DEMO_API_ENABLED; }
+export function isDemoApiEnabled() {
+  return DEMO_API_ENABLED;
+}
 
 export function demoLogin(email: string, password: string) {
   if (!email.trim() || !password.trim()) throw new Error("Informe e-mail e senha.");
   return { access_token: DEMO_TOKEN, user: DEMO_USER };
 }
 
-export function demoMe() { return DEMO_USER; }
-export function demoRefresh() { return { access_token: DEMO_TOKEN }; }
+export function demoMe() {
+  return DEMO_USER;
+}
+export function demoRefresh() {
+  return { access_token: DEMO_TOKEN };
+}

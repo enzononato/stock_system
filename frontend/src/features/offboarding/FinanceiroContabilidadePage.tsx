@@ -6,11 +6,17 @@ import { setChecklist, useOffboardingProcesses } from "./store";
 const CHECKLIST_FINANCEIRO = [
   { key: "cartao_corporativo", label: "Cancelamento / devolução do cartão corporativo" },
   { key: "adiantamentos", label: "Acerto de adiantamentos e reembolsos de despesas pendentes" },
-  { key: "acessos_bancarios", label: "Bloqueio e revogação de acessos bancários e assinaturas eletrônicas" },
+  {
+    key: "acessos_bancarios",
+    label: "Bloqueio e revogação de acessos bancários e assinaturas eletrônicas",
+  },
 ];
 
 const CHECKLIST_CONTABILIDADE = [
-  { key: "centro_custo", label: "Transferência ou encerramento de responsabilidade de centro de custo" },
+  {
+    key: "centro_custo",
+    label: "Transferência ou encerramento de responsabilidade de centro de custo",
+  },
   { key: "baixa_patrimonial", label: "Conferência de baixas de ativos sob custódia contábil" },
   { key: "provisoes_encargos", label: "Apuração e conciliação contábil das rescisões e provisões" },
 ];
@@ -33,7 +39,9 @@ export function OffboardingFinanceiroContabilidadePage() {
             <Landmark className="size-4" />
           </div>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Processos Ativos</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Processos Ativos
+            </p>
             <p className="mt-1 text-2xl font-bold num">{ativos.length}</p>
           </div>
         </div>
@@ -42,7 +50,9 @@ export function OffboardingFinanceiroContabilidadePage() {
             <ReceiptText className="size-4" />
           </div>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Escopo de Controle</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Escopo de Controle
+            </p>
             <p className="mt-1 text-sm font-bold">Cartões, Adiantamentos e Ativos</p>
           </div>
         </div>
@@ -53,7 +63,9 @@ export function OffboardingFinanceiroContabilidadePage() {
         description="Marque os itens concluídos para cada processo em andamento."
       >
         {ativos.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhum processo de desligamento em andamento.</p>
+          <p className="text-sm text-muted-foreground">
+            Nenhum processo de desligamento em andamento.
+          </p>
         ) : (
           <div className="space-y-6">
             {ativos.map((p) => (

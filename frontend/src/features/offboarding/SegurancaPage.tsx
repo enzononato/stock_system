@@ -77,7 +77,9 @@ export function OffboardingSegurancaPage() {
         {isLoading ? (
           <LoadingState label="Carregando patrimônio vinculado…" />
         ) : fila.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhum processo aguardando devolução de patrimônio.</p>
+          <p className="text-sm text-muted-foreground">
+            Nenhum processo aguardando devolução de patrimônio.
+          </p>
         ) : (
           <div className="space-y-4">
             {fila.map((p) => {
@@ -107,11 +109,15 @@ export function OffboardingSegurancaPage() {
 
                           <div className="mt-3 grid gap-3 sm:grid-cols-2">
                             <div className="space-y-1.5">
-                              <Label htmlFor={`obs-${item.id}`}>Estado de conservação / observação</Label>
+                              <Label htmlFor={`obs-${item.id}`}>
+                                Estado de conservação / observação
+                              </Label>
                               <Input
                                 id={`obs-${item.id}`}
                                 value={obs[item.id] ?? ""}
-                                onChange={(e) => setObs((s) => ({ ...s, [item.id]: e.target.value }))}
+                                onChange={(e) =>
+                                  setObs((s) => ({ ...s, [item.id]: e.target.value }))
+                                }
                               />
                             </div>
                             <FileUpload

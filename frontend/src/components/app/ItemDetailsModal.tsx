@@ -1,7 +1,21 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Cpu, User, Building2, HardDrive, Network, Zap, Info, Tag, Pencil, Save, Loader2, X, FileDown } from "lucide-react";
+import {
+  Cpu,
+  User,
+  Building2,
+  HardDrive,
+  Network,
+  Zap,
+  Info,
+  Tag,
+  Pencil,
+  Save,
+  Loader2,
+  X,
+  FileDown,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import type { Item } from "@/api/items";
@@ -31,20 +45,51 @@ interface ItemDetailsModalProps {
   onClose: () => void;
 }
 
-function Field({ label, value, mono }: { label: string; value?: string | null | undefined; mono?: boolean | undefined }) {
+function Field({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value?: string | null | undefined;
+  mono?: boolean | undefined;
+}) {
   return (
     <div className="min-w-0">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className={`text-sm font-medium text-foreground ${mono ? "font-mono" : ""}`}>{value || "-"}</p>
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
+      <p className={`text-sm font-medium text-foreground ${mono ? "font-mono" : ""}`}>
+        {value || "-"}
+      </p>
     </div>
   );
 }
 
-function EditField({ label, value, onChange, mono, placeholder }: { label: string; value: string; onChange: (v: string) => void; mono?: boolean | undefined; placeholder?: string | undefined }) {
+function EditField({
+  label,
+  value,
+  onChange,
+  mono,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  mono?: boolean | undefined;
+  placeholder?: string | undefined;
+}) {
   return (
     <div className="min-w-0 flex flex-col gap-1">
-      <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</Label>
-      <Input value={value} onChange={(e) => onChange(e.target.value)} className={`h-8 text-sm ${mono ? "font-mono" : ""}`} placeholder={placeholder} />
+      <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </Label>
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`h-8 text-sm ${mono ? "font-mono" : ""}`}
+        placeholder={placeholder}
+      />
     </div>
   );
 }
@@ -70,10 +115,27 @@ function Section({
 }
 
 const SPECIFIC_KEYS = [
-  "identificador", "dominio", "host", "endereco_fisico", "cpu", "ram", "storage",
-  "sistema", "licenca", "anydesk", "setor", "ip", "mac", "potencia_nominal",
-  "autonomia_estimada", "ip_snmp", "codigo_patrimonial", "responsavel",
-  "local_instalacao", "poe", "quantidade_portas",
+  "identificador",
+  "dominio",
+  "host",
+  "endereco_fisico",
+  "cpu",
+  "ram",
+  "storage",
+  "sistema",
+  "licenca",
+  "anydesk",
+  "setor",
+  "ip",
+  "mac",
+  "potencia_nominal",
+  "autonomia_estimada",
+  "ip_snmp",
+  "codigo_patrimonial",
+  "responsavel",
+  "local_instalacao",
+  "poe",
+  "quantidade_portas",
 ] as const;
 
 /** Modal de detalhes do equipamento com modo de edição inline. */
@@ -178,10 +240,19 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
   const isSwitch = item?.tipo === "Switch";
 
   const sf = (key: string) => specificFields[key] ?? "";
-  const setSf = (key: string, value: string) => setSpecificFields((prev) => ({ ...prev, [key]: value }));
+  const setSf = (key: string, value: string) =>
+    setSpecificFields((prev) => ({ ...prev, [key]: value }));
 
   return (
-    <Dialog open={Boolean(item)} onOpenChange={(open) => { if (!open) { setEditing(false); onClose(); } }}>
+    <Dialog
+      open={Boolean(item)}
+      onOpenChange={(open) => {
+        if (!open) {
+          setEditing(false);
+          onClose();
+        }
+      }}
+    >
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         {item ? (
           <>
@@ -192,12 +263,22 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
                 </span>
                 <span className="text-xs font-medium text-muted-foreground">{item.tipo}</span>
                 <StatusBadge status={item.status} />
-                {editing && <span className="text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded">Editando</span>}
+                {editing && (
+                  <span className="text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded">
+                    Editando
+                  </span>
+                )}
               </div>
               <DialogTitle>
-                {editing ? `${brand || item.brand} ${model || item.model}` : `${item.brand} ${item.model}`}
+                {editing
+                  ? `${brand || item.brand} ${model || item.model}`
+                  : `${item.brand} ${item.model}`}
               </DialogTitle>
-              <DialogDescription>{editing ? "Edite os campos e clique em Salvar." : "Detalhes do equipamento e periféricos vinculados."}</DialogDescription>
+              <DialogDescription>
+                {editing
+                  ? "Edite os campos e clique em Salvar."
+                  : "Detalhes do equipamento e periféricos vinculados."}
+              </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4">
@@ -207,8 +288,12 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
                     <Building2 className="size-4" aria-hidden />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Unidade</p>
-                    <p className="text-xs font-medium text-foreground truncate">{item.revenda || "Não definida"}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Unidade
+                    </p>
+                    <p className="text-xs font-medium text-foreground truncate">
+                      {item.revenda || "Não definida"}
+                    </p>
                   </div>
                 </div>
                 <div className="rounded-lg border border-border bg-muted/30 p-3 flex items-center gap-3">
@@ -216,8 +301,12 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
                     <User className="size-4" aria-hidden />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Usuário Atual</p>
-                    <p className="text-xs font-medium text-foreground truncate">{item.assigned_to || "Nenhum"}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Usuário Atual
+                    </p>
+                    <p className="text-xs font-medium text-foreground truncate">
+                      {item.assigned_to || "Nenhum"}
+                    </p>
                   </div>
                 </div>
                 <div className="rounded-lg border border-border bg-muted/30 p-3 flex items-center gap-3">
@@ -225,8 +314,12 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
                     <Tag className="size-4" aria-hidden />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Identificador / NF</p>
-                    <p className="text-xs font-medium text-foreground truncate">{item.identificador || item.nota_fiscal || "-"}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Identificador / NF
+                    </p>
+                    <p className="text-xs font-medium text-foreground truncate">
+                      {item.identificador || item.nota_fiscal || "-"}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -237,8 +330,17 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
                   <>
                     <EditField label="Marca" value={brand} onChange={setBrand} />
                     <EditField label="Modelo" value={model} onChange={setModel} />
-                    <EditField label="Nota Fiscal" value={notaFiscal} onChange={(v) => setNotaFiscal(maskNotaFiscalInput(v))} placeholder="9 dígitos" />
-                    <EditField label="Código Patrimonial" value={codigoPatrimonial} onChange={setCodigoPatrimonial} />
+                    <EditField
+                      label="Nota Fiscal"
+                      value={notaFiscal}
+                      onChange={(v) => setNotaFiscal(maskNotaFiscalInput(v))}
+                      placeholder="9 dígitos"
+                    />
+                    <EditField
+                      label="Código Patrimonial"
+                      value={codigoPatrimonial}
+                      onChange={setCodigoPatrimonial}
+                    />
                     <EditField label="Fornecedor" value={fornecedor} onChange={setFornecedor} />
                     <Field label="Data de Cadastro" value={formatDate(item.date_registered)} />
                   </>
@@ -294,17 +396,62 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
                 <Section icon={HardDrive} title="Hardware & Sistema">
                   {editing ? (
                     <>
-                      <EditField label="Host / Nome da Máquina" value={sf("host")} onChange={(v) => setSf("host", v)} mono />
-                      <EditField label="Processador (CPU)" value={sf("cpu")} onChange={(v) => setSf("cpu", v)} />
-                      <EditField label="Memória RAM" value={sf("ram")} onChange={(v) => setSf("ram", v)} />
-                      <EditField label="Armazenamento" value={sf("storage")} onChange={(v) => setSf("storage", v)} />
-                      <EditField label="Sistema Operacional" value={sf("sistema")} onChange={(v) => setSf("sistema", v)} />
-                      <EditField label="Domínio Corporativo" value={sf("dominio")} onChange={(v) => setSf("dominio", v)} />
-                      <EditField label="Endereço MAC / Físico" value={sf("endereco_fisico") || sf("mac")} onChange={(v) => setSf("endereco_fisico", v)} mono />
-                      <EditField label="Endereço IP" value={sf("ip")} onChange={(v) => setSf("ip", v)} mono />
-                      <EditField label="AnyDesk ID" value={sf("anydesk")} onChange={(v) => setSf("anydesk", v)} mono />
+                      <EditField
+                        label="Host / Nome da Máquina"
+                        value={sf("host")}
+                        onChange={(v) => setSf("host", v)}
+                        mono
+                      />
+                      <EditField
+                        label="Processador (CPU)"
+                        value={sf("cpu")}
+                        onChange={(v) => setSf("cpu", v)}
+                      />
+                      <EditField
+                        label="Memória RAM"
+                        value={sf("ram")}
+                        onChange={(v) => setSf("ram", v)}
+                      />
+                      <EditField
+                        label="Armazenamento"
+                        value={sf("storage")}
+                        onChange={(v) => setSf("storage", v)}
+                      />
+                      <EditField
+                        label="Sistema Operacional"
+                        value={sf("sistema")}
+                        onChange={(v) => setSf("sistema", v)}
+                      />
+                      <EditField
+                        label="Domínio Corporativo"
+                        value={sf("dominio")}
+                        onChange={(v) => setSf("dominio", v)}
+                      />
+                      <EditField
+                        label="Endereço MAC / Físico"
+                        value={sf("endereco_fisico") || sf("mac")}
+                        onChange={(v) => setSf("endereco_fisico", v)}
+                        mono
+                      />
+                      <EditField
+                        label="Endereço IP"
+                        value={sf("ip")}
+                        onChange={(v) => setSf("ip", v)}
+                        mono
+                      />
+                      <EditField
+                        label="AnyDesk ID"
+                        value={sf("anydesk")}
+                        onChange={(v) => setSf("anydesk", v)}
+                        mono
+                      />
                       <div className="col-span-2">
-                        <EditField label="Licença do Windows" value={sf("licenca")} onChange={(v) => setSf("licenca", v)} mono />
+                        <EditField
+                          label="Licença do Windows"
+                          value={sf("licenca")}
+                          onChange={(v) => setSf("licenca", v)}
+                          mono
+                        />
                       </div>
                     </>
                   ) : (
@@ -315,7 +462,11 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
                       <Field label="Armazenamento" value={item.storage} />
                       <Field label="Sistema Operacional" value={item.sistema} />
                       <Field label="Domínio Corporativo" value={item.dominio} />
-                      <Field label="Endereço MAC / Físico" value={item.endereco_fisico || item.mac} mono />
+                      <Field
+                        label="Endereço MAC / Físico"
+                        value={item.endereco_fisico || item.mac}
+                        mono
+                      />
                       <Field label="Endereço IP" value={item.ip} mono />
                       <Field label="AnyDesk ID" value={item.anydesk} mono />
                       <div className="col-span-2">
@@ -329,12 +480,25 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
               {/* Infraestrutura — editável para Nobreak/Switch */}
               {(isNobreak || isSwitch) && (
                 <Section icon={Zap} title="Infraestrutura">
-                  {isNobreak && (
-                    editing ? (
+                  {isNobreak &&
+                    (editing ? (
                       <>
-                        <EditField label="Potência Nominal" value={sf("potencia_nominal")} onChange={(v) => setSf("potencia_nominal", v)} />
-                        <EditField label="Autonomia Estimada" value={sf("autonomia_estimada")} onChange={(v) => setSf("autonomia_estimada", v)} />
-                        <EditField label="IP da Placa SNMP" value={sf("ip_snmp")} onChange={(v) => setSf("ip_snmp", v)} mono />
+                        <EditField
+                          label="Potência Nominal"
+                          value={sf("potencia_nominal")}
+                          onChange={(v) => setSf("potencia_nominal", v)}
+                        />
+                        <EditField
+                          label="Autonomia Estimada"
+                          value={sf("autonomia_estimada")}
+                          onChange={(v) => setSf("autonomia_estimada", v)}
+                        />
+                        <EditField
+                          label="IP da Placa SNMP"
+                          value={sf("ip_snmp")}
+                          onChange={(v) => setSf("ip_snmp", v)}
+                          mono
+                        />
                       </>
                     ) : (
                       <>
@@ -342,14 +506,26 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
                         <Field label="Autonomia Estimada" value={item.autonomia_estimada} />
                         <Field label="IP da Placa SNMP" value={item.ip_snmp} mono />
                       </>
-                    )
-                  )}
-                  {isSwitch && (
-                    editing ? (
+                    ))}
+                  {isSwitch &&
+                    (editing ? (
                       <>
-                        <EditField label="Quantidade de Portas" value={sf("quantidade_portas")} onChange={(v) => setSf("quantidade_portas", v)} />
-                        <EditField label="Suporte PoE" value={sf("poe")} onChange={(v) => setSf("poe", v)} />
-                        <EditField label="Endereço IP" value={sf("ip")} onChange={(v) => setSf("ip", v)} mono />
+                        <EditField
+                          label="Quantidade de Portas"
+                          value={sf("quantidade_portas")}
+                          onChange={(v) => setSf("quantidade_portas", v)}
+                        />
+                        <EditField
+                          label="Suporte PoE"
+                          value={sf("poe")}
+                          onChange={(v) => setSf("poe", v)}
+                        />
+                        <EditField
+                          label="Endereço IP"
+                          value={sf("ip")}
+                          onChange={(v) => setSf("ip", v)}
+                          mono
+                        />
                       </>
                     ) : (
                       <>
@@ -357,8 +533,7 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
                         <Field label="Suporte PoE" value={item.poe} />
                         <Field label="Endereço IP" value={item.ip} mono />
                       </>
-                    )
-                  )}
+                    ))}
                 </Section>
               )}
 
@@ -398,7 +573,12 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
             <DialogFooter>
               {editing ? (
                 <>
-                  <Button variant="outline" size="sm" onClick={cancelEdit} disabled={saveMutation.isPending}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={cancelEdit}
+                    disabled={saveMutation.isPending}
+                  >
                     <X className="size-3.5 mr-1.5" aria-hidden />
                     Cancelar
                   </Button>

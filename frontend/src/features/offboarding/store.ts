@@ -172,7 +172,9 @@ export function setReturnedItems(id: string, itemIds: number[]) {
 export function markItemReturned(id: string, itemId: number, note?: string) {
   update(id, (p) => ({
     ...p,
-    returnedItemIds: p.returnedItemIds.includes(itemId) ? p.returnedItemIds : [...p.returnedItemIds, itemId],
+    returnedItemIds: p.returnedItemIds.includes(itemId)
+      ? p.returnedItemIds
+      : [...p.returnedItemIds, itemId],
     steps: note
       ? { ...p.steps, devolucao_patrimonio: { done: false, note, at: new Date().toISOString() } }
       : p.steps,

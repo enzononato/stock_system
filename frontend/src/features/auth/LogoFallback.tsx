@@ -30,7 +30,8 @@ export function LogoFallback() {
           Tecnologia & Governança de Ativos
         </h3>
         <p className="mt-1 text-xs text-muted-foreground text-center max-w-[260px]">
-          Plataforma corporativa centralizada para auditoria, controle de estoque e ciclo de vida de TI.
+          Plataforma corporativa centralizada para auditoria, controle de estoque e ciclo de vida de
+          TI.
         </p>
 
         <div className="mt-5 flex items-center gap-2 text-[11px] font-medium text-primary">

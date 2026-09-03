@@ -1,6 +1,16 @@
 import { useEffect, useState, lazy, Suspense, type FormEvent } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Eye, EyeOff, Lock, ShieldCheck, User, Sparkles, Server, FileCheck2, History } from "lucide-react";
+import {
+  Eye,
+  EyeOff,
+  Lock,
+  ShieldCheck,
+  User,
+  Sparkles,
+  Server,
+  FileCheck2,
+  History,
+} from "lucide-react";
 
 import { useAuth } from "@/lib/auth";
 import { getErrorMessage } from "@/lib/api-error";
@@ -54,9 +64,18 @@ export function LoginPage() {
   return (
     <div className="relative min-h-screen bg-background overflow-hidden flex flex-col lg:grid lg:grid-cols-[1.2fr_minmax(420px,520px)]">
       {/* Background radial e malha tecnológica (Solvd Style) */}
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-grid-tech opacity-40" aria-hidden />
-      <div className="pointer-events-none absolute -top-40 -left-40 size-[600px] rounded-full bg-primary/10 blur-[120px] -z-10" aria-hidden />
-      <div className="pointer-events-none absolute bottom-0 right-1/3 size-[500px] rounded-full bg-primary/5 blur-[100px] -z-10" aria-hidden />
+      <div
+        className="pointer-events-none absolute inset-0 -z-10 bg-grid-tech opacity-40"
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute -top-40 -left-40 size-[600px] rounded-full bg-primary/10 blur-[120px] -z-10"
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute bottom-0 right-1/3 size-[500px] rounded-full bg-primary/5 blur-[100px] -z-10"
+        aria-hidden
+      />
 
       {/* PAINEL VISUAL E MOTION (Spotify Experience + Solvd Tech Identity) */}
       <section className="relative hidden lg:flex flex-col justify-between p-10 xl:p-14 border-r border-border/60 bg-gradient-to-br from-sidebar/95 via-background to-sidebar/90 overflow-hidden">
@@ -141,10 +160,18 @@ export function LoginPage() {
           {/* Header Mobile com insígnia da marca */}
           <div className="lg:hidden flex flex-col items-center text-center mb-6">
             <div className="flex size-12 items-center justify-center rounded-xl border border-primary/30 bg-primary/10 mb-3 shadow-md">
-              <img src="/logo-revalle.jpg" alt="Revalle" className="size-9 rounded-lg object-cover" />
+              <img
+                src="/logo-revalle.jpg"
+                alt="Revalle"
+                className="size-9 rounded-lg object-cover"
+              />
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">Controle de Estoque de TI</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">Portal corporativo de controle de ativos</p>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">
+              Controle de Estoque de TI
+            </h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Portal corporativo de controle de ativos
+            </p>
           </div>
 
           {/* Card principal do formulário com elevação suave */}
@@ -152,9 +179,13 @@ export function LoginPage() {
             <div>
               <div className="flex items-center gap-2">
                 <span className="size-2 rounded-full bg-primary" />
-                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Acesso Restrito</p>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Acesso Restrito
+                </p>
               </div>
-              <h2 className="mt-2 text-2xl font-bold tracking-tight text-foreground">Entrar no Sistema</h2>
+              <h2 className="mt-2 text-2xl font-bold tracking-tight text-foreground">
+                Entrar no Sistema
+              </h2>
               <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
                 Utilize suas credenciais corporativas autorizadas para acessar a plataforma.
               </p>

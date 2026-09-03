@@ -1,6 +1,12 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { isValidMac, isValidIp, maskMacInput } from "@/lib/utils";
 
 interface FieldConfig {
@@ -29,7 +35,13 @@ const TYPE_FIELDS: Record<string, FieldConfig[]> = {
   Notebook: [
     { key: "dominio", label: "Domínio", type: "select", options: ["Sim", "Não"] },
     { key: "host", label: "Host" },
-    { key: "endereco_fisico", label: "Endereço Físico (MAC)", mask: maskMacInput, validate: isValidMac, invalidMessage: "MAC inválido." },
+    {
+      key: "endereco_fisico",
+      label: "Endereço Físico (MAC)",
+      mask: maskMacInput,
+      validate: isValidMac,
+      invalidMessage: "MAC inválido.",
+    },
     { key: "cpu", label: "Processador (CPU)" },
     { key: "ram", label: "Memória RAM" },
     { key: "storage", label: "Armazenamento (GB)" },
@@ -40,7 +52,13 @@ const TYPE_FIELDS: Record<string, FieldConfig[]> = {
   Desktop: [
     { key: "dominio", label: "Domínio", type: "select", options: ["Sim", "Não"] },
     { key: "host", label: "Host" },
-    { key: "endereco_fisico", label: "Endereço Físico (MAC)", mask: maskMacInput, validate: isValidMac, invalidMessage: "MAC inválido." },
+    {
+      key: "endereco_fisico",
+      label: "Endereço Físico (MAC)",
+      mask: maskMacInput,
+      validate: isValidMac,
+      invalidMessage: "MAC inválido.",
+    },
     { key: "cpu", label: "Processador (CPU)" },
     { key: "ram", label: "Memória RAM" },
     { key: "storage", label: "Armazenamento (GB)" },
@@ -51,7 +69,13 @@ const TYPE_FIELDS: Record<string, FieldConfig[]> = {
   Impressora: [
     { key: "setor", label: "Setor" },
     { key: "ip", label: "IP", validate: isValidIp, invalidMessage: "IP inválido." },
-    { key: "mac", label: "MAC", mask: maskMacInput, validate: isValidMac, invalidMessage: "MAC inválido." },
+    {
+      key: "mac",
+      label: "MAC",
+      mask: maskMacInput,
+      validate: isValidMac,
+      invalidMessage: "MAC inválido.",
+    },
   ],
   Tablet: [
     { key: "identificador", label: "Nº de Série" },
@@ -76,7 +100,13 @@ const TYPE_FIELDS: Record<string, FieldConfig[]> = {
     { key: "local_instalacao", label: "Local de Instalação" },
     { key: "setor", label: "Setor" },
     { key: "ip", label: "IP", validate: isValidIp, invalidMessage: "IP inválido." },
-    { key: "mac", label: "MAC", mask: maskMacInput, validate: isValidMac, invalidMessage: "MAC inválido." },
+    {
+      key: "mac",
+      label: "MAC",
+      mask: maskMacInput,
+      validate: isValidMac,
+      invalidMessage: "MAC inválido.",
+    },
   ],
 };
 
@@ -86,7 +116,10 @@ const TYPE_FIELDS: Record<string, FieldConfig[]> = {
  * que consome este componente. Retorna a primeira mensagem de erro
  * encontrada, ou `null` se tudo estiver ok.
  */
-export function validateTypeSpecificFields(tipo: string, values: Record<string, string>): string | null {
+export function validateTypeSpecificFields(
+  tipo: string,
+  values: Record<string, string>,
+): string | null {
   const fields = TYPE_FIELDS[tipo] ?? [];
   for (const field of fields) {
     const value = values[field.key];
@@ -114,7 +147,11 @@ export function TypeSpecificFields({ tipo, values, onChange, disabled }: TypeSpe
         <div key={field.key} className="flex flex-col gap-1.5">
           <Label htmlFor={field.key}>{field.label}</Label>
           {field.type === "select" ? (
-            <Select value={values[field.key] ?? ""} onValueChange={(v) => onChange(field.key, v)} disabled={disabled ?? false}>
+            <Select
+              value={values[field.key] ?? ""}
+              onValueChange={(v) => onChange(field.key, v)}
+              disabled={disabled ?? false}
+            >
               <SelectTrigger id={field.key}>
                 <SelectValue placeholder={`Selecione ${field.label}`} />
               </SelectTrigger>
@@ -130,7 +167,9 @@ export function TypeSpecificFields({ tipo, values, onChange, disabled }: TypeSpe
             <Input
               id={field.key}
               value={values[field.key] ?? ""}
-              onChange={(e) => onChange(field.key, field.mask ? field.mask(e.target.value) : e.target.value)}
+              onChange={(e) =>
+                onChange(field.key, field.mask ? field.mask(e.target.value) : e.target.value)
+              }
               placeholder={field.placeholder ?? field.label}
               disabled={disabled}
             />

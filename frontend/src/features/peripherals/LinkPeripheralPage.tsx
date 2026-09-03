@@ -22,7 +22,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // Tipos de equipamento que aceitam periféricos. Regra própria desta tela
 // (subconjunto curado, não um cadastro de domínio), por isso continua fixa.
@@ -35,9 +41,9 @@ const LINK_ALLOWED_TYPES = ["Desktop", "Notebook", "Switch", "Impressora"];
 const FETCH_ALL_LIMIT = 500;
 
 function peripheralBadgeVariant(status?: string) {
-  if (status === "Disponível") return "border-emerald-500/25 bg-emerald-500/12 text-emerald-700 dark:text-emerald-400";
-  if (status === "Em Uso") return "border-amber-500/30 bg-amber-500/14 text-amber-700 dark:text-amber-400";
-  return "";
+  if (status === "Disponível") return "badge-success";
+  if (status === "Em Uso") return "badge-warning";
+  return "badge-muted";
 }
 
 function PeripheralCard({
@@ -59,7 +65,9 @@ function PeripheralCard({
         <span className="truncate text-sm font-medium text-foreground">
           {peripheral.tipo} — {peripheral.brand || "-"} {peripheral.model || ""}
         </span>
-        <span className="text-xs text-muted-foreground">S/N: {peripheral.identificador || "-"}</span>
+        <span className="text-xs text-muted-foreground">
+          S/N: {peripheral.identificador || "-"}
+        </span>
       </div>
       <div className="flex shrink-0 items-center gap-3">
         <Badge
@@ -154,7 +162,12 @@ export function LinkPeripheralPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate({ to: "/peripherals" })} aria-label="Voltar para periféricos">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => navigate({ to: "/peripherals" })}
+          aria-label="Voltar para periféricos"
+        >
           <ArrowLeft className="size-4" aria-hidden />
         </Button>
         <PageHeader
@@ -194,7 +207,12 @@ export function LinkPeripheralPage() {
           <Section
             title={`Vinculados (${linkedPeripherals.length})`}
             actions={
-              <Button size="sm" variant="ghost" onClick={() => void refetchLinked()} aria-label="Atualizar vinculados">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => void refetchLinked()}
+                aria-label="Atualizar vinculados"
+              >
                 <RefreshCw className="size-3.5" aria-hidden />
               </Button>
             }
@@ -249,13 +267,18 @@ export function LinkPeripheralPage() {
       )}
 
       {replacingLinkId && replacingOldId && (
-        <Section title={`Substituir periférico #${replacingOldId}`} className="border-warning/30 bg-warning/5">
+        <Section
+          title={`Substituir periférico #${replacingOldId}`}
+          className="border-warning/30 bg-warning/5"
+        >
           <div className="space-y-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
                 <Label>Novo periférico</Label>
                 <Select value={replaceNewId} onValueChange={setReplaceNewId}>
-                  <SelectTrigger><SelectValue placeholder="Selecione o substituto" /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o substituto" />
+                  </SelectTrigger>
                   <SelectContent>
                     {availablePeripherals.map((p) => (
                       <SelectItem key={p.id} value={String(p.id)}>
@@ -267,7 +290,11 @@ export function LinkPeripheralPage() {
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label>Motivo da substituição *</Label>
-                <Input value={replaceReason} onChange={(e) => setReplaceReason(e.target.value)} placeholder="Ex: Defeito, Upgrade…" />
+                <Input
+                  value={replaceReason}
+                  onChange={(e) => setReplaceReason(e.target.value)}
+                  placeholder="Ex: Defeito, Upgrade…"
+                />
               </div>
             </div>
             <FileUpload

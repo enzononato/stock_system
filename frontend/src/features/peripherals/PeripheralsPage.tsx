@@ -3,7 +3,16 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 import { toast } from "sonner";
 import { Download, Link2, Trash2, Unlink, RefreshCw, Filter } from "lucide-react";
 
-import { createPeripheral, deletePeripheral, listPeripherals, listItemPeripherals, linkPeripheral, unlinkPeripheral, replacePeripheral, type Peripheral } from "@/api/peripherals";
+import {
+  createPeripheral,
+  deletePeripheral,
+  listPeripherals,
+  listItemPeripherals,
+  linkPeripheral,
+  unlinkPeripheral,
+  replacePeripheral,
+  type Peripheral,
+} from "@/api/peripherals";
 import { listItemsPaginated } from "@/api/items";
 import { listUnidades } from "@/api/unidades";
 import { useAuth } from "@/lib/auth";
@@ -20,17 +29,47 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 const LINK_ALLOWED_TYPES = ["Desktop", "Notebook", "Switch", "Impressora"];
 const FETCH_ALL_LIMIT = 500;
 
 function PeripheralStatusBadge({ status }: { status?: string | undefined }) {
-  if (status === "Disponível") return <Badge className="border-emerald-500/25 bg-emerald-500/12 text-emerald-700 dark:text-emerald-400">{status}</Badge>;
-  if (status === "Em Uso") return <Badge className="border-amber-500/30 bg-amber-500/14 text-amber-700 dark:text-amber-400">{status}</Badge>;
+  if (status === "Disponível")
+    return (
+      <Badge variant="outline" className="badge-success">
+        {status}
+      </Badge>
+    );
+  if (status === "Em Uso")
+    return (
+      <Badge variant="outline" className="badge-warning">
+        {status}
+      </Badge>
+    );
   if (status === "Substituido") return <Badge variant="destructive">{status}</Badge>;
-  return <Badge variant="outline">{status ?? "-"}</Badge>;
+  return (
+    <Badge variant="outline" className="badge-muted">
+      {status ?? "-"}
+    </Badge>
+  );
 }
 
 export function PeripheralsPage() {
@@ -53,12 +92,27 @@ export function PeripheralsPage() {
   const [replaceReason, setReplaceReason] = useState("");
   const [replaceAttachment, setReplaceAttachment] = useState<File | null>(null);
 
-  const { data: peripherals = [], isLoading, error, refetch } = useQuery({ queryKey: ["peripherals"], queryFn: () => listPeripherals() });
-  const { data: itemsData } = useQuery({ queryKey: ["items"], queryFn: () => listItemsPaginated({ limit: FETCH_ALL_LIMIT }) });
+  const {
+    data: peripherals = [],
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({ queryKey: ["peripherals"], queryFn: () => listPeripherals() });
+  const { data: itemsData } = useQuery({
+    queryKey: ["items"],
+    queryFn: () => listItemsPaginated({ limit: FETCH_ALL_LIMIT }),
+  });
   const items = itemsData?.items ?? [];
   const linkableItems = items.filter((i) => LINK_ALLOWED_TYPES.includes(i.tipo ?? ""));
-  const { data: linkedPeripherals = [], refetch: refetchLinked } = useQuery({ queryKey: ["item-peripherals", selectedItemId], queryFn: () => listItemPeripherals(Number(selectedItemId)), enabled: !!selectedItemId });
-  const { data: unidades = [] } = useQuery({ queryKey: ["unidades"], queryFn: () => listUnidades() });
+  const { data: linkedPeripherals = [], refetch: refetchLinked } = useQuery({
+    queryKey: ["item-peripherals", selectedItemId],
+    queryFn: () => listItemPeripherals(Number(selectedItemId)),
+    enabled: !!selectedItemId,
+  });
+  const { data: unidades = [] } = useQuery({
+    queryKey: ["unidades"],
+    queryFn: () => listUnidades(),
+  });
   const availablePeripherals = peripherals.filter((p) => p.status === "Disponível" && !p.link_id);
   const canManage = hasRole("Gestor", "Técnico");
 
@@ -158,7 +212,14 @@ export function PeripheralsPage() {
   });
 
   const replaceMutation = useMutation({
-    mutationFn: () => replacePeripheral(Number(selectedItemId), replacingOldId!, Number(replaceNewId), replaceReason, replaceAttachment ?? undefined),
+    mutationFn: () =>
+      replacePeripheral(
+        Number(selectedItemId),
+        replacingOldId!,
+        Number(replaceNewId),
+        replaceReason,
+        replaceAttachment ?? undefined,
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["peripherals"] });
       queryClient.invalidateQueries({ queryKey: ["item-peripherals", selectedItemId] });
@@ -192,7 +253,12 @@ export function PeripheralsPage() {
     { key: "model", header: "Modelo", cell: (p) => p.model || "-", hideBelow: "lg" },
     { key: "identificador", header: "Identificador (S/N)", cell: (p) => p.identificador || "-" },
     { key: "status", header: "Status", cell: (p) => <PeripheralStatusBadge status={p.status} /> },
-    { key: "date_registered", header: "Cadastro", cell: (p) => formatDate(p.date_registered), hideBelow: "lg" },
+    {
+      key: "date_registered",
+      header: "Cadastro",
+      cell: (p) => formatDate(p.date_registered),
+      hideBelow: "lg",
+    },
     ...(canManage
       ? [
           {
@@ -202,18 +268,26 @@ export function PeripheralsPage() {
             cell: (p: Peripheral) => (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-destructive hover:text-destructive"
+                  >
                     <Trash2 className="size-3.5" />
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle>Inativar periférico #{p.id}?</AlertDialogTitle>
-                    <AlertDialogDescription>Esta ação inativa o cadastro. Periféricos em uso não podem ser inativados.</AlertDialogDescription>
+                    <AlertDialogDescription>
+                      Esta ação inativa o cadastro. Periféricos em uso não podem ser inativados.
+                    </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => deleteMutation.mutate(p.id)}>Inativar</AlertDialogAction>
+                    <AlertDialogAction onClick={() => deleteMutation.mutate(p.id)}>
+                      Inativar
+                    </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
@@ -234,15 +308,19 @@ export function PeripheralsPage() {
             size="sm"
             disabled={!peripherals.length}
             onClick={() =>
-              exportToCsv("perifericos", filteredPeripherals as unknown as Record<string, unknown>[], [
-                { key: "id", label: "ID" },
-                { key: "tipo", label: "Tipo" },
-                { key: "brand", label: "Marca" },
-                { key: "model", label: "Modelo" },
-                { key: "identificador", label: "Identificador" },
-                { key: "status", label: "Status" },
-                { key: "date_registered", label: "Cadastro" },
-              ])
+              exportToCsv(
+                "perifericos",
+                filteredPeripherals as unknown as Record<string, unknown>[],
+                [
+                  { key: "id", label: "ID" },
+                  { key: "tipo", label: "Tipo" },
+                  { key: "brand", label: "Marca" },
+                  { key: "model", label: "Modelo" },
+                  { key: "identificador", label: "Identificador" },
+                  { key: "status", label: "Status" },
+                  { key: "date_registered", label: "Cadastro" },
+                ],
+              )
             }
           >
             <Download className="mr-2 size-3.5" />
@@ -277,7 +355,12 @@ export function PeripheralsPage() {
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Identificador (S/N) *</Label>
-              <Input value={identificador} onChange={(e) => setIdentificador(e.target.value)} required placeholder="Número de série único" />
+              <Input
+                value={identificador}
+                onChange={(e) => setIdentificador(e.target.value)}
+                required
+                placeholder="Número de série único"
+              />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Marca</Label>
@@ -297,7 +380,10 @@ export function PeripheralsPage() {
       </Section>
 
       {canManage && (
-        <Section title="Vincular periférico" description="O vínculo agora acontece dentro da própria área de Periféricos. Não é necessário abrir outra tela.">
+        <Section
+          title="Vincular periférico"
+          description="O vínculo agora acontece dentro da própria área de Periféricos. Não é necessário abrir outra tela."
+        >
           <div className="space-y-5">
             <div className="max-w-xl">
               <Label>Equipamento</Label>
@@ -319,7 +405,9 @@ export function PeripheralsPage() {
               <div className="grid gap-5 lg:grid-cols-2">
                 <div>
                   <div className="mb-3 flex items-center justify-between">
-                    <h3 className="text-sm font-semibold">Vinculados ({linkedPeripherals.length})</h3>
+                    <h3 className="text-sm font-semibold">
+                      Vinculados ({linkedPeripherals.length})
+                    </h3>
                     <Button size="icon" variant="ghost" onClick={() => void refetchLinked()}>
                       <RefreshCw className="size-3.5" />
                     </Button>
@@ -335,9 +423,15 @@ export function PeripheralsPage() {
                               <p className="truncate text-sm font-medium">
                                 {p.tipo} — {p.brand || "-"} {p.model || ""}
                               </p>
-                              <p className="text-xs text-muted-foreground">S/N: {p.identificador || "-"}</p>
+                              <p className="text-xs text-muted-foreground">
+                                S/N: {p.identificador || "-"}
+                              </p>
                             </div>
-                            <Button size="sm" variant="outline" onClick={() => unlinkMutation.mutate(p.link_id!)}>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => unlinkMutation.mutate(p.link_id!)}
+                            >
                               <Unlink className="mr-1.5 size-3.5" />
                               Desvincular
                             </Button>
@@ -358,20 +452,31 @@ export function PeripheralsPage() {
                   )}
                 </div>
                 <div>
-                  <h3 className="mb-3 text-sm font-semibold">Disponíveis ({availablePeripherals.length})</h3>
+                  <h3 className="mb-3 text-sm font-semibold">
+                    Disponíveis ({availablePeripherals.length})
+                  </h3>
                   {availablePeripherals.length === 0 ? (
                     <EmptyState title="Nenhum periférico disponível" />
                   ) : (
                     <div className="max-h-[420px] space-y-2 overflow-y-auto">
                       {availablePeripherals.map((p) => (
-                        <div key={p.id} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+                        <div
+                          key={p.id}
+                          className="flex items-center justify-between gap-3 rounded-lg border border-border p-3"
+                        >
                           <div className="min-w-0">
                             <p className="truncate text-sm font-medium">
                               {p.tipo} — {p.brand || "-"} {p.model || ""}
                             </p>
-                            <p className="text-xs text-muted-foreground">S/N: {p.identificador || "-"}</p>
+                            <p className="text-xs text-muted-foreground">
+                              S/N: {p.identificador || "-"}
+                            </p>
                           </div>
-                          <Button size="sm" variant="outline" onClick={() => linkMutation.mutate(p.id)}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => linkMutation.mutate(p.id)}
+                          >
                             <Link2 className="mr-1.5 size-3.5" />
                             Vincular
                           </Button>
@@ -406,14 +511,25 @@ export function PeripheralsPage() {
             </div>
             <div>
               <Label>Motivo *</Label>
-              <Input value={replaceReason} onChange={(e) => setReplaceReason(e.target.value)} placeholder="Ex: Defeito, upgrade…" />
+              <Input
+                value={replaceReason}
+                onChange={(e) => setReplaceReason(e.target.value)}
+                placeholder="Ex: Defeito, upgrade…"
+              />
             </div>
           </div>
           <div className="mt-4">
-            <FileUpload accept="application/pdf,image/*" onFile={setReplaceAttachment} label="Comprovante (opcional)" />
+            <FileUpload
+              accept="application/pdf,image/*"
+              onFile={setReplaceAttachment}
+              label="Comprovante (opcional)"
+            />
           </div>
           <div className="mt-4 flex gap-3">
-            <Button disabled={!replaceNewId || !replaceReason || replaceMutation.isPending} onClick={() => replaceMutation.mutate()}>
+            <Button
+              disabled={!replaceNewId || !replaceReason || replaceMutation.isPending}
+              onClick={() => replaceMutation.mutate()}
+            >
               {replaceMutation.isPending ? "Substituindo…" : "Confirmar substituição"}
             </Button>
             <Button variant="ghost" onClick={() => setReplacingOldId(null)}>
@@ -423,7 +539,10 @@ export function PeripheralsPage() {
         </Section>
       )}
 
-      <Section title="Consultar periféricos" description="Filtre e pesquise por tipo, status ou identificador.">
+      <Section
+        title="Consultar periféricos"
+        description="Filtre e pesquise por tipo, status ou identificador."
+      >
         <div className="flex flex-col sm:flex-row gap-3 items-end mb-4">
           <div className="flex-1 w-full flex flex-col gap-1.5">
             <Label htmlFor="periph-search">Buscar</Label>
@@ -481,7 +600,10 @@ export function PeripheralsPage() {
               </SelectContent>
             </Select>
           </div>
-          {(filterTipo !== "all" || filterStatus !== "all" || filterRevenda !== "all" || searchQuery) && (
+          {(filterTipo !== "all" ||
+            filterStatus !== "all" ||
+            filterRevenda !== "all" ||
+            searchQuery) && (
             <Button
               variant="ghost"
               onClick={() => {
@@ -515,4 +637,3 @@ export function PeripheralsPage() {
     </div>
   );
 }
-

@@ -58,6 +58,17 @@ All 7 visual reference corrections from the user's reference images have been co
   - [x] Shell da aplicação (`AppShell.tsx`) com navegação unificada e tátil inspirada no Spotify
   - [x] Proteção de largura mínima e scroll horizontal em tabelas largas (`DataTable.tsx`)
   - [x] Validação com `npm run build` (Exit Code 0)
+
+- [x] **Plano 007 — Redesign Enterprise Global (Prompt Mestre Final):**
+  - [x] Fase 0: Auditoria do projeto completo e plano estruturado aprovado pelo usuário
+  - [x] Fase 1: Limpeza de tokens órfãos em `tailwind.config.js` (`sidebar-primary`, `purple`, `pink`) e importação oficial de `IBM Plex Mono` + `Plus Jakarta Sans` no `index.html` e `tailwind.config.js`
+  - [x] Fase 1: Criação de utilitários semânticos no `styles.css` (`badge-success`, `badge-warning`, `badge-info`, `badge-destructive`, `badge-muted`, `surface-interactive`)
+  - [x] Fase 2: AppShell com Header Enterprise ativo (Breadcrumb contextual dinâmico, status "Sincronizado", busca rápida Command Palette `Ctrl+K`, perfil de operador) e Sidebar Spotify com indicador ciano ativo
+  - [x] Fase 3: Validação contínua do elemento 3D no Login (`logo.glb` Draco self-hosted com lazy loading)
+  - [x] Fase 4: Refinamento de componentes base (`StatusBadge`, `KpiCard` com fonte mono tabular, `PageHeader`, `Section`, `DataTable`)
+  - [x] Fase 5: Aplicação semântica e descompactação de JSX em `StockPage`, `UsersPage`, `HistoryPage`, `PeripheralsPage`, `LinkPeripheralPage`, `TermsPage`, `ReportPage`
+  - [x] Fase 6: Responsividade e acessibilidade com `prefers-reduced-motion` e visualização de tabelas em cards no mobile
+  - [x] Fase 7: Build de produção com `npm run build` (Exit Code 0) e `npx eslint src` (0 erros)
   - [x] Documentação em `notas/planos/plano-006.md` e `notas/auditoria/auditoria-006.md`
 
 ## In Progress

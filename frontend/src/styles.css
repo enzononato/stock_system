@@ -117,7 +117,7 @@
   --surface-foreground: oklch(0.96 0.008 245);
   --card: oklch(0.185 0.042 255);
   --card-foreground: oklch(0.96 0.008 245);
-  --popover: oklch(0.20 0.045 255);
+  --popover: oklch(0.2 0.045 255);
   --popover-foreground: oklch(0.96 0.008 245);
 
   --primary: oklch(0.74 0.14 225);
@@ -169,7 +169,9 @@
     color: var(--color-foreground);
     font-family: var(--font-sans);
     font-feature-settings: "cv02", "cv03", "ss01";
-    transition: background-color 0.25s cubic-bezier(0.16, 1, 0.3, 1), color 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    transition:
+      background-color 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+      color 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   :focus-visible {
@@ -189,8 +191,13 @@
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  box-shadow: 0 4px 20px -2px oklch(0 0 0 / 0.15), 0 0 0 1px oklch(0.74 0.14 225 / 0.05);
-  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow:
+    0 4px 20px -2px oklch(0 0 0 / 0.15),
+    0 0 0 1px oklch(0.74 0.14 225 / 0.05);
+  transition:
+    transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @utility text-eyebrow {
@@ -214,6 +221,44 @@
 
 @utility glow-navy {
   box-shadow: 0 0 40px -10px oklch(0.74 0.14 225 / 0.25);
+}
+
+@utility surface-interactive {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  &:hover {
+    border-color: oklch(0.74 0.14 225 / 0.35);
+    box-shadow: 0 4px 20px -2px oklch(0 0 0 / 0.12);
+  }
+}
+
+@utility badge-success {
+  background-color: oklch(0.72 0.14 160 / 0.14);
+  color: oklch(0.72 0.14 160);
+  border-color: oklch(0.72 0.14 160 / 0.3);
+}
+
+@utility badge-warning {
+  background-color: oklch(0.79 0.14 78 / 0.14);
+  color: oklch(0.79 0.14 78);
+  border-color: oklch(0.79 0.14 78 / 0.3);
+}
+
+@utility badge-info {
+  background-color: oklch(0.72 0.13 235 / 0.14);
+  color: oklch(0.72 0.13 235);
+  border-color: oklch(0.72 0.13 235 / 0.3);
+}
+
+@utility badge-destructive {
+  background-color: oklch(0.65 0.19 22 / 0.14);
+  color: oklch(0.65 0.19 22);
+  border-color: oklch(0.65 0.19 22 / 0.3);
+}
+
+@utility badge-muted {
+  background-color: var(--color-muted);
+  color: var(--color-muted-foreground);
+  border-color: var(--color-border);
 }
 
 @media (prefers-reduced-motion: reduce) {

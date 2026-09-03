@@ -152,7 +152,11 @@ export function DataTable<T>({
                     key={col.key}
                     scope="col"
                     aria-sort={
-                      sort?.key === col.key ? (sort.dir === "asc" ? "ascending" : "descending") : undefined
+                      sort?.key === col.key
+                        ? sort.dir === "asc"
+                          ? "ascending"
+                          : "descending"
+                        : undefined
                     }
                     className={cn(
                       "px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap",
@@ -220,7 +224,9 @@ export function DataTable<T>({
           const rest = columns.filter((c) => !c.primary && !c.hideOnMobile);
           return (
             <li key={rowKey(row)} className="surface-panel p-4">
-              {primary ? <div className="mb-2 text-sm font-semibold">{primary.cell(row)}</div> : null}
+              {primary ? (
+                <div className="mb-2 text-sm font-semibold">{primary.cell(row)}</div>
+              ) : null}
               <dl className="grid grid-cols-2 gap-x-3 gap-y-2">
                 {rest.map((col) => (
                   <div key={col.key} className="min-w-0">
@@ -232,21 +238,24 @@ export function DataTable<T>({
                 ))}
               </dl>
               {mobileActions ? (
-                <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-3">{mobileActions(row)}</div>
+                <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-3">
+                  {mobileActions(row)}
+                </div>
               ) : null}
             </li>
           );
         })}
       </ul>
 
-      {(totalPages > 1) ? (
+      {totalPages > 1 ? (
         <nav
           aria-label="Paginação"
           className="flex flex-col items-center justify-between gap-3 sm:flex-row"
         >
           <p className="text-xs text-muted-foreground">
             Página <span className="num">{effectivePage + 1}</span> de{" "}
-            <span className="num">{totalPages}</span> · <span className="num">{effectiveTotal}</span> registros
+            <span className="num">{totalPages}</span> ·{" "}
+            <span className="num">{effectiveTotal}</span> registros
           </p>
           <div className="flex gap-2">
             <Button

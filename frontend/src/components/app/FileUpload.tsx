@@ -87,7 +87,10 @@ export function FileUpload({
           onClick={() => inputRef.current?.click()}
           className="flex flex-col items-center gap-2 rounded-md px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <span className="grid size-10 place-items-center rounded-full bg-muted text-muted-foreground" aria-hidden>
+          <span
+            className="grid size-10 place-items-center rounded-full bg-muted text-muted-foreground"
+            aria-hidden
+          >
             {isDragging ? <Upload className="size-5" /> : <FileText className="size-5" />}
           </span>
           <span className="text-sm font-medium text-foreground">{label}</span>

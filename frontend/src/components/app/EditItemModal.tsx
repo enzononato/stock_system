@@ -4,11 +4,20 @@ import { Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 
 import { updateItem, type Item } from "@/api/items";
-import { TypeSpecificFields, validateTypeSpecificFields } from "@/components/app/TypeSpecificFields";
+import {
+  TypeSpecificFields,
+  validateTypeSpecificFields,
+} from "@/components/app/TypeSpecificFields";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -160,7 +169,12 @@ export function EditItemModal({ item, onClose }: EditItemModalProps) {
 
             <div className="flex flex-col gap-1.5">
               <Label>Revenda / Unidade *</Label>
-              <Select value={revenda} onValueChange={setRevenda} required disabled={constantsLoading}>
+              <Select
+                value={revenda}
+                onValueChange={setRevenda}
+                required
+                disabled={constantsLoading}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione a revenda" />
                 </SelectTrigger>

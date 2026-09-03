@@ -92,7 +92,10 @@ export function isValidCep(cep: string | null | undefined): boolean {
 
 /** Máscara progressiva de CEP (00000-000). */
 export function maskCepInput(value: string): string {
-  return value.replace(/\D/g, "").slice(0, 8).replace(/(\d{5})(\d{1,3})$/, "$1-$2");
+  return value
+    .replace(/\D/g, "")
+    .slice(0, 8)
+    .replace(/(\d{5})(\d{1,3})$/, "$1-$2");
 }
 
 /** UF: exatamente 2 letras. */
@@ -103,7 +106,10 @@ export function isValidUf(uf: string | null | undefined): boolean {
 
 /** Restringe a digitação da UF a no máximo 2 letras, sempre maiúsculas. */
 export function maskUfInput(value: string): string {
-  return value.replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase();
+  return value
+    .replace(/[^A-Za-z]/g, "")
+    .slice(0, 2)
+    .toUpperCase();
 }
 
 // --- Indicadores ---------------------------------------------------------------
@@ -161,7 +167,15 @@ function IndicadoresPanel({ dados }: { dados: IndicadoresUnidade }) {
 
 // --- Página ---------------------------------------------------------------------
 
-const emptyForm = { nome: "", razaoSocial: "", cnpj: "", endereco: "", cep: "", cidade: "", uf: "" };
+const emptyForm = {
+  nome: "",
+  razaoSocial: "",
+  cnpj: "",
+  endereco: "",
+  cep: "",
+  cidade: "",
+  uf: "",
+};
 
 export function UnidadesPage() {
   const queryClient = useQueryClient();
@@ -177,7 +191,12 @@ export function UnidadesPage() {
 
   const [showInactive, setShowInactive] = useState(false);
 
-  const { data: unidades = [], isLoading, error, refetch } = useQuery({
+  const {
+    data: unidades = [],
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ["unidades", { includeInactive: showInactive }],
     queryFn: () => listUnidades(showInactive ? { include_inactive: true } : undefined),
   });
@@ -350,10 +369,20 @@ export function UnidadesPage() {
       header: "",
       cell: (u) => (
         <div className="flex gap-2">
-          <Button size="sm" variant="ghost" aria-label={`Indicadores da unidade ${u.nome}`} onClick={() => setIndicadoresUnidadeId(u.id)}>
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-label={`Indicadores da unidade ${u.nome}`}
+            onClick={() => setIndicadoresUnidadeId(u.id)}
+          >
             <BarChart3 className="size-3.5" aria-hidden />
           </Button>
-          <Button size="sm" variant="ghost" aria-label={`Editar unidade ${u.nome}`} onClick={() => startEdit(u)}>
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-label={`Editar unidade ${u.nome}`}
+            onClick={() => startEdit(u)}
+          >
             <Pencil className="size-3.5" aria-hidden />
           </Button>
           {u.is_active && (
@@ -373,12 +402,15 @@ export function UnidadesPage() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Inativar unidade &quot;{u.nome}&quot;?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Unidades com itens ativos vinculados não podem ser inativadas. Esta ação não pode ser desfeita.
+                    Unidades com itens ativos vinculados não podem ser inativadas. Esta ação não
+                    pode ser desfeita.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => deactivateMutation.mutate(u.id)}>Inativar</AlertDialogAction>
+                  <AlertDialogAction onClick={() => deactivateMutation.mutate(u.id)}>
+                    Inativar
+                  </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
@@ -405,7 +437,7 @@ export function UnidadesPage() {
       <PageHeader
         eyebrow="Administração"
         title="Unidades de Revenda"
-        description="Dados jurídicos e fiscais das unidades (antigas &quot;revendas&quot;) e indicadores por unidade"
+        description='Dados jurídicos e fiscais das unidades (antigas "revendas") e indicadores por unidade'
       />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -423,15 +455,20 @@ export function UnidadesPage() {
 
           {editingId !== null && (
             <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
-              O nome da unidade liga os equipamentos e todo o histórico a ela. Alterá-lo atualiza automaticamente
-              essas referências — confirme antes de salvar se for esse o caso.
+              O nome da unidade liga os equipamentos e todo o histórico a ela. Alterá-lo atualiza
+              automaticamente essas referências — confirme antes de salvar se for esse o caso.
             </p>
           )}
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="unidade-nome">Nome *</Label>
-              <Input id="unidade-nome" value={form.nome} onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))} required />
+              <Input
+                id="unidade-nome"
+                value={form.nome}
+                onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))}
+                required
+              />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="unidade-razao-social">Razão Social *</Label>
@@ -455,7 +492,11 @@ export function UnidadesPage() {
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="unidade-endereco">Endereço</Label>
-              <Input id="unidade-endereco" value={form.endereco} onChange={(e) => setForm((f) => ({ ...f, endereco: e.target.value }))} />
+              <Input
+                id="unidade-endereco"
+                value={form.endereco}
+                onChange={(e) => setForm((f) => ({ ...f, endereco: e.target.value }))}
+              />
             </div>
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center gap-2">
@@ -476,7 +517,11 @@ export function UnidadesPage() {
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="unidade-cidade">Cidade</Label>
-              <Input id="unidade-cidade" value={form.cidade} onChange={(e) => setForm((f) => ({ ...f, cidade: e.target.value }))} />
+              <Input
+                id="unidade-cidade"
+                value={form.cidade}
+                onChange={(e) => setForm((f) => ({ ...f, cidade: e.target.value }))}
+              />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="unidade-uf">UF</Label>
@@ -497,7 +542,11 @@ export function UnidadesPage() {
               </Button>
             )}
             <Button type="submit" disabled={isSaving}>
-              {isSaving ? "Salvando..." : editingId !== null ? "Salvar Alterações" : "Criar Unidade"}
+              {isSaving
+                ? "Salvando..."
+                : editingId !== null
+                  ? "Salvar Alterações"
+                  : "Criar Unidade"}
             </Button>
           </div>
         </form>
@@ -529,8 +578,9 @@ export function UnidadesPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar renomeação da unidade?</AlertDialogTitle>
             <AlertDialogDescription>
-              Renomear &quot;{originalNome}&quot; para &quot;{pendingData?.nome}&quot; atualiza automaticamente todas
-              as referências a esta unidade em equipamentos e histórico. Deseja continuar?
+              Renomear &quot;{originalNome}&quot; para &quot;{pendingData?.nome}&quot; atualiza
+              automaticamente todas as referências a esta unidade em equipamentos e histórico.
+              Deseja continuar?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -540,13 +590,22 @@ export function UnidadesPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog open={indicadoresUnidadeId !== null} onOpenChange={(open) => !open && setIndicadoresUnidadeId(null)}>
+      <Dialog
+        open={indicadoresUnidadeId !== null}
+        onOpenChange={(open) => !open && setIndicadoresUnidadeId(null)}
+      >
         <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle>Indicadores — {unidades.find((u) => u.id === indicadoresUnidadeId)?.nome ?? ""}</DialogTitle>
+            <DialogTitle>
+              Indicadores — {unidades.find((u) => u.id === indicadoresUnidadeId)?.nome ?? ""}
+            </DialogTitle>
             <DialogDescription>Movimentação e status de itens desta unidade.</DialogDescription>
           </DialogHeader>
-          {indicadoresLoading ? <LoadingState label="Carregando indicadores…" /> : indicadores ? <IndicadoresPanel dados={indicadores} /> : null}
+          {indicadoresLoading ? (
+            <LoadingState label="Carregando indicadores…" />
+          ) : indicadores ? (
+            <IndicadoresPanel dados={indicadores} />
+          ) : null}
         </DialogContent>
       </Dialog>
     </div>

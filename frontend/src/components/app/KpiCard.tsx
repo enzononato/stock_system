@@ -19,17 +19,30 @@ export function KpiCard({
   className?: string | undefined;
 }) {
   return (
-    <div className={cn("rounded-lg border border-border bg-card p-4", className)}>
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-        {Icon ? <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden /> : null}
-      </div>
-      {isLoading ? (
-        <Skeleton className="mt-2 h-8 w-20" />
-      ) : (
-        <p className="mt-2 text-2xl font-bold tabular-nums tracking-tight text-foreground">{value}</p>
+    <div
+      className={cn(
+        "surface-panel surface-interactive p-4 sm:p-5 flex flex-col justify-between",
+        className,
       )}
-      {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-eyebrow text-muted-foreground">{label}</p>
+        {Icon ? (
+          <div className="flex size-7 items-center justify-center rounded-md border border-primary/20 bg-primary/10 text-primary shrink-0">
+            <Icon className="size-3.5" aria-hidden />
+          </div>
+        ) : null}
+      </div>
+      <div className="mt-3">
+        {isLoading ? (
+          <Skeleton className="h-8 w-24 rounded" />
+        ) : (
+          <p className="num text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+            {value}
+          </p>
+        )}
+        {hint ? <p className="mt-1 text-xs text-muted-foreground/90">{hint}</p> : null}
+      </div>
     </div>
   );
 }
