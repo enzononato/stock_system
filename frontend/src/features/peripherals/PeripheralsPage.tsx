@@ -503,6 +503,7 @@ export function PeripheralsPage() {
           isLoading={isLoading}
           error={error}
           onRetry={() => void refetch()}
+          clientPageSize={7}
           emptyTitle="Nenhum periférico encontrado"
           emptyDescription={
             filterTipo !== "all" || filterStatus !== "all" || filterRevenda !== "all" || searchQuery

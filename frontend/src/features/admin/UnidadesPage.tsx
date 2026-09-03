@@ -519,6 +519,7 @@ export function UnidadesPage() {
           isLoading={isLoading}
           error={error}
           onRetry={() => void refetch()}
+          clientPageSize={7}
           emptyTitle="Nenhuma unidade cadastrada"
         />
       </Section>

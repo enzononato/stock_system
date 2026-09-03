@@ -67,17 +67,17 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
                       onClick={onNavigate}
                       aria-current={active ? "page" : undefined}
                       className={cn(
-                        "flex items-center gap-3 rounded-md px-2.5 py-2 text-sm font-medium transition-colors",
-                        "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                        active && "bg-sidebar-accent text-sidebar-accent-foreground",
-                        collapsed && "justify-center px-0"
+                        "flex items-center gap-3 rounded-md px-2.5 py-2 text-sm font-medium transition-all duration-150",
+                        "text-sidebar-foreground/80 hover:bg-sidebar-accent/80 hover:text-foreground",
+                        active && "bg-sidebar-accent text-primary font-semibold shadow-xs border-l-2 border-primary pl-2",
+                        collapsed && "justify-center px-0 border-l-0"
                       )}
                     >
-                      <item.icon className="size-4 shrink-0" aria-hidden />
+                      <item.icon className={cn("size-4 shrink-0 transition-colors", active && "text-primary")} aria-hidden />
                       {!collapsed && <span className="truncate">{item.label}</span>}
                       {item.children && !collapsed && (
                         <span
-                          className={cn("ml-auto text-muted-foreground transition-transform", childActive && "rotate-90")}
+                          className={cn("ml-auto text-muted-foreground transition-transform text-xs", childActive && "rotate-90 text-primary")}
                           aria-hidden
                         >
                           ›
@@ -97,7 +97,7 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
                         link
                       )}
                       {item.children && !collapsed && (
-                        <ul className="ml-5 mt-1 space-y-0.5 border-l border-sidebar-border pl-2">
+                        <ul className="ml-5 mt-1 space-y-0.5 border-l border-sidebar-border/80 pl-2">
                           {item.children
                             .filter(
                               (child) =>
@@ -113,11 +113,11 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
                                     onClick={onNavigate}
                                     aria-current={childIsActive ? "page" : undefined}
                                     className={cn(
-                                      "flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs font-medium text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                                      childIsActive && "bg-sidebar-accent text-sidebar-accent-foreground"
+                                      "flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs font-medium text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-foreground transition-all duration-150",
+                                      childIsActive && "bg-sidebar-accent text-primary font-semibold border-l-2 border-primary pl-2"
                                     )}
                                   >
-                                    <child.icon className="size-3.5 shrink-0" aria-hidden />
+                                    <child.icon className={cn("size-3.5 shrink-0", childIsActive && "text-primary")} aria-hidden />
                                     <span className="truncate">{child.label}</span>
                                   </Link>
                                 </li>

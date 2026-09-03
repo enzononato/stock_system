@@ -143,7 +143,7 @@ export function DataTable<T>({
       {/* Desktop / tablet */}
       <div className="surface-panel hidden overflow-hidden sm:block">
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
+          <table className="w-full min-w-[640px] border-collapse text-sm">
             {caption ? <caption className="sr-only">{caption}</caption> : null}
             <thead className="sticky top-0 z-10">
               <tr className="border-b border-border bg-muted/40">

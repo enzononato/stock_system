@@ -59,10 +59,10 @@ export function TermsPage() {
     {confirmingId && <ConfirmacaoTermo itemId={confirmingId} description="Faça o upload do termo de responsabilidade assinado (PDF)." uploadLabel="Arraste ou clique para enviar o PDF assinado" errorMessage="Erro ao confirmar." onConfirmed={() => setConfirmingId(null)} onCancel={() => setConfirmingId(null)} />}
     <div className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-2 xl:auto-rows-fr">
       <Section title="Pendentes de confirmação" actions={pendentes.length > 0 ? <Badge variant="outline">{pendentes.length}</Badge> : undefined} description="Gere o termo, colete a assinatura e confirme o empréstimo com o PDF assinado." className="h-full min-h-[430px]">
-        <DataTable data={pendentes} columns={pendingColumns} rowKey={(i) => i.id} isLoading={isLoading} error={error} onRetry={() => void refetch()} emptyTitle="Nenhum empréstimo pendente de confirmação" />
+        <DataTable data={pendentes} columns={pendingColumns} rowKey={(i) => i.id} isLoading={isLoading} error={error} onRetry={() => void refetch()} clientPageSize={7} emptyTitle="Nenhum empréstimo pendente de confirmação" />
       </Section>
       <Section title={`Empréstimos ativos (${ativos.length})`} description="Consulte os empréstimos que já foram confirmados e acesse o termo assinado." className="h-full min-h-[430px]">
-        <DataTable data={ativos} columns={activeColumns} rowKey={(i) => i.id} isLoading={isLoading} error={error} onRetry={() => void refetch()} emptyTitle="Nenhum empréstimo ativo no momento" />
+        <DataTable data={ativos} columns={activeColumns} rowKey={(i) => i.id} isLoading={isLoading} error={error} onRetry={() => void refetch()} clientPageSize={7} emptyTitle="Nenhum empréstimo ativo no momento" />
       </Section>
     </div>
   </div>;

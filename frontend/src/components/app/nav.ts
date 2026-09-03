@@ -7,6 +7,7 @@ import {
   FileSpreadsheet,
   History,
   Keyboard,
+  Link2,
   PackagePlus,
   ShieldCheck,
   Trash2,
@@ -34,7 +35,16 @@ export const NAV_ITEMS: NavItem[] = [
   { to: "/terms", label: "Termos", icon: FileSignature, roles: ["Gestor", "Técnico"], group: "Operação" },
   { to: "/remove", label: "Remover item", icon: Trash2, roles: ["Gestor"], group: "Operação" },
   { to: "/offboarding-ti", label: "Desligamentos", icon: UserX, group: "Operação" },
-  { to: "/peripherals", label: "Periféricos", icon: Keyboard, roles: ["Gestor", "Técnico"], group: "Operação" },
+  {
+    to: "/peripherals",
+    label: "Periféricos",
+    icon: Keyboard,
+    roles: ["Gestor", "Técnico"],
+    group: "Operação",
+    children: [
+      { to: "/link", label: "Vincular periféricos", icon: Link2, roles: ["Gestor", "Técnico"] },
+    ],
+  },
 
   { to: "/charts", label: "Indicadores", icon: BarChart3, group: "Gestão" },
   { to: "/history", label: "Histórico", icon: History, roles: ["Gestor", "Técnico"], group: "Gestão" },

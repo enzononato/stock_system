@@ -146,6 +146,7 @@ export function ReportPage() {
           isLoading={isLoading}
           error={error}
           onRetry={() => void refetch()}
+          clientPageSize={7}
           emptyTitle="Nenhum registro no período"
           emptyDescription="Ajuste o ano/mês e gere o relatório novamente."
         />
