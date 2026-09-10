@@ -22,6 +22,7 @@ import { Route as ShellRegisterRouteImport } from './routes/_shell.register'
 import { Route as ShellRemoveRouteImport } from './routes/_shell.remove'
 import { Route as ShellReportRouteImport } from './routes/_shell.report'
 import { Route as ShellReturnRouteImport } from './routes/_shell.return'
+import { Route as ShellStockRouteImport } from './routes/_shell.stock'
 import { Route as ShellTermsRouteImport } from './routes/_shell.terms'
 import { Route as ShellUnidadesRouteImport } from './routes/_shell.unidades'
 import { Route as ShellUsersRouteImport } from './routes/_shell.users'
@@ -91,6 +92,11 @@ const ShellReturnRoute = ShellReturnRouteImport.update({
   path: '/return',
   getParentRoute: () => ShellRoute,
 } as any)
+const ShellStockRoute = ShellStockRouteImport.update({
+  id: '/stock',
+  path: '/stock',
+  getParentRoute: () => ShellRoute,
+} as any)
 const ShellTermsRoute = ShellTermsRouteImport.update({
   id: '/terms',
   path: '/terms',
@@ -125,6 +131,7 @@ export interface FileRoutesByFullPath {
   '/remove': typeof ShellRemoveRoute
   '/report': typeof ShellReportRoute
   '/return': typeof ShellReturnRoute
+  '/stock': typeof ShellStockRoute
   '/terms': typeof ShellTermsRoute
   '/unidades': typeof ShellUnidadesRoute
   '/users': typeof ShellUsersRoute
@@ -142,6 +149,7 @@ export interface FileRoutesByTo {
   '/remove': typeof ShellRemoveRoute
   '/report': typeof ShellReportRoute
   '/return': typeof ShellReturnRoute
+  '/stock': typeof ShellStockRoute
   '/terms': typeof ShellTermsRoute
   '/unidades': typeof ShellUnidadesRoute
   '/users': typeof ShellUsersRoute
@@ -162,6 +170,7 @@ export interface FileRoutesById {
   '/_shell/remove': typeof ShellRemoveRoute
   '/_shell/report': typeof ShellReportRoute
   '/_shell/return': typeof ShellReturnRoute
+  '/_shell/stock': typeof ShellStockRoute
   '/_shell/terms': typeof ShellTermsRoute
   '/_shell/unidades': typeof ShellUnidadesRoute
   '/_shell/users': typeof ShellUsersRoute
@@ -183,6 +192,7 @@ export interface FileRouteTypes {
     | '/remove'
     | '/report'
     | '/return'
+    | '/stock'
     | '/terms'
     | '/unidades'
     | '/users'
@@ -200,6 +210,7 @@ export interface FileRouteTypes {
     | '/remove'
     | '/report'
     | '/return'
+    | '/stock'
     | '/terms'
     | '/unidades'
     | '/users'
@@ -219,6 +230,7 @@ export interface FileRouteTypes {
     | '/_shell/remove'
     | '/_shell/report'
     | '/_shell/return'
+    | '/_shell/stock'
     | '/_shell/terms'
     | '/_shell/unidades'
     | '/_shell/users'
@@ -324,6 +336,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellReturnRouteImport
       parentRoute: typeof ShellRoute
     }
+    '/_shell/stock': {
+      id: '/_shell/stock'
+      path: '/stock'
+      fullPath: '/stock'
+      preLoaderRoute: typeof ShellStockRouteImport
+      parentRoute: typeof ShellRoute
+    }
     '/_shell/terms': {
       id: '/_shell/terms'
       path: '/terms'
@@ -366,6 +385,7 @@ interface ShellRouteChildren {
   ShellRemoveRoute: typeof ShellRemoveRoute
   ShellReportRoute: typeof ShellReportRoute
   ShellReturnRoute: typeof ShellReturnRoute
+  ShellStockRoute: typeof ShellStockRoute
   ShellTermsRoute: typeof ShellTermsRoute
   ShellUnidadesRoute: typeof ShellUnidadesRoute
   ShellUsersRoute: typeof ShellUsersRoute
@@ -384,6 +404,7 @@ const ShellRouteChildren: ShellRouteChildren = {
   ShellRemoveRoute: ShellRemoveRoute,
   ShellReportRoute: ShellReportRoute,
   ShellReturnRoute: ShellReturnRoute,
+  ShellStockRoute: ShellStockRoute,
   ShellTermsRoute: ShellTermsRoute,
   ShellUnidadesRoute: ShellUnidadesRoute,
   ShellUsersRoute: ShellUsersRoute,

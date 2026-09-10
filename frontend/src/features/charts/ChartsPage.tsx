@@ -7,16 +7,17 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
 } from "recharts";
-import { ArrowDownLeft, ArrowUpRight, Calendar, Filter, PackagePlus } from "lucide-react";
+import { Calendar, Filter } from "lucide-react";
 
 import { getLoansChart, getRegistrationsChart, getMonthlyReport } from "@/api/reports";
 import { listUnidades } from "@/api/unidades";
 import { useConstants } from "@/hooks/useConstants";
-import { PageHeader, Section } from "@/components/app/PageHeader";
-import { KpiCard } from "@/components/app/KpiCard";
 import { LoadingState, EmptyState, ErrorState } from "@/components/app/StateBlocks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,19 +31,18 @@ import {
 } from "@/components/ui/select";
 
 const MONTHS = [
-  "Janeiro",
-  "Fevereiro",
-  "Março",
-  "Abril",
-  "Maio",
-  "Junho",
-  "Julho",
-  "Agosto",
-  "Setembro",
-  "Outubro",
-  "Novembro",
-  "Dezembro",
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
+
+const TOOLTIP_STYLE = {
+  backgroundColor: "var(--color-surface)",
+  borderColor: "var(--color-border)",
+  borderRadius: 4,
+  fontSize: 12,
+  fontWeight: 600,
+  color: "var(--color-foreground)",
+};
 
 export function ChartsPage() {
   const now = new Date();
@@ -90,23 +90,20 @@ export function ChartsPage() {
     useMemo(() => {
       if (!isFiltered) {
         const lData = (loans.data?.days ?? []).map((day, i) => ({
-          dia: `Dia ${day}`,
+          dia: `${day}`,
           Empréstimos: loans.data?.values[i] ?? 0,
           Devoluções: loans.data?.values2?.[i] ?? 0,
         }));
         const rData = (registrations.data?.days ?? []).map((day, i) => ({
-          dia: `Dia ${day}`,
+          dia: `${day}`,
           Cadastros: registrations.data?.values[i] ?? 0,
         }));
-        const tEmp = loans.data?.values?.reduce((a, v) => a + v, 0) ?? 0;
-        const tDev = loans.data?.values2?.reduce((a, v) => a + v, 0) ?? 0;
-        const tCad = registrations.data?.values?.reduce((a, v) => a + v, 0) ?? 0;
         return {
           loansChartData: lData,
           regChartData: rData,
-          totalEmprestimos: tEmp,
-          totalDevolucoes: tDev,
-          totalCadastros: tCad,
+          totalEmprestimos: loans.data?.values?.reduce((a, v) => a + v, 0) ?? 0,
+          totalDevolucoes: loans.data?.values2?.reduce((a, v) => a + v, 0) ?? 0,
+          totalCadastros: registrations.data?.values?.reduce((a, v) => a + v, 0) ?? 0,
         };
       }
 
@@ -132,245 +129,290 @@ export function ChartsPage() {
       });
 
       const lData = daysArray.map((d) => ({
-        dia: `Dia ${d}`,
+        dia: `${d}`,
         Empréstimos: empByDay[d] ?? 0,
         Devoluções: devByDay[d] ?? 0,
       }));
       const rData = daysArray.map((d) => ({
-        dia: `Dia ${d}`,
+        dia: `${d}`,
         Cadastros: cadByDay[d] ?? 0,
       }));
-      const tEmp = Object.values(empByDay).reduce((a, v) => a + v, 0);
-      const tDev = Object.values(devByDay).reduce((a, v) => a + v, 0);
-      const tCad = Object.values(cadByDay).reduce((a, v) => a + v, 0);
 
       return {
         loansChartData: lData,
         regChartData: rData,
-        totalEmprestimos: tEmp,
-        totalDevolucoes: tDev,
-        totalCadastros: tCad,
+        totalEmprestimos: Object.values(empByDay).reduce((a, v) => a + v, 0),
+        totalDevolucoes: Object.values(devByDay).reduce((a, v) => a + v, 0),
+        totalCadastros: Object.values(cadByDay).reduce((a, v) => a + v, 0),
       };
     }, [isFiltered, loans.data, registrations.data, monthly.data, params.revenda, daysArray]);
 
-  const monthLabel = `${MONTHS[params.month - 1] ?? "Mês"} de ${params.year}${params.revenda !== "all" ? ` · ${params.revenda}` : ""}`;
   const hasInvalidYear = !/^\d{4}$/.test(year) || Number(year) < 2000 || Number(year) > 2100;
+  const monthLabel = `${MONTHS[params.month - 1] ?? "Mês"} / ${params.year}${params.revenda !== "all" ? ` · ${params.revenda}` : ""}`;
+  const isLoading = isFiltered ? monthly.isLoading : loans.isLoading || registrations.isLoading;
+  const hasError = isFiltered ? monthly.error : loans.error || registrations.error;
 
-  const applyPeriod = () => {
+  function applyPeriod() {
     if (hasInvalidYear) return;
     setParams({ year: Number(year), month: Number(month), revenda: filterRevenda });
-  };
+  }
 
-  const tooltipStyle = {
-    backgroundColor: "var(--color-popover)",
-    borderColor: "var(--color-border)",
-    borderRadius: 10,
-    fontSize: 12,
-    fontWeight: 600,
-  };
-  const isLoading = isFiltered ? monthly.isLoading : loans.isLoading || registrations.isLoading;
-  const error = isFiltered ? monthly.error : loans.error || registrations.error;
+  // Distribuição por dia da semana (a partir de loans data)
+  const weekdayDist = useMemo(() => {
+    const days = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+    const counts: number[] = Array(7).fill(0);
+    loansChartData.forEach((d, idx) => {
+      const date = new Date(params.year, params.month - 1, idx + 1);
+      counts[date.getDay()] = (counts[date.getDay()] ?? 0) + (d.Empréstimos ?? 0);
+    });
+    return days.map((d, i) => ({ dia: d, Empréstimos: counts[i] ?? 0 }));
+  }, [loansChartData, params.year, params.month]);
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        eyebrow="Gestão"
-        title="Indicadores"
-        description="Acompanhe a movimentação do patrimônio por período e unidade usando os dados disponíveis no sistema."
-      />
+    <div className="page-container-dense space-y-6">
+      {/* Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-border pb-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
+              Inteligência de Operações
+            </span>
+            <span className="text-muted-foreground">•</span>
+            <span className="text-caption text-foreground font-medium">Análise Comparativa</span>
+          </div>
+          <h1 className="text-heading font-semibold tracking-tight text-foreground mt-0.5">
+            Indicadores Operacionais
+          </h1>
+          <p className="text-body-sm text-muted-foreground mt-1">
+            Movimentação patrimonial comparativa por período, filial e tipo de operação.
+          </p>
+        </div>
+      </div>
 
-      <div className="surface-panel p-4 sm:p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-primary lg:mr-2 lg:pb-2">
-            <Filter className="size-4" aria-hidden />
-            Filtros
+      {/* Toolbar de Filtro */}
+      <div className="rounded-[6px] border border-border bg-surface p-4">
+        <div className="flex flex-wrap items-end gap-4">
+          <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground self-end pb-0.5">
+            Período
+          </span>
+
+          <div className="space-y-1">
+            <Label className="text-caption font-medium">Ano</Label>
+            <Input
+              inputMode="numeric"
+              maxLength={4}
+              value={year}
+              onChange={(e) => setYear(e.target.value.replace(/\D/g, "").slice(0, 4))}
+              className="w-20 h-8 rounded-[4px] border-border bg-background text-body-sm font-mono"
+              aria-invalid={hasInvalidYear}
+            />
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="charts-year">Ano</Label>
-              <Input
-                id="charts-year"
-                inputMode="numeric"
-                maxLength={4}
-                value={year}
-                onChange={(e) => setYear(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                className="w-full sm:w-28"
-                aria-invalid={hasInvalidYear}
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>Mês</Label>
-              <Select value={month} onValueChange={setMonth}>
-                <SelectTrigger className="w-full sm:w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {MONTHS.map((m, i) => (
-                    <SelectItem key={m} value={String(i + 1)}>
-                      {m}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>Unidade / Revenda</Label>
-              <Select value={filterRevenda} onValueChange={setFilterRevenda}>
-                <SelectTrigger className="w-full sm:w-48">
-                  <SelectValue placeholder="Todas as unidades" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas as unidades</SelectItem>
-                  {revendaOptions.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {r}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+
+          <div className="space-y-1">
+            <Label className="text-caption font-medium">Mês</Label>
+            <Select value={month} onValueChange={setMonth}>
+              <SelectTrigger className="w-36 h-8 rounded-[4px] border-border bg-background text-body-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="rounded-[4px] border-border bg-surface">
+                {MONTHS.map((m, i) => (
+                  <SelectItem key={m} value={String(i + 1)} className="text-body-sm rounded-[2px]">{m}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <Button onClick={applyPeriod} disabled={hasInvalidYear} className="w-full sm:w-auto">
-            <Calendar className="mr-1.5 size-4" aria-hidden />
+
+          <div className="space-y-1">
+            <Label className="text-caption font-medium">Unidade / Filial</Label>
+            <Select value={filterRevenda} onValueChange={setFilterRevenda}>
+              <SelectTrigger className="w-44 h-8 rounded-[4px] border-border bg-background text-body-sm">
+                <SelectValue placeholder="Todas" />
+              </SelectTrigger>
+              <SelectContent className="rounded-[4px] border-border bg-surface">
+                <SelectItem value="all" className="text-body-sm rounded-[2px]">Todas as unidades</SelectItem>
+                {revendaOptions.map((r) => (
+                  <SelectItem key={r} value={r} className="text-body-sm rounded-[2px]">{r}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Button
+            size="sm"
+            onClick={applyPeriod}
+            disabled={hasInvalidYear}
+            className="rounded-[4px] bg-foreground text-background hover:bg-foreground/90 font-medium h-8"
+          >
+            <Calendar className="mr-1.5 size-3.5" />
             Aplicar
           </Button>
+
           {hasInvalidYear && (
-            <p className="text-xs text-destructive lg:pb-2">Informe um ano entre 2000 e 2100.</p>
+            <p className="text-caption text-muted-foreground self-end pb-1">
+              Ano inválido (2000–2100)
+            </p>
           )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <KpiCard label="Empréstimos no mês" value={totalEmprestimos} icon={ArrowUpRight} />
-        <KpiCard label="Devoluções no mês" value={totalDevolucoes} icon={ArrowDownLeft} />
-        <KpiCard label="Cadastros no mês" value={totalCadastros} icon={PackagePlus} />
+      {/* KPIs Numéricos */}
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          { label: "Empréstimos no mês", value: totalEmprestimos, symbol: "↑" },
+          { label: "Devoluções no mês", value: totalDevolucoes, symbol: "↓" },
+          { label: "Cadastros no mês", value: totalCadastros, symbol: "+" },
+        ].map((stat) => (
+          <div key={stat.label} className="rounded-[6px] border border-border bg-surface p-5">
+            <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground block">
+              {stat.label}
+            </span>
+            <div className="flex items-baseline gap-2 mt-2">
+              <span className="font-mono text-heading-lg font-bold text-foreground">{stat.value}</span>
+              <span className="font-mono text-body-lg text-muted-foreground">{stat.symbol}</span>
+            </div>
+            <span className="text-caption text-muted-foreground">{monthLabel}</span>
+          </div>
+        ))}
       </div>
 
-      <Section
-        title="Empréstimos × Devoluções"
-        description={`Movimentação diária em ${monthLabel}`}
-      >
+      {/* Gráfico 1: Área de Empréstimos × Devoluções */}
+      <div className="rounded-[6px] border border-border bg-surface p-5">
+        <div className="border-b border-border pb-3 mb-5">
+          <h2 className="text-body-lg font-semibold text-foreground">
+            Empréstimos × Devoluções — {monthLabel}
+          </h2>
+          <p className="text-caption text-muted-foreground">
+            Comparativo diário de entradas e saídas do inventário ativo.
+          </p>
+        </div>
+
         {isLoading ? (
-          <LoadingState label="Carregando indicadores..." />
-        ) : error ? (
+          <LoadingState label="Carregando indicadores…" />
+        ) : hasError ? (
           <ErrorState
-            error={error}
-            onRetry={() => (isFiltered ? monthly.refetch() : loans.refetch())}
+            error={hasError}
+            onRetry={() => isFiltered ? void monthly.refetch() : void loans.refetch()}
           />
         ) : loansChartData.every((d) => !d.Empréstimos && !d.Devoluções) ? (
-          <EmptyState
-            title="Nenhuma movimentação registrada"
-            description={`Não há empréstimos ou devoluções em ${monthLabel}.`}
-            icon={<PackagePlus className="size-5" aria-hidden />}
-          />
+          <div className="py-8 text-center text-caption text-muted-foreground">
+            Nenhuma movimentação neste período.
+          </div>
         ) : (
           <div className="min-w-0 overflow-x-auto">
-            <div className="min-w-[560px]">
-              <ResponsiveContainer width="100%" height={320}>
-                <AreaChart
-                  data={loansChartData}
-                  margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-                >
+            <div className="min-w-[520px]">
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={loansChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
-                    <linearGradient id="gradEmprestimos" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--color-chart-1)" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="var(--color-chart-1)" stopOpacity={0.02} />
+                    <linearGradient id="gradEmp" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--color-foreground)" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="var(--color-foreground)" stopOpacity={0.01} />
                     </linearGradient>
-                    <linearGradient id="gradDevolucoes" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--color-chart-2)" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="var(--color-chart-2)" stopOpacity={0.02} />
+                    <linearGradient id="gradDev" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--color-muted-foreground)" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="var(--color-muted-foreground)" stopOpacity={0.01} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
-                  <XAxis dataKey="dia" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis
-                    allowDecimals={false}
-                    tick={{ fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <Tooltip contentStyle={tooltipStyle} />
-                  <Legend wrapperStyle={{ paddingTop: 10, fontSize: 12, fontWeight: 600 }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                  <XAxis dataKey="dia" tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={TOOLTIP_STYLE} />
                   <Area
                     type="monotone"
                     dataKey="Empréstimos"
-                    stroke="var(--color-chart-1)"
-                    strokeWidth={2.5}
-                    fill="url(#gradEmprestimos)"
-                    dot={{ r: 3 }}
-                    activeDot={{ r: 5 }}
+                    stroke="var(--color-foreground)"
+                    strokeWidth={2}
+                    fill="url(#gradEmp)"
+                    dot={{ r: 2, fill: "var(--color-foreground)" }}
+                    activeDot={{ r: 4 }}
                   />
                   <Area
                     type="monotone"
                     dataKey="Devoluções"
-                    stroke="var(--color-chart-2)"
-                    strokeWidth={2.5}
-                    fill="url(#gradDevolucoes)"
-                    dot={{ r: 3 }}
-                    activeDot={{ r: 5 }}
+                    stroke="var(--color-muted-foreground)"
+                    strokeWidth={2}
+                    fill="url(#gradDev)"
+                    dot={{ r: 2, fill: "var(--color-muted-foreground)" }}
+                    activeDot={{ r: 4 }}
                   />
                 </AreaChart>
               </ResponsiveContainer>
-            </div>
-          </div>
-        )}
-      </Section>
 
-      <Section
-        title="Novos cadastros"
-        description={`Volume diário de novos patrimônios em ${monthLabel}`}
-      >
-        {isLoading ? (
-          <LoadingState label="Carregando indicadores..." />
-        ) : error ? (
-          <ErrorState
-            error={error}
-            onRetry={() => (isFiltered ? monthly.refetch() : registrations.refetch())}
-          />
-        ) : regChartData.every((d) => !d.Cadastros) ? (
-          <EmptyState
-            title="Nenhum cadastro registrado"
-            description={`Não há novos cadastros em ${monthLabel}.`}
-            icon={<PackagePlus className="size-5" aria-hidden />}
-          />
-        ) : (
-          <div className="min-w-0 overflow-x-auto">
-            <div className="min-w-[560px]">
-              <ResponsiveContainer width="100%" height={280}>
-                <AreaChart
-                  data={regChartData}
-                  margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-                >
-                  <defs>
-                    <linearGradient id="gradCadastros" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--color-chart-4)" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="var(--color-chart-4)" stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
-                  <XAxis dataKey="dia" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis
-                    allowDecimals={false}
-                    tick={{ fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <Tooltip contentStyle={tooltipStyle} />
-                  <Area
-                    type="monotone"
-                    dataKey="Cadastros"
-                    stroke="var(--color-chart-4)"
-                    strokeWidth={2.5}
-                    fill="url(#gradCadastros)"
-                    dot={{ r: 3 }}
-                    activeDot={{ r: 5 }}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+              {/* Legenda manual monocromática */}
+              <div className="flex items-center gap-6 mt-3 pt-3 border-t border-border text-caption">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-6 h-0.5 bg-foreground" />
+                  <span className="text-foreground font-medium">Empréstimos</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-6 h-0.5 bg-muted-foreground" />
+                  <span className="text-muted-foreground">Devoluções</span>
+                </div>
+              </div>
             </div>
           </div>
         )}
-      </Section>
+      </div>
+
+      {/* Grid: Gráfico Barras (Cadastros por dia) + Distribuição Semanal */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Gráfico 2: Barras de Cadastros */}
+        <div className="rounded-[6px] border border-border bg-surface p-5">
+          <div className="border-b border-border pb-3 mb-5">
+            <h2 className="text-body font-semibold text-foreground">Cadastros por Dia</h2>
+            <p className="text-caption text-muted-foreground">
+              Novos patrimônios registrados no período.
+            </p>
+          </div>
+
+          {isLoading ? (
+            <div className="py-6 text-center text-caption text-muted-foreground">Carregando…</div>
+          ) : regChartData.every((d) => !d.Cadastros) ? (
+            <div className="py-8 text-center text-caption text-muted-foreground">
+              Nenhum cadastro neste período.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <div className="min-w-[300px]">
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={regChartData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                    <XAxis dataKey="dia" tick={{ fontSize: 9, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 9, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={TOOLTIP_STYLE} />
+                    <Bar dataKey="Cadastros" fill="var(--color-foreground)" radius={[2, 2, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Gráfico 3: Distribuição por dia da semana */}
+        <div className="rounded-[6px] border border-border bg-surface p-5">
+          <div className="border-b border-border pb-3 mb-5">
+            <h2 className="text-body font-semibold text-foreground">Distribuição Semanal de Empréstimos</h2>
+            <p className="text-caption text-muted-foreground">
+              Concentração de movimentações por dia da semana.
+            </p>
+          </div>
+
+          {weekdayDist.every((d) => !d.Empréstimos) ? (
+            <div className="py-8 text-center text-caption text-muted-foreground">
+              Nenhum dado disponível para este período.
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={weekdayDist} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                <XAxis dataKey="dia" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 9, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={TOOLTIP_STYLE} />
+                <Bar dataKey="Empréstimos" fill="var(--color-foreground)" opacity={0.8} radius={[2, 2, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

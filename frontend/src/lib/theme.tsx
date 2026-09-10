@@ -4,16 +4,19 @@ type Theme = "dark" | "light";
 
 const ThemeContext = createContext<{ theme: Theme; toggle: () => void } | null>(null);
 
-const STORAGE_KEY = "theme";
+const STORAGE_KEY = "stock-theme";
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  // Leitura do localStorage só após a hidratação (evita mismatch de SSR).
-  const [theme, setTheme] = useState<Theme>("light");
+  // Dark-first por padrão (Seção 12)
+  const [theme, setTheme] = useState<Theme>("dark");
 
   useEffect(() => {
     const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (stored === "dark" || stored === "light") setTheme(stored);
-    else if (window.matchMedia("(prefers-color-scheme: dark)").matches) setTheme("dark");
+    if (stored === "dark" || stored === "light") {
+      setTheme(stored);
+    } else {
+      setTheme("dark");
+    }
   }, []);
 
   useEffect(() => {

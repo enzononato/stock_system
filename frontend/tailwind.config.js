@@ -10,8 +10,8 @@ export default {
   theme: {
     container: {
       center: true,
-      padding: "2rem",
-      screens: { "2xl": "1400px" },
+      padding: "1.5rem",
+      screens: { "2xl": "1440px" },
     },
     extend: {
       fontFamily: {
@@ -20,11 +20,19 @@ export default {
         heading: ['"Plus Jakarta Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
       },
       boxShadow: {
-        "glow-primary": "0 0 20px -5px oklch(0.72 0.16 226 / 45%)",
-        glass: "0 8px 32px 0 rgba(0, 0, 0, 0.28)",
+        overlay: "var(--shadow-overlay)",
       },
       colors: {
-        border: "var(--border)",
+        canvas: "var(--canvas)",
+        surface: {
+          DEFAULT: "var(--surface)",
+          alt: "var(--surface-alt)",
+        },
+        border: {
+          DEFAULT: "var(--border)",
+          strong: "var(--border-strong)",
+        },
+        hairline: "var(--border)",
         input: "var(--input)",
         ring: "var(--ring)",
         background: "var(--background)",
@@ -40,18 +48,6 @@ export default {
         destructive: {
           DEFAULT: "var(--destructive)",
           foreground: "var(--destructive-foreground)",
-        },
-        success: {
-          DEFAULT: "var(--success)",
-          foreground: "var(--success-foreground)",
-        },
-        warning: {
-          DEFAULT: "var(--warning)",
-          foreground: "var(--warning-foreground)",
-        },
-        info: {
-          DEFAULT: "var(--info)",
-          foreground: "var(--info-foreground)",
         },
         muted: {
           DEFAULT: "var(--muted)",
@@ -79,14 +75,17 @@ export default {
       },
       transitionDuration: {
         micro: "150ms",
-        hover: "200ms",
-        DEFAULT: "250ms",
-        major: "300ms",
+        overlay: "250ms",
+        DEFAULT: "200ms",
+      },
+      transitionTimingFunction: {
+        DEFAULT: "cubic-bezier(0.16, 1, 0.3, 1)",
       },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        lg: "var(--radius-lg, 8px)",
+        md: "var(--radius-md, 6px)",
+        DEFAULT: "var(--radius, 4px)",
+        sm: "var(--radius-sm, 2px)",
       },
       keyframes: {
         "accordion-down": {
@@ -98,18 +97,18 @@ export default {
           to: { height: "0" },
         },
         "fade-in": {
-          from: { opacity: "0", transform: "translateY(6px)" },
+          from: { opacity: "0", transform: "translateY(4px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
         "scale-in": {
-          from: { opacity: "0", transform: "scale(0.96)" },
+          from: { opacity: "0", transform: "scale(0.98)" },
           to: { opacity: "1", transform: "scale(1)" },
         },
       },
       animation: {
-        "accordion-down": "accordion-down 0.2s ease-out",
-        "accordion-up": "accordion-up 0.2s ease-out",
-        "fade-in": "fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+        "accordion-down": "accordion-down 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
+        "accordion-up": "accordion-up 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
+        "fade-in": "fade-in 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
         "scale-in": "scale-in 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
       },
     },

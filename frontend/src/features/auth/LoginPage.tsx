@@ -1,16 +1,6 @@
 import { useEffect, useState, lazy, Suspense, type FormEvent } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import {
-  Eye,
-  EyeOff,
-  Lock,
-  ShieldCheck,
-  User,
-  Sparkles,
-  Server,
-  FileCheck2,
-  History,
-} from "lucide-react";
+import { Eye, EyeOff, Lock, ShieldCheck, User, Sparkles } from "lucide-react";
 
 import { useAuth } from "@/lib/auth";
 import { getErrorMessage } from "@/lib/api-error";
@@ -47,6 +37,15 @@ export function LoginPage() {
     return () => window.removeEventListener("resize", checkDesktop);
   }, []);
 
+  // Bloqueia qualquer possibilidade de scroll no body durante a rota de login
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
@@ -62,7 +61,7 @@ export function LoginPage() {
   }
 
   return (
-    <div className="relative min-h-screen bg-background overflow-hidden flex flex-col lg:grid lg:grid-cols-[1.2fr_minmax(420px,520px)]">
+    <div className="relative h-screen h-[100dvh] max-h-[100dvh] w-full max-w-[100vw] bg-background overflow-hidden flex flex-col lg:grid lg:grid-cols-[1.2fr_minmax(420px,520px)]">
       {/* Background radial e malha tecnológica (Solvd Style) */}
       <div
         className="pointer-events-none absolute inset-0 -z-10 bg-grid-tech opacity-40"
@@ -78,9 +77,9 @@ export function LoginPage() {
       />
 
       {/* PAINEL VISUAL E MOTION (Spotify Experience + Solvd Tech Identity) */}
-      <section className="relative hidden lg:flex flex-col justify-between p-10 xl:p-14 border-r border-border/60 bg-gradient-to-br from-sidebar/95 via-background to-sidebar/90 overflow-hidden">
+      <section className="relative hidden lg:flex flex-col justify-between p-8 xl:p-12 border-r border-border/60 bg-gradient-to-br from-sidebar/95 via-background to-sidebar/90 overflow-hidden h-full max-h-[100dvh]">
         {/* Topo institucional */}
-        <div className="relative z-10 flex items-center justify-between">
+        <div className="relative z-10 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="flex size-9 items-center justify-center rounded-lg border border-primary/30 bg-primary/10 shadow-sm">
               <img src="/logo-revalle.jpg" alt="Revalle" className="size-7 rounded object-cover" />
@@ -100,7 +99,7 @@ export function LoginPage() {
         </div>
 
         {/* Centro: Elemento 3D interativo ou Fallback */}
-        <div className="relative z-10 my-auto flex h-[460px] w-full items-center justify-center">
+        <div className="relative z-10 my-auto flex flex-1 min-h-[260px] max-h-[460px] w-full items-center justify-center">
           {/* Anéis decorativos Solvd */}
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center -z-10">
             <div className="size-[420px] rounded-full border border-primary/10 opacity-60" />
@@ -116,8 +115,8 @@ export function LoginPage() {
           )}
         </div>
 
-        {/* Rodapé: Pilares de Gestão Corporativa */}
-        <div className="relative z-10 space-y-4">
+        {/* Rodapé: Pilares de Gestão Corporativa (Cards Rastreio/Termos/Auditoria removidos) */}
+        <div className="relative z-10 space-y-3 shrink-0">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
             <Sparkles className="size-3.5" />
             <span>Controle Patrimonial de Alto Desempenho</span>
@@ -125,38 +124,12 @@ export function LoginPage() {
           <h2 className="text-2xl font-bold tracking-tight text-foreground xl:text-3xl max-w-lg leading-snug">
             Gestão unificada de ativos de TI, vínculos e termos com rastreabilidade total.
           </h2>
-
-          <div className="grid grid-cols-3 gap-3 pt-2 border-t border-border/70">
-            <div className="rounded-lg border border-border/60 bg-surface/40 p-3 backdrop-blur-sm">
-              <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-                <Server className="size-3.5 text-primary" />
-                <span>Rastreio</span>
-              </div>
-              <p className="mt-1 text-xs font-semibold text-foreground">Serial, MAC & IP</p>
-            </div>
-
-            <div className="rounded-lg border border-border/60 bg-surface/40 p-3 backdrop-blur-sm">
-              <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-                <FileCheck2 className="size-3.5 text-primary" />
-                <span>Termos</span>
-              </div>
-              <p className="mt-1 text-xs font-semibold text-foreground">Emissão em PDF</p>
-            </div>
-
-            <div className="rounded-lg border border-border/60 bg-surface/40 p-3 backdrop-blur-sm">
-              <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-                <History className="size-3.5 text-primary" />
-                <span>Auditoria</span>
-              </div>
-              <p className="mt-1 text-xs font-semibold text-foreground">Histórico e Estorno</p>
-            </div>
-          </div>
         </div>
       </section>
 
       {/* PAINEL DE ACESSO CORPORATIVO (Formulário Elegante e Acessível) */}
-      <section className="relative z-10 flex flex-1 items-center justify-center p-6 sm:p-10 lg:p-12">
-        <div className="w-full max-w-[400px] space-y-6">
+      <section className="relative z-10 flex flex-1 items-center justify-center p-6 sm:p-8 lg:p-10 overflow-hidden h-full max-h-[100dvh]">
+        <div className="w-full max-w-[400px] space-y-5 my-auto shrink-0">
           {/* Header Mobile com insígnia da marca */}
           <div className="lg:hidden flex flex-col items-center text-center mb-6">
             <div className="flex size-12 items-center justify-center rounded-xl border border-primary/30 bg-primary/10 mb-3 shadow-md">

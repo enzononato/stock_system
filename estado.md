@@ -71,13 +71,19 @@ All 7 visual reference corrections from the user's reference images have been co
   - [x] Fase 7: Build de produção com `npm run build` (Exit Code 0) e `npx eslint src` (0 erros)
   - [x] Documentação em `notas/planos/plano-006.md` e `notas/auditoria/auditoria-006.md`
 
+- [x] **Plano 008 — Restauração do Design Anterior & Refinamentos de Login:**
+  - [x] Reversão do layout terminal de volta ao Design System Enterprise aprovado (Spotify/Solvd/Deep Navy, `AppShell.tsx` com navegação em árvore por grupos, `DataTable.tsx`, `StockPage.tsx`, etc.).
+  - [x] Remoção definitiva do bloco inferior com os cards "Rastreio", "Termos" e "Auditoria" na `LoginPage.tsx`.
+  - [x] Aplicação de contenção estrita de viewport 100dvh na `LoginPage.tsx` (`overflow: hidden` na raiz e bloqueio de scroll no `document.body` enquanto a tela de login estiver aberta).
+  - [x] Validação com `npm run build` (Exit Code 0) e `npm run lint` (0 erros).
+
 ## In Progress
 
-- [ ] Continuity maintenance and ongoing user-requested tasks
+- [ ] Manutenção contínua e novas solicitações do usuário.
 
 ## Pending
 
-- [ ] None currently.
+- [ ] Nenhuma pendência imediata.
 
 ## Known Issues
 

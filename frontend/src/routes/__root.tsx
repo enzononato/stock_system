@@ -125,7 +125,7 @@ function RootShell({ children }: { children: ReactNode }) {
         <script
           // Aplica o tema salvo antes da hidratação para evitar flash de cor.
           dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem("stock-theme")||"light";if(t==="dark")document.documentElement.classList.add("dark")}catch(e){}`,
+            __html: `try{var t=localStorage.getItem("stock-theme")||"dark";if(t!=="light")document.documentElement.classList.add("dark")}catch(e){}`,
           }}
         />
       </head>

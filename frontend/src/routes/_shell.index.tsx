@@ -1,19 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { StockPage } from "@/features/stock/StockPage";
+import { DashboardPage } from "@/features/dashboard/DashboardPage";
 
 export const Route = createFileRoute("/_shell/")({
   head: () => ({
     meta: [
-      { title: "Estoque de equipamentos · Controle de Patrimônio" },
+      { title: "Dashboard Executivo · Controle de Patrimônio" },
       {
         name: "description",
-        content: "Estoque de equipamentos no sistema corporativo de controle de patrimônio.",
+        content: "Visão executiva e panorama operacional do patrimônio e estoque de TI.",
       },
-      { property: "og:title", content: "Estoque de equipamentos · Controle de Patrimônio" },
+      { property: "og:title", content: "Dashboard Executivo · Controle de Patrimônio" },
       {
         property: "og:description",
-        content: "Estoque de equipamentos no sistema corporativo de controle de patrimônio.",
+        content: "Visão executiva e panorama operacional do patrimônio e estoque de TI.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -23,5 +23,5 @@ export const Route = createFileRoute("/_shell/")({
 });
 
 function RouteComponent() {
-  return <StockPage />;
+  return <DashboardPage />;
 }

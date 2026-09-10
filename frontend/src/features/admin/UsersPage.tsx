@@ -1,10 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Key, Shield, Trash2, UserPlus, Users, Wrench, ShieldCheck } from "lucide-react";
+import { Key, Lock, Plus, Shield, Trash2, UserPlus, Users, Wrench } from "lucide-react";
 import { listUsers, createUser, removeUser, updatePassword, type User } from "@/api/users";
-import { DataTable, type Column } from "@/components/app/DataTable";
-import { KpiCard } from "@/components/app/KpiCard";
-import { PageHeader, Section } from "@/components/app/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +16,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -39,28 +37,60 @@ import { toast } from "sonner";
 
 const ROLES = ["Gestor", "Técnico", "Jovem Aprendiz"];
 
+const ROLE_META: Record<string, { label: string; iconSrc: string; description: string }> = {
+  Gestor: {
+    label: "Gestor",
+    iconSrc: "/icons/role-gestor.png",
+    description: "Acesso total: cadastros, relatórios, estornos e configurações do sistema.",
+  },
+  Técnico: {
+    label: "Técnico",
+    iconSrc: "/icons/role-tecnico.png",
+    description: "Operações de estoque: empréstimos, devoluções, cadastro de periféricos.",
+  },
+  "Jovem Aprendiz": {
+    label: "Jovem Aprendiz",
+    iconSrc: "/icons/role-aprendiz.png",
+    description: "Consulta e operações limitadas sob supervisão de Gestor ou Técnico.",
+  },
+};
+
+function RoleBadge({ role }: { role: string }) {
+  const meta = ROLE_META[role] ?? { label: role, iconSrc: "/icons/role-gestor.png" };
+  return (
+    <span className="inline-flex items-center gap-1.5 font-medium text-caption text-foreground">
+      {meta.iconSrc && (
+        <span className="size-4 rounded-xs border border-border/80 bg-surface-alt flex items-center justify-center p-0.5 shrink-0">
+          <img src={meta.iconSrc} alt={meta.label} className="size-full object-contain dark:invert" />
+        </span>
+      )}
+      <span>{meta.label}</span>
+    </span>
+  );
+}
+
 export function UsersPage() {
   const queryClient = useQueryClient();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("");
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const [changingPasswordId, setChangingPasswordId] = useState<number | null>(null);
   const [newPassword, setNewPassword] = useState("");
+  const [usersPage, setUsersPage] = useState(0);
+  const USERS_PAGE_SIZE = 7;
 
-  const {
-    data: users = [],
-    isLoading,
-    error,
-    refetch,
-  } = useQuery({ queryKey: ["users"], queryFn: listUsers });
+  const { data: users = [], isLoading, error, refetch } = useQuery({
+    queryKey: ["users"],
+    queryFn: listUsers,
+  });
 
   const createMutation = useMutation({
     mutationFn: () => createUser({ username, password, role }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["users"] });
-      setUsername("");
-      setPassword("");
-      setRole("");
+      void queryClient.invalidateQueries({ queryKey: ["users"] });
+      setUsername(""); setPassword(""); setRole("");
+      setShowCreateForm(false);
       toast.success("Usuário criado com sucesso!");
     },
     onError: (err: unknown) => toast.error(getErrorMessage(err, "Erro ao criar usuário.")),
@@ -69,8 +99,8 @@ export function UsersPage() {
   const removeMutation = useMutation({
     mutationFn: (id: number) => removeUser(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["users"] });
-      toast.success("Usuário removido com sucesso.");
+      void queryClient.invalidateQueries({ queryKey: ["users"] });
+      toast.success("Usuário removido.");
     },
     onError: (err: unknown) => toast.error(getErrorMessage(err, "Erro ao remover usuário.")),
   });
@@ -85,239 +115,381 @@ export function UsersPage() {
     onError: (err: unknown) => toast.error(getErrorMessage(err, "Erro ao alterar senha.")),
   });
 
-  const roleBadgeClass = (r: string) => {
-    if (r === "Gestor") return "badge-info";
-    if (r === "Técnico") return "badge-warning";
-    return "badge-success";
-  };
-
-  const columns: Column<User>[] = [
-    {
-      key: "id",
-      header: "ID",
-      cell: (u) => <span className="num text-xs font-semibold text-muted-foreground">#{u.id}</span>,
-    },
-    {
-      key: "username",
-      header: "Usuário",
-      primary: true,
-      cell: (u) => <span className="font-semibold text-foreground">{u.username}</span>,
-    },
-    {
-      key: "role",
-      header: "Função",
-      cell: (u) => (
-        <Badge variant="outline" className={roleBadgeClass(u.role)}>
-          {u.role}
-        </Badge>
-      ),
-    },
-    {
-      key: "actions",
-      header: "Ações",
-      cell: (u) => (
-        <div className="flex gap-1 justify-end">
-          <Button
-            size="sm"
-            variant="ghost"
-            className="size-8 text-muted-foreground hover:text-foreground"
-            aria-label={`Alterar senha de ${u.username}`}
-            title="Alterar senha"
-            onClick={() => setChangingPasswordId(u.id)}
-          >
-            <Key className="size-3.5" />
-          </Button>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                aria-label={`Remover ${u.username}`}
-                title="Remover usuário"
-              >
-                <Trash2 className="size-3.5" />
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Remover usuário &quot;{u.username}&quot;?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Esta ação não pode ser desfeita. Não é possível remover seu próprio usuário nem o
-                  último Gestor do sistema.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={() => removeMutation.mutate(u.id)}>
-                  Remover
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
-      ),
-    },
-  ];
-
   const changingUser = users.find((u) => u.id === changingPasswordId);
 
+  const gestores = users.filter((u) => u.role === "Gestor");
+  const tecnicos = users.filter((u) => u.role === "Técnico");
+  const aprendizes = users.filter((u) => u.role === "Jovem Aprendiz");
+
   return (
-    <div className="space-y-6">
-      <PageHeader
-        eyebrow="Administração"
-        title="Gestão de Usuários"
-        description="Gerencie contas de operadores, funções de acesso e credenciais de segurança do sistema."
-      />
-
-      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
-        <KpiCard
-          label="Total de Usuários"
-          value={users.length}
-          hint="Contas ativas cadastradas"
-          icon={Users}
-        />
-        <KpiCard
-          label="Gestores"
-          value={users.filter((u) => u.role === "Gestor").length}
-          hint="Acesso administrativo total"
-          icon={Shield}
-        />
-        <KpiCard
-          label="Técnicos"
-          value={users.filter((u) => u.role === "Técnico").length}
-          hint="Operação de estoque e movimentações"
-          icon={Wrench}
-        />
-      </div>
-
-      <Section
-        title="Novo Usuário"
-        description="Cadastre uma conta corporativa e defina sua função de permissões."
-      >
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            createMutation.mutate();
-          }}
-          className="space-y-4"
+    <div className="page-container-dense space-y-6">
+      {/* Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-border pb-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
+              Administração de Acessos
+            </span>
+            <span className="text-muted-foreground">•</span>
+            <span className="text-caption text-foreground font-medium">Matriz de Governança</span>
+          </div>
+          <h1 className="text-heading font-semibold tracking-tight text-foreground mt-0.5">
+            Gestão de Usuários
+          </h1>
+          <p className="text-body-sm text-muted-foreground mt-1">
+            Contas de operadores, perfis de acesso e credenciais de segurança corporativa.
+          </p>
+        </div>
+        <Button
+          size="sm"
+          onClick={() => setShowCreateForm((p) => !p)}
+          className="rounded-[4px] bg-foreground text-background hover:bg-foreground/90 text-xs h-8"
         >
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="new-username">Nome de usuário *</Label>
-              <Input
-                id="new-username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Ex.: joao.silva"
-                required
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="new-password">Senha inicial *</Label>
-              <Input
-                id="new-password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Mínimo 6 caracteres"
-                required
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>Função no sistema *</Label>
-              <Select value={role} onValueChange={setRole}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o perfil" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ROLES.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {r}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex justify-end pt-2">
-            <Button
-              type="submit"
-              disabled={createMutation.isPending || !username || !password || !role}
-            >
-              <UserPlus className="mr-2 size-4" />
-              {createMutation.isPending ? "Criando conta…" : "Criar usuário"}
-            </Button>
-          </div>
-        </form>
-      </Section>
-
-      <Section
-        title="Usuários Cadastrados"
-        description={`${users.length} operador(es) com credenciais ativas no sistema.`}
-      >
-        <DataTable
-          data={users}
-          columns={columns}
-          rowKey={(u) => u.id}
-          isLoading={isLoading}
-          error={error}
-          onRetry={() => void refetch()}
-          clientPageSize={7}
-          emptyTitle="Nenhum usuário cadastrado"
-        />
-      </Section>
-
-      <div className="flex items-start gap-3 rounded-lg border border-border/80 bg-muted/20 p-4 text-xs text-muted-foreground">
-        <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
-        <p>
-          <strong className="text-foreground">Princípio de menor privilégio:</strong> Atribua a cada
-          usuário somente a função estritamente necessária para suas atividades corporativas.
-        </p>
+          <UserPlus className="mr-1.5 size-3.5" />
+          Novo Usuário
+        </Button>
       </div>
 
+      {/* Formulário de Criação (colapsável) */}
+      {showCreateForm && (
+        <div className="rounded-[6px] border border-border bg-surface p-5 space-y-4">
+          <div className="border-b border-border pb-2.5">
+            <h2 className="text-body font-semibold text-foreground">Criar Nova Conta de Operador</h2>
+            <p className="text-caption text-muted-foreground">
+              Defina o nome de usuário, senha inicial e o perfil de permissões conforme o princípio de menor privilégio.
+            </p>
+          </div>
+          <form
+            onSubmit={(e) => { e.preventDefault(); createMutation.mutate(); }}
+            className="space-y-4"
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-caption font-medium">Nome de usuário *</Label>
+                <Input
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Ex.: joao.silva"
+                  required
+                  className="rounded-[4px] border-border bg-background text-body-sm h-9"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-caption font-medium">Senha inicial *</Label>
+                <Input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Mínimo 6 caracteres"
+                  required
+                  className="rounded-[4px] border-border bg-background text-body-sm h-9"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-caption font-medium">Perfil de acesso *</Label>
+                <Select value={role} onValueChange={setRole}>
+                  <SelectTrigger className="h-9 rounded-[4px] border-border bg-background text-body-sm">
+                    <SelectValue placeholder="Selecione o perfil" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-[4px] border-border bg-surface">
+                    {ROLES.map((r) => (
+                      <SelectItem key={r} value={r} className="text-body-sm rounded-[2px]">
+                        {ROLE_META[r]?.symbol} {r}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Preview do perfil selecionado */}
+            {role && ROLE_META[role] && (
+              <div className="rounded-[4px] border border-border bg-surface-alt px-3 py-2 text-caption text-muted-foreground">
+                <span className="font-semibold text-foreground font-mono mr-2">{ROLE_META[role]?.symbol}</span>
+                {ROLE_META[role]?.description}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-1">
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowCreateForm(false)} className="rounded-[4px] border-border text-xs h-8">
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={createMutation.isPending || !username || !password || !role}
+                className="rounded-[4px] bg-foreground text-background hover:bg-foreground/90 text-xs h-8"
+              >
+                <UserPlus className="mr-1.5 size-3.5" />
+                {createMutation.isPending ? "Criando conta…" : "Criar usuário"}
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Aviso de governança */}
+      <div className="rounded-[4px] border border-border bg-surface-alt px-4 py-3 text-caption text-muted-foreground">
+        <span className="font-semibold text-foreground">Princípio de menor privilégio —</span> Atribua a cada operador somente as permissões estritamente necessárias para sua função corporativa. Gestores possuem acesso irreversível ao estorno de operações.
+      </div>
+
+      {/* Matriz de Governança por Perfil */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {[
+          { role: "Gestor", users: gestores, iconSrc: "/icons/role-gestor.png", level: "Nível Administrador" },
+          { role: "Técnico", users: tecnicos, iconSrc: "/icons/role-tecnico.png", level: "Nível Operador" },
+          { role: "Jovem Aprendiz", users: aprendizes, iconSrc: "/icons/role-aprendiz.png", level: "Nível Assistente" },
+        ].map(({ role: r, users: roleUsers, iconSrc, level }) => (
+          <div key={r} className="rounded-[6px] border border-border bg-surface p-4 space-y-3">
+            <div className="border-b border-border pb-2.5">
+              <div className="flex items-center gap-2.5">
+                <div className="size-8 rounded-[4px] border border-border bg-surface-alt flex items-center justify-center p-1.5 shrink-0 shadow-2xs">
+                  <img
+                    src={iconSrc}
+                    alt={r}
+                    className="size-full object-contain dark:invert"
+                  />
+                </div>
+                <div className="min-w-0">
+                  <span className="text-body-sm font-semibold text-foreground block leading-tight">{r}</span>
+                  <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-wider">
+                    {level}
+                  </span>
+                </div>
+              </div>
+              <p className="text-caption text-muted-foreground mt-2">
+                {ROLE_META[r]?.description}
+              </p>
+            </div>
+
+            <div className="space-y-1">
+              {isLoading ? (
+                <p className="text-caption text-muted-foreground py-2">Carregando…</p>
+              ) : roleUsers.length === 0 ? (
+                <p className="text-caption text-muted-foreground italic py-2">Nenhum {r.toLowerCase()} cadastrado.</p>
+              ) : (
+                roleUsers.map((u) => (
+                  <div
+                    key={u.id}
+                    className="flex items-center justify-between gap-2 rounded-[4px] px-3 py-2 bg-surface-alt border border-border/50"
+                  >
+                    <div className="min-w-0">
+                      <span className="text-body-sm font-medium text-foreground block truncate">{u.username}</span>
+                      <span className="font-mono text-caption text-muted-foreground">#{u.id}</span>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setChangingPasswordId(u.id)}
+                        className="size-7 p-0 rounded-[2px] text-muted-foreground hover:text-foreground"
+                        title="Alterar senha"
+                      >
+                        <Key className="size-3" />
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="size-7 p-0 rounded-[2px] text-muted-foreground hover:text-foreground"
+                            title="Remover usuário"
+                          >
+                            <Trash2 className="size-3" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent className="rounded-[6px] border-border bg-surface">
+                          <AlertDialogHeader>
+                            <AlertDialogTitle className="text-body-lg font-semibold">
+                              Remover "{u.username}"?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription className="text-caption text-muted-foreground">
+                              Esta ação não pode ser desfeita. Não é possível remover seu próprio usuário nem o último Gestor ativo no sistema.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel className="rounded-[4px] border-border text-xs">Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                              className="rounded-[4px] bg-foreground text-background hover:bg-foreground/90 text-xs"
+                              onClick={() => removeMutation.mutate(u.id)}
+                            >
+                              Remover
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="pt-1 border-t border-border text-caption text-muted-foreground font-mono">
+              {roleUsers.length} operador{roleUsers.length !== 1 ? "es" : ""}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Tabela Flat Completa de todos os usuários */}
+      <div className="rounded-[6px] border border-border bg-surface p-5 space-y-3">
+        <div className="border-b border-border pb-2.5">
+          <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
+            Todos os Operadores — {users.length} conta{users.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+        <table className="w-full text-left text-body-sm">
+          <thead className="border-b border-border text-caption uppercase tracking-wider text-muted-foreground">
+            <tr>
+              <th className="py-2 px-3">ID</th>
+              <th className="py-2 px-3">Usuário</th>
+              <th className="py-2 px-3">Perfil</th>
+              <th className="py-2 px-3 text-right">Ações</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {users.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="py-8 text-center text-caption text-muted-foreground">
+                  {isLoading ? "Carregando usuários…" : "Nenhum usuário cadastrado."}
+                </td>
+              </tr>
+            ) : (
+              users
+                .slice(usersPage * USERS_PAGE_SIZE, (usersPage + 1) * USERS_PAGE_SIZE)
+                .map((u) => (
+                <tr key={u.id} className="hover:bg-muted/30">
+                  <td className="py-2 px-3 font-mono text-caption text-muted-foreground">#{u.id}</td>
+                  <td className="py-2 px-3 font-medium text-foreground">{u.username}</td>
+                  <td className="py-2 px-3">
+                    <RoleBadge role={u.role} />
+                  </td>
+                  <td className="py-2 px-3 text-right">
+                    <div className="flex items-center gap-1 justify-end">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setChangingPasswordId(u.id)}
+                        className="size-7 p-0 rounded-[2px] text-muted-foreground hover:text-foreground"
+                        title="Alterar senha"
+                      >
+                        <Key className="size-3.5" />
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="size-7 p-0 rounded-[2px] text-muted-foreground hover:text-foreground"
+                            title="Remover"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent className="rounded-[6px] border-border bg-surface">
+                          <AlertDialogHeader>
+                            <AlertDialogTitle className="text-body-lg font-semibold">Remover "{u.username}"?</AlertDialogTitle>
+                            <AlertDialogDescription className="text-caption text-muted-foreground">
+                              Esta ação não pode ser desfeita. O último Gestor não pode ser removido.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel className="rounded-[4px] border-border text-xs">Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                              className="rounded-[4px] bg-foreground text-background hover:bg-foreground/90 text-xs"
+                              onClick={() => removeMutation.mutate(u.id)}
+                            >
+                              Remover
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+
+        {Math.ceil(users.length / USERS_PAGE_SIZE) > 1 && (
+          <div className="flex items-center justify-between border-t border-border pt-3">
+            <span className="text-caption text-muted-foreground">
+              Página {usersPage + 1} de {Math.ceil(users.length / USERS_PAGE_SIZE)} ({users.length} operadores)
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={usersPage === 0}
+                onClick={() => setUsersPage((p) => Math.max(0, p - 1))}
+                className="rounded-[4px] border-border text-xs h-7 px-2.5"
+              >
+                ← Anterior
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={usersPage >= Math.ceil(users.length / USERS_PAGE_SIZE) - 1}
+                onClick={() => setUsersPage((p) => p + 1)}
+                className="rounded-[4px] border-border text-xs h-7 px-2.5"
+              >
+                Próxima →
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Dialog: Alterar Senha */}
       <Dialog
         open={changingPasswordId !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setChangingPasswordId(null);
-            setNewPassword("");
-          }
-        }}
+        onOpenChange={(open) => { if (!open) { setChangingPasswordId(null); setNewPassword(""); } }}
       >
-        <DialogContent>
+        <DialogContent className="max-w-sm rounded-[6px] border border-border bg-surface p-6">
           <DialogHeader>
-            <DialogTitle>
-              Alterar senha — {changingUser?.username ?? `Usuário #${changingPasswordId}`}
-            </DialogTitle>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 rounded-[4px] border border-border bg-surface-alt">
+                <Lock className="size-4 text-foreground" />
+              </div>
+              <div>
+                <DialogTitle className="text-body-lg font-semibold text-foreground">
+                  Alterar Senha
+                </DialogTitle>
+                <DialogDescription className="text-caption text-muted-foreground">
+                  {changingUser?.username ?? `Operador #${changingPasswordId}`}
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
-          <div className="flex flex-col gap-2 py-2">
-            <Label htmlFor="change-password-input">Nova senha corporativa</Label>
+          <div className="space-y-2">
+            <Label className="text-caption font-medium">Nova senha corporativa *</Label>
             <Input
-              id="change-password-input"
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="Digite a nova senha"
+              placeholder="Mínimo 6 caracteres"
               autoFocus
+              className="rounded-[4px] border-border bg-background text-body-sm h-9"
             />
           </div>
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t border-border flex justify-end gap-2">
             <Button
-              variant="ghost"
-              onClick={() => {
-                setChangingPasswordId(null);
-                setNewPassword("");
-              }}
+              variant="outline"
+              size="sm"
+              onClick={() => { setChangingPasswordId(null); setNewPassword(""); }}
+              className="rounded-[4px] border-border text-xs"
             >
               Cancelar
             </Button>
             <Button
+              size="sm"
               onClick={() =>
                 changingPasswordId !== null &&
                 passwordMutation.mutate({ id: changingPasswordId, pass: newPassword })
               }
               disabled={!newPassword || passwordMutation.isPending}
+              className="rounded-[4px] bg-foreground text-background hover:bg-foreground/90 text-xs"
             >
               {passwordMutation.isPending ? "Salvando…" : "Salvar nova senha"}
             </Button>

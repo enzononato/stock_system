@@ -2,23 +2,21 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
-  AlertTriangle,
   Boxes,
-  CheckCircle2,
-  Clock3,
   Eye,
+  Filter,
   Pencil,
   Plus,
   RefreshCw,
+  Search,
   X,
 } from "lucide-react";
+
 import { listItemsPaginated, type Item } from "@/api/items";
 import { listUnidades } from "@/api/unidades";
 import { DataTable, type Column } from "@/components/app/DataTable";
-import { PageHeader } from "@/components/app/PageHeader";
-import { StatusBadge } from "@/components/app/StatusBadge";
-import { KpiCard } from "@/components/app/KpiCard";
-import { ItemDetailsModal } from "@/components/app/ItemDetailsModal";
+import { AssetDetailsPanel } from "@/components/app/AssetDetailsPanel";
+import { EditItemModal } from "@/components/app/EditItemModal";
 import {
   Select,
   SelectContent,
@@ -27,36 +25,63 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
 import { useConstants } from "@/hooks/useConstants";
 import { cn, formatDate } from "@/lib/utils";
-import { EditItemModal } from "@/components/app/EditItemModal";
 
 const STATUS_OPTIONS = ["Disponível", "Indisponível", "Pendente", "Pendente Devolução"];
 const PAGE_SIZE = 7;
+
+function MonochromaticStatusBadge({ status }: { status?: string }) {
+  if (!status) return <span className="text-muted-foreground text-xs">—</span>;
+
+  let symbol = "●";
+  let label = status;
+
+  if (status === "Disponível") {
+    symbol = "○";
+  } else if (status.startsWith("Pendente")) {
+    symbol = "!";
+  } else if (status === "Baixado" || status === "Descartado") {
+    symbol = "×";
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-sm border border-border text-foreground font-mono text-xs font-medium">
+      <span className="font-bold text-[11px]">{symbol}</span>
+      <span className="uppercase tracking-wider text-[11px]">{label}</span>
+    </span>
+  );
+}
 
 export function StockPage() {
   const { hasRole } = useAuth();
   const navigate = useNavigate();
   const { equipmentTypes, isLoading: constantsLoading } = useConstants();
+
+  const [search, setSearch] = useState("");
   const [filterTipo, setFilterTipo] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterRevenda, setFilterRevenda] = useState("all");
   const [page, setPage] = useState(0);
-  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
+
+  const [selectedAsset, setSelectedAsset] = useState<Item | null>(null);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
 
   const { data: unidades = [] } = useQuery({
     queryKey: ["unidades-filter"],
     queryFn: () => listUnidades(),
   });
+
   const { data, isLoading, isFetching, error, refetch } = useQuery({
-    queryKey: ["items", filterTipo, filterStatus, filterRevenda, page],
+    queryKey: ["items", filterTipo, filterStatus, filterRevenda, page, search],
     queryFn: () =>
       listItemsPaginated({
         tipo: filterTipo !== "all" ? filterTipo : undefined,
         status: filterStatus !== "all" ? filterStatus : undefined,
         revenda: filterRevenda !== "all" ? filterRevenda : undefined,
+        search: search.trim() || undefined,
         limit: PAGE_SIZE,
         offset: page * PAGE_SIZE,
       }),
@@ -64,10 +89,8 @@ export function StockPage() {
 
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
-  const disponiveisCount = items.filter((i) => i.status === "Disponível").length;
-  const indisponiveisCount = items.filter((i) => i.status === "Indisponível").length;
-  const pendentesCount = items.filter((i) => i.status?.startsWith("Pendente")).length;
-  const hasFilters = filterTipo !== "all" || filterStatus !== "all" || filterRevenda !== "all";
+  const hasFilters =
+    filterTipo !== "all" || filterStatus !== "all" || filterRevenda !== "all" || search !== "";
 
   useEffect(() => {
     if (data && page > 0 && items.length === 0 && total > 0) {
@@ -76,6 +99,7 @@ export function StockPage() {
   }, [data, items.length, page, total]);
 
   const resetFilters = () => {
+    setSearch("");
     setFilterTipo("all");
     setFilterStatus("all");
     setFilterRevenda("all");
@@ -85,15 +109,18 @@ export function StockPage() {
   const columns: Column<Item>[] = [
     {
       key: "id",
-      header: "ID",
+      header: "Patrimônio",
       primary: true,
       cell: (row) => (
         <button
           type="button"
-          onClick={() => setSelectedItem(row)}
-          className="num text-xs font-semibold text-primary hover:underline cursor-pointer"
+          onClick={() => setSelectedAsset(row)}
+          className="num font-mono text-xs font-semibold text-foreground hover:underline cursor-pointer flex items-center gap-1"
         >
-          #{row.id}
+          <span>#{row.id}</span>
+          {row.identificador && (
+            <span className="text-muted-foreground font-normal">({row.identificador})</span>
+          )}
         </button>
       ),
     },
@@ -101,105 +128,88 @@ export function StockPage() {
       key: "tipo",
       header: "Tipo",
       cell: (row) => (
-        <span
-          className="block max-w-[180px] truncate font-medium text-foreground"
-          title={row.tipo || undefined}
-        >
-          {row.tipo || "-"}
+        <span className="font-medium text-foreground truncate max-w-[140px] block">
+          {row.tipo || "—"}
         </span>
       ),
     },
     {
-      key: "brand",
-      header: "Marca",
-      cell: (row) => row.brand || "-",
-      hideBelow: "md",
-    },
-    {
-      key: "model",
-      header: "Modelo",
+      key: "brand_model",
+      header: "Equipamento",
       cell: (row) => (
-        <span
-          className="block max-w-[180px] truncate text-muted-foreground"
-          title={row.model || undefined}
-        >
-          {row.model || "-"}
+        <span className="text-foreground truncate max-w-[200px] block" title={`${row.brand} ${row.model}`}>
+          {row.brand || ""} {row.model || "—"}
         </span>
       ),
-      hideBelow: "md",
     },
     {
       key: "status",
       header: "Status",
-      cell: (row) => <StatusBadge status={row.status} />,
-    },
-    {
-      key: "peripheral_count",
-      header: "Periféricos",
-      cell: (row) => <span className="num font-semibold">{row.peripheral_count ?? 0}</span>,
-      hideBelow: "lg",
-      align: "right",
+      cell: (row) => <MonochromaticStatusBadge status={row.status} />,
     },
     {
       key: "assigned_to",
-      header: "Usuário Alocado",
+      header: "Alocado Para",
       cell: (row) => (
-        <span
-          className="block max-w-[160px] truncate text-muted-foreground"
-          title={row.assigned_to || undefined}
-        >
-          {row.assigned_to || "-"}
+        <span className="text-muted-foreground truncate max-w-[160px] block">
+          {row.assigned_to || "—"}
+        </span>
+      ),
+      hideBelow: "md",
+    },
+    {
+      key: "revenda",
+      header: "Unidade",
+      cell: (row) => (
+        <span className="text-secondary text-xs truncate max-w-[120px] block">
+          {row.revenda || "—"}
         </span>
       ),
       hideBelow: "lg",
     },
     {
-      key: "revenda",
-      header: "Unidade",
-      cell: (row) => row.revenda || "-",
-      hideBelow: "md",
-    },
-    {
       key: "date_registered",
-      header: "Data Cadastro",
+      header: "Cadastro",
       cell: (row) => (
-        <span className="num text-xs text-muted-foreground">{formatDate(row.date_registered)}</span>
+        <span className="num font-mono text-xs text-muted-foreground">
+          {formatDate(row.date_registered)}
+        </span>
       ),
       hideBelow: "xl",
     },
     {
       key: "actions",
-      header: "Ações",
-      hideOnMobile: true,
+      header: "",
       align: "right",
       cell: (row) => (
         <div className="flex items-center justify-end gap-1">
           <Button
             variant="ghost"
-            size="icon"
-            className="size-8 text-muted-foreground hover:text-foreground"
+            size="sm"
+            className="size-8 p-0 text-muted-foreground hover:text-foreground"
             onClick={(e) => {
               e.stopPropagation();
-              setSelectedItem(row);
+              setSelectedAsset(row);
             }}
-            title="Ver detalhes"
-            aria-label={`Ver detalhes de ${row.tipo || "equipamento"} #${row.id}`}
+            title="Ver ficha técnica"
+            aria-label={`Ver ficha de ${row.tipo} #${row.id}`}
           >
-            <Eye className="size-4" aria-hidden />
+            <Eye className="size-3.5" />
           </Button>
+
           {hasRole("Gestor", "Técnico") && (
             <Button
               variant="ghost"
-              size="icon"
-              className="size-8 text-muted-foreground hover:text-primary"
+              size="sm"
+              className="size-8 p-0 text-muted-foreground hover:text-foreground"
               onClick={(e) => {
                 e.stopPropagation();
                 setEditingItem(row);
               }}
-              title="Editar equipamento"
-              aria-label={`Editar equipamento #${row.id}`}
+              title="Edição rápida"
+              aria-label={`Editar ${row.tipo} #${row.id}`}
             >
-              <Pencil className="size-4" aria-hidden />
+              <Pencil className="size-3.5" />
             </Button>
           )}
         </div>
@@ -209,67 +219,86 @@ export function StockPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Inventário"
-        title="Estoque de Equipamentos"
-        description="Visão operacional do inventário de TI, sincronizada com os dados reais do sistema."
-        actions={
-          <>
-            <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-              <RefreshCw className={cn("mr-2 size-4", isFetching && "animate-spin")} aria-hidden />
+      {/* Topo Operacional (Seção 24: Contexto + Ações) */}
+      <div className="border-b border-border pb-5">
+        <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-3">
+          <div>
+            <span className="text-caption text-muted-foreground font-mono">
+              INVENTÁRIO · DATA GRID OPERACIONAL
+            </span>
+            <div className="flex items-baseline gap-3 mt-0.5">
+              <h1 className="text-heading-lg font-semibold tracking-tight text-foreground">
+                Estoque de Equipamentos
+              </h1>
+              <span className="text-caption font-mono num text-muted-foreground">
+                ({total} ativos registrados)
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refetch()}
+              disabled={isFetching}
+              className="h-8 text-xs"
+            >
+              <RefreshCw className={cn("mr-1.5 size-3.5", isFetching && "animate-spin")} />
               {isFetching ? "Atualizando…" : "Atualizar"}
             </Button>
+
             {hasRole("Gestor", "Técnico") && (
-              <Button size="sm" onClick={() => navigate({ to: "/register" })}>
-                <Plus className="mr-2 size-4" aria-hidden />
-                Novo Equipamento
+              <Button
+                size="sm"
+                onClick={() => navigate({ to: "/register" })}
+                className="h-8 text-xs"
+              >
+                <Plus className="mr-1.5 size-3.5" />
+                Novo Ativo
               </Button>
             )}
-          </>
-        }
-      />
-
-      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
-          label="Total em Estoque"
-          value={total}
-          hint="Itens correspondentes aos filtros"
-          icon={Boxes}
-        />
-        <KpiCard
-          label="Disponíveis"
-          value={disponiveisCount}
-          hint="Na página atual"
-          icon={CheckCircle2}
-        />
-        <KpiCard
-          label="Indisponíveis"
-          value={indisponiveisCount}
-          hint="Na página atual"
-          icon={Clock3}
-        />
-        <KpiCard
-          label="Ações Pendentes"
-          value={pendentesCount}
-          hint="Na página atual"
-          icon={AlertTriangle}
-        />
+          </div>
+        </div>
       </div>
 
-      <div className="surface-panel p-3.5 sm:p-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-          <span className="px-1 text-eyebrow text-muted-foreground">Filtros</span>
-          <div className="grid min-w-0 flex-1 grid-cols-1 gap-2.5 sm:grid-cols-3">
-            <Select
-              value={filterTipo}
-              onValueChange={(v) => {
-                setFilterTipo(v);
+      {/* Toolbar Operacional de Filtros e Busca (Sem Cards Decorativos) */}
+      <div className="bg-surface border border-border rounded-md p-4 space-y-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          {/* Campo de Busca Direta */}
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
                 setPage(0);
               }}
-              disabled={constantsLoading}
+              placeholder="Buscar por patrimônio, marca, modelo, usuário ou serial..."
+              className="h-9 pl-9 text-xs"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="size-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Filtros em Linha */}
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              value={filterTipo}
+              onValueChange={(val) => {
+                setFilterTipo(val);
+                setPage(0);
+              }}
             >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Tipo de Equipamento" />
+              <SelectTrigger className="h-9 w-36 text-xs">
+                <SelectValue placeholder="Tipo" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos os tipos</SelectItem>
@@ -283,16 +312,16 @@ export function StockPage() {
 
             <Select
               value={filterStatus}
-              onValueChange={(v) => {
-                setFilterStatus(v);
+              onValueChange={(val) => {
+                setFilterStatus(val);
                 setPage(0);
               }}
             >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Status do Item" />
+              <SelectTrigger className="h-9 w-36 text-xs">
+                <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todos os status</SelectItem>
+                <SelectItem value="all">Todos status</SelectItem>
                 {STATUS_OPTIONS.map((s) => (
                   <SelectItem key={s} value={s}>
                     {s}
@@ -303,12 +332,12 @@ export function StockPage() {
 
             <Select
               value={filterRevenda}
-              onValueChange={(v) => {
-                setFilterRevenda(v);
+              onValueChange={(val) => {
+                setFilterRevenda(val);
                 setPage(0);
               }}
             >
-              <SelectTrigger className="w-full">
+              <SelectTrigger className="h-9 w-40 text-xs">
                 <SelectValue placeholder="Unidade" />
               </SelectTrigger>
               <SelectContent>
@@ -320,40 +349,59 @@ export function StockPage() {
                 ))}
               </SelectContent>
             </Select>
+
+            {hasFilters && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={resetFilters}
+                className="h-9 px-2 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <X className="mr-1 size-3" /> Limpar
+              </Button>
+            )}
           </div>
-          {hasFilters && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="shrink-0 text-muted-foreground hover:text-foreground"
-              onClick={resetFilters}
-            >
-              <X className="mr-1.5 size-3.5" />
-              Limpar filtros
-            </Button>
-          )}
         </div>
       </div>
 
-      <DataTable
-        data={items}
-        columns={columns}
-        rowKey={(row) => row.id}
-        isLoading={isLoading}
-        error={error}
-        onRetry={() => refetch()}
-        onRowClick={setSelectedItem}
-        emptyTitle="Nenhum equipamento encontrado"
-        emptyDescription={
-          hasFilters
-            ? "Nenhum equipamento corresponde aos filtros selecionados."
-            : "Cadastre um equipamento para começar o inventário."
-        }
-        pagination={{ page, pageSize: PAGE_SIZE, total, onPageChange: setPage }}
+      {/* Tabela Protagonista de Alta Densidade (7 itens por página) */}
+      <div className="bg-surface border border-border rounded-md overflow-hidden">
+        <DataTable
+          data={items}
+          columns={columns}
+          rowKey={(row) => row.id}
+          isLoading={isLoading}
+          error={error}
+          onRetry={() => void refetch()}
+          onRowClick={(row) => setSelectedAsset(row)}
+          emptyTitle="Nenhum ativo localizado"
+          emptyDescription={
+            hasFilters
+              ? "Nenhum patrimônio corresponde aos filtros aplicados. Tente ajustar os parâmetros."
+              : "Não há equipamentos cadastrados no estoque de TI."
+          }
+          pagination={{
+            page,
+            pageSize: PAGE_SIZE,
+            total,
+            onPageChange: setPage,
+          }}
+        />
+      </div>
+
+      {/* Ficha Técnica Lateral do Ativo Selecionado (AssetDetailsPanel) */}
+      <AssetDetailsPanel
+        item={selectedAsset}
+        open={selectedAsset !== null}
+        onOpenChange={(open) => !open && setSelectedAsset(null)}
       />
 
-      <ItemDetailsModal item={selectedItem} onClose={() => setSelectedItem(null)} />
-      <EditItemModal item={editingItem} onClose={() => setEditingItem(null)} />
+      {/* Modal de Edição Rápida */}
+      <EditItemModal
+        item={editingItem}
+        open={editingItem !== null}
+        onClose={() => setEditingItem(null)}
+      />
     </div>
   );
 }
