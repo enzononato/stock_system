@@ -56,7 +56,7 @@ export default function StockPage() {
       cell: ({ row }) => (
         <button
           onClick={() => setSelectedItem(row.original)}
-          className="font-mono font-bold text-indigo-600 hover:text-indigo-800 hover:underline text-xs"
+          className="num font-semibold text-foreground hover:underline text-xs"
           title="Clique para ver detalhes do item"
         >
           #{row.original.id}
@@ -71,16 +71,29 @@ export default function StockPage() {
       header: 'Status',
       cell: ({ row }) => <StatusBadge status={row.original.status} />,
     },
-    { accessorKey: 'peripheral_count', header: 'Periféricos', size: 90 },
+    {
+      accessorKey: 'peripheral_count',
+      header: 'Periféricos',
+      size: 90,
+      cell: ({ getValue }) => <span className="num">{getValue() as number}</span>,
+    },
     { accessorKey: 'assigned_to', header: 'Usuário Alocado', cell: ({ getValue }) => (getValue() as string) || '-' },
     { accessorKey: 'revenda', header: 'Unidade' },
-    { accessorKey: 'identificador', header: 'Identificador', cell: ({ getValue }) => (getValue() as string) || '-' },
+    {
+      accessorKey: 'identificador',
+      header: 'Identificador',
+      cell: ({ getValue }) => <span className="num">{(getValue() as string) || '-'}</span>,
+    },
     { accessorKey: 'setor', header: 'Setor', cell: ({ getValue }) => (getValue() as string) || '-' },
-    { accessorKey: 'ip', header: 'IP', cell: ({ getValue }) => (getValue() as string) || '-' },
+    {
+      accessorKey: 'ip',
+      header: 'IP',
+      cell: ({ getValue }) => <span className="num">{(getValue() as string) || '-'}</span>,
+    },
     {
       accessorKey: 'date_registered',
       header: 'Data Cadastro',
-      cell: ({ getValue }) => formatDate(getValue() as string),
+      cell: ({ getValue }) => <span className="num">{formatDate(getValue() as string)}</span>,
     },
     {
       id: 'actions',
@@ -91,7 +104,7 @@ export default function StockPage() {
             variant="ghost"
             size="sm"
             onClick={() => setSelectedItem(row.original)}
-            className="h-8 w-8 p-0 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
+            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground hover:bg-surface-alt rounded"
             title="Ver detalhes do equipamento"
           >
             <Eye size={14} />
@@ -101,7 +114,7 @@ export default function StockPage() {
               variant="ghost"
               size="sm"
               onClick={() => navigate(`/edit/${row.original.id}`)}
-              className="h-8 w-8 p-0 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground hover:bg-surface-alt rounded"
               title="Editar equipamento"
             >
               <Pencil size={14} />
@@ -115,32 +128,22 @@ export default function StockPage() {
   return (
     <div className="space-y-6">
       {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900 font-heading">
+          <h2 className="text-heading text-foreground">
             Estoque de Equipamentos
           </h2>
-          <p className="text-sm text-slate-500 font-medium">
+          <p className="text-body-sm text-muted-foreground">
             Gerenciamento centralizado de hardware e insumos de TI
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            className="rounded-xl border-slate-200 bg-white shadow-sm"
-          >
-            <RefreshCw size={14} className={`mr-2 ${isRefreshing ? 'animate-spin text-indigo-600' : ''}`} />
+          <Button variant="outline" size="sm" onClick={handleRefresh}>
+            <RefreshCw size={14} className={`mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
             Atualizar
           </Button>
           {hasRole('Gestor', 'Técnico') && (
-            <Button
-              variant="gradient"
-              size="sm"
-              onClick={() => navigate('/register')}
-              className="rounded-xl"
-            >
+            <Button variant="gradient" size="sm" onClick={() => navigate('/register')}>
               <Plus size={16} className="mr-1.5" />
               Novo Equipamento
             </Button>
@@ -150,52 +153,52 @@ export default function StockPage() {
 
       {/* KPI Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="glass-card rounded-2xl p-4 flex items-center gap-4">
-          <div className="h-12 w-12 rounded-xl bg-indigo-500/10 text-indigo-600 flex items-center justify-center font-bold shadow-inner">
+        <div className="surface-panel p-4 flex items-center gap-4">
+          <div className="h-12 w-12 rounded-md bg-surface-alt border border-border text-foreground flex items-center justify-center">
             <Package size={24} />
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total em Estoque</p>
-            <p className="text-2xl font-bold text-slate-900 font-heading">{total}</p>
+            <p className="text-caption text-muted-foreground">Total em Estoque</p>
+            <p className="text-heading num text-foreground">{total}</p>
           </div>
         </div>
 
-        <div className="glass-card rounded-2xl p-4 flex items-center gap-4">
-          <div className="h-12 w-12 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold shadow-inner">
+        <div className="surface-panel p-4 flex items-center gap-4">
+          <div className="h-12 w-12 rounded-md bg-surface-alt border border-border text-foreground flex items-center justify-center">
             <CheckCircle2 size={24} />
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Disponíveis</p>
-            <p className="text-2xl font-bold text-emerald-600 font-heading">{disponiveisCount}</p>
+            <p className="text-caption text-muted-foreground">Disponíveis</p>
+            <p className="text-heading num text-foreground">{disponiveisCount}</p>
           </div>
         </div>
 
-        <div className="glass-card rounded-2xl p-4 flex items-center gap-4">
-          <div className="h-12 w-12 rounded-xl bg-sky-500/10 text-sky-600 flex items-center justify-center font-bold shadow-inner">
+        <div className="surface-panel p-4 flex items-center gap-4">
+          <div className="h-12 w-12 rounded-md bg-surface-alt border border-border text-foreground flex items-center justify-center">
             <Laptop size={24} />
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Em Empréstimo</p>
-            <p className="text-2xl font-bold text-sky-600 font-heading">{indisponiveisCount}</p>
+            <p className="text-caption text-muted-foreground">Em Empréstimo</p>
+            <p className="text-heading num text-foreground">{indisponiveisCount}</p>
           </div>
         </div>
 
-        <div className="glass-card rounded-2xl p-4 flex items-center gap-4">
-          <div className="h-12 w-12 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center font-bold shadow-inner">
+        <div className="surface-panel p-4 flex items-center gap-4">
+          <div className="h-12 w-12 rounded-md bg-surface-alt border border-border text-foreground flex items-center justify-center">
             <Clock size={24} />
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Ações Pendentes</p>
-            <p className="text-2xl font-bold text-amber-600 font-heading">{pendentesCount}</p>
+            <p className="text-caption text-muted-foreground">Ações Pendentes</p>
+            <p className="text-heading num text-foreground">{pendentesCount}</p>
           </div>
         </div>
       </div>
 
       {/* Filter Bar */}
-      <div className="flex flex-wrap items-center gap-3 p-3 rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200/80 shadow-sm">
-        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider px-2">Filtros:</span>
+      <div className="surface-panel p-3 flex flex-wrap items-center gap-3">
+        <span className="text-caption text-muted-foreground px-2">Filtros:</span>
         <Select value={filterTipo} onValueChange={setFilterTipo} disabled={constantsLoading}>
-          <SelectTrigger className="w-48 bg-white rounded-xl border-slate-200">
+          <SelectTrigger className="w-48">
             <SelectValue placeholder="Tipo de Equipamento" />
           </SelectTrigger>
           <SelectContent>
@@ -209,7 +212,7 @@ export default function StockPage() {
         </Select>
 
         <Select value={filterStatus} onValueChange={setFilterStatus}>
-          <SelectTrigger className="w-56 bg-white rounded-xl border-slate-200">
+          <SelectTrigger className="w-56">
             <SelectValue placeholder="Status do Item" />
           </SelectTrigger>
           <SelectContent>
@@ -230,7 +233,7 @@ export default function StockPage() {
               setFilterTipo('all')
               setFilterStatus('all')
             }}
-            className="text-xs text-slate-500 hover:text-slate-900"
+            className="text-xs text-muted-foreground hover:text-foreground"
           >
             Limpar Filtros
           </Button>
@@ -239,9 +242,9 @@ export default function StockPage() {
 
       {/* Data Table */}
       {isLoading ? (
-        <div className="glass-card rounded-2xl p-12 text-center text-slate-400 flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600" />
-          <p className="text-sm font-medium">Carregando estoque...</p>
+        <div className="surface-panel p-12 text-center text-muted-foreground flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-border-strong border-t-primary" />
+          <p className="text-body-sm">Carregando estoque...</p>
         </div>
       ) : (
         <DataTable
