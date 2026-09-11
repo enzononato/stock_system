@@ -4,7 +4,6 @@ import { listItemsPaginated } from '@/api/items'
 import { downloadSignedTerm } from '@/api/loans'
 import { DataTable } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { toast } from '@/components/ui/toast'
 import { ConfirmacaoTermo, generateAndDownloadLoanTerm } from '@/components/equipment/ConfirmacaoTermo'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -95,7 +94,7 @@ export default function TermsPage() {
         <div className="flex items-center gap-2">
           <h3 className="text-body-lg font-semibold text-foreground">Pendentes de Confirmação</h3>
           {pendentes.length > 0 && (
-            <Badge variant="warning" className="num">{pendentes.length}</Badge>
+            <span className="text-body-sm font-semibold text-foreground num">{pendentes.length}</span>
           )}
         </div>
         <p className="text-body-sm text-muted-foreground">
