@@ -61,9 +61,14 @@ interface ConfirmacaoTermoProps {
   onCancel?: () => void
 }
 
+// Interface monocromática: os dois esquemas de cor (âmbar para empréstimo,
+// azul para devolução) colapsam no mesmo tratamento neutro — como o variant
+// "gradient" do Button, que também renderiza como default hoje. O prop
+// `variant` continua aceito para não quebrar quem já o passa (LoanPage,
+// TermsPage), mas não produz mais diferença visual entre as duas telas.
 const VARIANT_CLASSES: Record<'amber' | 'blue', { container: string; heading: string; text: string }> = {
-  amber: { container: 'bg-amber-50 border-amber-200', heading: 'text-amber-800', text: 'text-amber-700' },
-  blue: { container: 'bg-blue-50 border-blue-200', heading: 'text-blue-800', text: 'text-blue-700' },
+  amber: { container: 'figure-ground-panel', heading: 'text-heading-sm text-foreground', text: 'text-body-sm text-muted-foreground' },
+  blue: { container: 'figure-ground-panel', heading: 'text-heading-sm text-foreground', text: 'text-body-sm text-muted-foreground' },
 }
 
 /**
@@ -106,9 +111,11 @@ export function ConfirmacaoTermo({
   })
 
   return (
-    <div className={cn('rounded-xl border p-6 space-y-4', colors.container)}>
-      <h3 className={cn('font-medium', colors.heading)}>Confirmar Empréstimo — Item #{itemId}</h3>
-      <div className={cn('text-sm', colors.text)}>{description}</div>
+    <div className={cn('space-y-4', colors.container)}>
+      <h3 className={colors.heading}>
+        Confirmar Empréstimo — Item #<span className="num">{itemId}</span>
+      </h3>
+      <div className={colors.text}>{description}</div>
       {showGenerateButton && (
         <Button variant="outline" onClick={() => generateAndDownloadLoanTerm(itemId)}>
           <FileDown size={14} className="mr-2" />Gerar Termo
