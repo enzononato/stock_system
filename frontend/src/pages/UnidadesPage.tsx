@@ -450,7 +450,7 @@ export default function UnidadesPage() {
         </h3>
 
         {editingId !== null && (
-          <p className="border border-border-strong bg-surface-alt p-3 rounded text-body-sm text-muted-foreground">
+          <p className="border border-border-strong bg-surface-alt p-3 rounded text-body-sm">
             O nome da unidade liga os equipamentos e todo o histórico a ela. Alterá-lo atualiza
             automaticamente essas referências — confirme antes de salvar se for esse o caso.
           </p>
