@@ -109,9 +109,9 @@ const STATUS_ORDER = ['Disponível', 'Indisponível', 'Pendente', 'Pendente Devo
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border bg-slate-50 p-3">
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className="text-lg font-semibold text-slate-800">{value}</p>
+    <div className="rounded border border-border bg-surface p-3">
+      <p className="text-caption text-muted-foreground">{label}</p>
+      <p className="text-heading num text-foreground">{value}</p>
     </div>
   )
 }
@@ -140,7 +140,7 @@ function IndicadoresPanel({ dados }: { dados: IndicadoresUnidade }) {
       </div>
 
       <div>
-        <p className="text-sm font-medium text-slate-600 mb-2">Itens por Status</p>
+        <p className="text-body-sm font-medium text-foreground mb-2">Itens por Status</p>
         <div className="flex flex-wrap gap-2">
           {STATUS_ORDER.map((status) => (
             <Badge key={status}>
@@ -151,7 +151,7 @@ function IndicadoresPanel({ dados }: { dados: IndicadoresUnidade }) {
       </div>
 
       {semMovimento && (
-        <p className="text-sm text-slate-400 italic">
+        <p className="text-body-sm text-muted-foreground italic">
           Esta unidade ainda não tem nenhuma movimentação registrada.
         </p>
       )}
@@ -346,10 +346,10 @@ export default function UnidadesPage() {
       header: 'Nome',
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
-          <span className={row.original.is_active ? '' : 'text-slate-400 line-through'}>
+          <span className={row.original.is_active ? '' : 'text-muted-foreground line-through'}>
             {row.original.nome}
           </span>
-          {!row.original.is_active && <Badge variant="danger">Inativa</Badge>}
+          {!row.original.is_active && <Badge variant="default">Inativa</Badge>}
         </div>
       ),
     },
@@ -360,7 +360,7 @@ export default function UnidadesPage() {
       header: 'Cidade/UF',
       cell: ({ row }) => {
         const { cidade, uf } = row.original
-        if (!cidade && !uf) return <span className="text-slate-400">—</span>
+        if (!cidade && !uf) return <span className="text-muted-foreground">—</span>
         return <span>{cidade || '—'}/{uf || '—'}</span>
       },
     },
@@ -392,7 +392,7 @@ export default function UnidadesPage() {
                   size="sm"
                   variant="ghost"
                   aria-label={`Inativar unidade ${row.original.nome}`}
-                  className="text-red-500 hover:text-red-700"
+                  className="text-muted-foreground hover:text-destructive"
                   disabled={deactivateMutation.isPending}
                 >
                   <Ban size={14} />
@@ -420,7 +420,6 @@ export default function UnidadesPage() {
               size="sm"
               variant="ghost"
               aria-label={`Reativar unidade ${row.original.nome}`}
-              className="text-green-600 hover:text-green-800"
               disabled={reactivateMutation.isPending}
               onClick={() => reactivateMutation.mutate(row.original.id)}
             >
@@ -437,21 +436,21 @@ export default function UnidadesPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-xl font-semibold">Unidades</h2>
-        <p className="text-sm text-slate-500">
+        <h2 className="text-heading text-foreground">Unidades</h2>
+        <p className="text-body-sm text-muted-foreground">
           Dados jurídicos e fiscais das unidades (antigas "revendas") e indicadores por unidade.
         </p>
       </div>
 
       {/* Criar / editar unidade */}
-      <form onSubmit={handleSubmit} className="bg-white rounded-xl border p-6 space-y-4 max-w-3xl">
-        <h3 className="font-medium flex items-center gap-2">
+      <form onSubmit={handleSubmit} className="surface-panel p-6 space-y-4 max-w-3xl">
+        <h3 className="text-body-lg font-semibold text-foreground flex items-center gap-2">
           <Building2 size={16} />
           {editingId !== null ? `Editar Unidade #${editingId}` : 'Nova Unidade'}
         </h3>
 
         {editingId !== null && (
-          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+          <p className="border border-border-strong bg-surface-alt p-3 rounded text-body-sm text-muted-foreground">
             O nome da unidade liga os equipamentos e todo o histórico a ela. Alterá-lo atualiza
             automaticamente essas referências — confirme antes de salvar se for esse o caso.
           </p>
@@ -568,28 +567,28 @@ export default function UnidadesPage() {
 
       {/* Lista */}
       <div className="flex items-center justify-between">
-        <h3 className="font-medium text-slate-700">Unidades cadastradas</h3>
-        <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
+        <h3 className="text-body-lg font-semibold text-foreground">Unidades cadastradas</h3>
+        <label className="flex items-center gap-2 text-body-sm text-foreground cursor-pointer select-none">
           <input
             type="checkbox"
             checked={showInactive}
             onChange={(e) => setShowInactive(e.target.checked)}
-            className="rounded border-slate-300"
+            className="rounded border-border"
           />
           Mostrar unidades inativas
         </label>
       </div>
       {isLoading ? (
-        <div className="py-8 text-center text-slate-400">Carregando...</div>
+        <div className="py-8 text-center text-muted-foreground">Carregando...</div>
       ) : (
         <DataTable data={unidades} columns={columns} searchPlaceholder="Buscar unidade..." />
       )}
 
       {/* Indicadores */}
       {indicadoresUnidadeId !== null && (
-        <div className="bg-white rounded-xl border p-6 space-y-4">
+        <div className="figure-ground-panel space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="font-medium flex items-center gap-2">
+            <h3 className="text-body-lg font-semibold text-foreground flex items-center gap-2">
               <BarChart3 size={16} />
               Indicadores — {unidadeSelecionadaIndicadores?.nome ?? `Unidade #${indicadoresUnidadeId}`}
             </h3>
@@ -599,11 +598,11 @@ export default function UnidadesPage() {
           </div>
 
           {indicadoresLoading ? (
-            <p className="text-sm text-slate-400">Carregando indicadores...</p>
+            <p className="text-body-sm text-muted-foreground">Carregando indicadores...</p>
           ) : indicadores ? (
             <IndicadoresPanel dados={indicadores} />
           ) : (
-            <p className="text-sm text-slate-400">Não foi possível carregar os indicadores.</p>
+            <p className="text-body-sm text-muted-foreground">Não foi possível carregar os indicadores.</p>
           )}
         </div>
       )}
