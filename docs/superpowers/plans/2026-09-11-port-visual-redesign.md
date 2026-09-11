@@ -58,7 +58,7 @@ Esta tabela é a especificação de tradução. Onde uma classe da coluna esquer
 
 ### Exemplo trabalhado da tradução
 
-Para não restar dúvida sobre o que "aplicar a tabela" significa na prática — este é um trecho real de `StockPage.tsx`:
+Para não restar dúvida sobre o que "aplicar a tabela" significa na prática. O trecho abaixo é ilustrativo (um cartão de indicador no estilo dos que existem em `StockPage.tsx`), não um trecho literal do código — use-o como referência de *como* traduzir, não do que exatamente vai encontrar:
 
 ```tsx
 // ANTES
