@@ -49,29 +49,29 @@ export default function ReportPage() {
     { accessorKey: 'tipo', header: 'Tipo' },
     { accessorKey: 'brand', header: 'Marca' },
     { accessorKey: 'model', header: 'Modelo' },
-    { accessorKey: 'identificador', header: 'Identificador', cell: ({ getValue }) => getValue() as string || '-' },
+    { accessorKey: 'identificador', header: 'Identificador', cell: ({ getValue }) => <span className="num">{(getValue() as string) || '-'}</span> },
     { accessorKey: 'nota_fiscal', header: 'Nota Fiscal', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'fornecedor', header: 'Fornecedor', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'usuario', header: 'Usuário', cell: ({ getValue }) => getValue() as string || '-' },
-    { accessorKey: 'cpf', header: 'CPF', cell: ({ getValue }) => getValue() as string || '-' },
+    { accessorKey: 'cpf', header: 'CPF', cell: ({ getValue }) => <span className="num">{(getValue() as string) || '-'}</span> },
     { accessorKey: 'cargo', header: 'Cargo', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'setor', header: 'Setor', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'revenda', header: 'Revenda', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'center_cost', header: 'C. Custo', cell: ({ getValue }) => getValue() as string || '-' },
-    { accessorKey: 'data_emprestimo', header: 'Data', cell: ({ getValue }) => formatDateTime(getValue() as string) },
-    { accessorKey: 'data_confirmacao', header: 'Confirmação', cell: ({ getValue }) => formatDateTime(getValue() as string) },
-    { accessorKey: 'data_devolucao', header: 'Devolução', cell: ({ getValue }) => formatDateTime(getValue() as string) },
+    { accessorKey: 'data_emprestimo', header: 'Data', cell: ({ getValue }) => <span className="num">{formatDateTime(getValue() as string)}</span> },
+    { accessorKey: 'data_confirmacao', header: 'Confirmação', cell: ({ getValue }) => <span className="num">{formatDateTime(getValue() as string)}</span> },
+    { accessorKey: 'data_devolucao', header: 'Devolução', cell: ({ getValue }) => <span className="num">{formatDateTime(getValue() as string)}</span> },
     { accessorKey: 'details', header: 'Detalhes', cell: ({ getValue }) => getValue() as string || '-' },
   ]
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold">Relatório Mensal</h2>
-        <p className="text-sm text-slate-500">Visualize todas as operações de um determinado mês.</p>
+        <h2 className="text-heading text-foreground">Relatório Mensal</h2>
+        <p className="text-body-sm text-muted-foreground">Visualize todas as operações de um determinado mês.</p>
       </div>
 
-      <div className="flex items-end gap-4 bg-white rounded-xl border p-4">
+      <div className="surface-panel flex items-end gap-4 p-4">
         <div className="flex flex-col gap-1.5">
           <Label>Ano</Label>
           <Input value={year} onChange={e => setYear(e.target.value)} className="w-24" />
@@ -93,7 +93,7 @@ export default function ReportPage() {
       </div>
 
       {isLoading ? (
-        <div className="py-8 text-center text-slate-400">Gerando relatório...</div>
+        <div className="py-8 text-center text-muted-foreground">Gerando relatório...</div>
       ) : (
         <DataTable data={report} columns={columns} searchPlaceholder="Buscar no relatório..." />
       )}
