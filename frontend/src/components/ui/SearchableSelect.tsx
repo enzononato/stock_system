@@ -146,7 +146,7 @@ export function SearchableSelect({
                     <div className="truncate pr-2">
                       <p className="truncate font-semibold">{opt.label}</p>
                       {opt.subtitle && (
-                        <p className={cn('truncate text-[10px] font-normal', isSelected ? 'text-primary-foreground/70' : 'text-muted-foreground')}>
+                        <p className={cn('truncate text-[10px] font-normal', isSelected ? 'text-border-strong' : 'text-muted-foreground')}>
                           {opt.subtitle}
                         </p>
                       )}

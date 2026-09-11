@@ -39,9 +39,9 @@ export default function LoginPage() {
           </div>
           <span className="text-heading-lg font-semibold">Controle de Estoque</span>
         </div>
-        <p className="flex items-center gap-1.5 text-body text-primary-foreground/80">
+        <p className="flex items-center gap-1.5 text-body text-primary-foreground">
           <span>Revalle TI</span>
-          <span className="h-1 w-1 rounded-full bg-primary-foreground/40" />
+          <span className="h-1 w-1 rounded-full bg-primary-foreground" />
           <span>Portal Corporativo</span>
         </p>
       </div>
@@ -99,7 +99,7 @@ export default function LoginPage() {
           <Button type="submit" size="lg" className="w-full" disabled={loading}>
             {loading ? (
               <span className="flex items-center justify-center gap-2">
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground/30 border-t-primary-foreground" />
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-border-strong border-t-primary-foreground" />
                 <span>Entrando...</span>
               </span>
             ) : (
