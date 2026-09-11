@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Calendar, Filter, ArrowUpRight, ArrowDownLeft, PackagePlus } from 'lucide-react'
+import { useTheme } from '@/lib/theme'
 
 const MONTHS = [
   'Janeiro',
@@ -51,6 +52,13 @@ const CORES_GRAFICO = {
 }
 
 export default function ChartsPage() {
+  // Assina o contexto de tema para que esta página re-renderize quando o
+  // usuário alterna claro/escuro. Sem isso, CORES_GRAFICO/corDoToken (que
+  // leem getComputedStyle no momento do render) nunca seriam chamados de
+  // novo, e os gráficos ficariam com a paleta do tema anterior até algo
+  // não relacionado forçar um re-render (ex.: "Aplicar Filtro").
+  const { theme } = useTheme()
+
   const now = new Date()
   const [year, setYear] = useState(String(now.getFullYear()))
   const [month, setMonth] = useState(String(now.getMonth() + 1))

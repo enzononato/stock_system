@@ -43,8 +43,22 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   }, [theme])
 
-  const setTheme = useCallback((tema: Tema) => setThemeState(tema), [])
-  const toggle = useCallback(() => setThemeState((t) => (t === 'dark' ? 'light' : 'dark')), [])
+  // A classe é aplicada de forma síncrona aqui (não só no useEffect) porque
+  // consumidores do contexto (ex.: ChartsPage, que lê cores via
+  // getComputedStyle) re-renderizam na mesma passada da mudança de estado,
+  // antes do useEffect rodar. Sem isso, eles leriam a paleta antiga.
+  // toggle/setTheme só são chamados a partir de handlers de evento, nunca
+  // durante o render, então mutar o DOM aqui é seguro. O useEffect abaixo
+  // continua necessário para o mount inicial e para a persistência.
+  const setTheme = useCallback((tema: Tema) => {
+    aplicarNoDocumento(tema)
+    setThemeState(tema)
+  }, [])
+  const toggle = useCallback(() => {
+    const proximo = theme === 'dark' ? 'light' : 'dark'
+    aplicarNoDocumento(proximo)
+    setThemeState(proximo)
+  }, [theme])
 
   return (
     <ThemeContext.Provider value={{ theme, toggle, setTheme }}>{children}</ThemeContext.Provider>
