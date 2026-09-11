@@ -58,13 +58,13 @@ export default function RemovePage() {
   }
 
   return (
-    <div className="max-w-xl space-y-6">
+    <div className="page-container-reading space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-red-700">Remover Equipamento</h2>
-        <p className="text-sm text-slate-500">Remove permanentemente o item do estoque. Esta ação não pode ser desfeita.</p>
+        <h2 className="text-heading text-destructive">Remover Equipamento</h2>
+        <p className="text-body-sm text-muted-foreground">Remove permanentemente o item do estoque. Esta ação não pode ser desfeita.</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-red-100 p-6 space-y-4">
+      <form onSubmit={handleSubmit} className="figure-ground-panel space-y-4">
         <div className="flex flex-col gap-1.5">
           <Label>Equipamento *</Label>
           <SearchableSelect
