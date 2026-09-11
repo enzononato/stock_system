@@ -2,94 +2,299 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Design System — Stock System / Revalle
+ * Enterprise Editorial — monocromático (preto, branco, cinzas).
+ * Contraste, tipografia e densidade como identidade visual.
+ *
+ * Exceção deliberada ao monocromático: os tokens --status-* abaixo.
+ * Num sistema de inventário a cor do status é sinal funcional (varrer uma
+ * tabela de 88 itens sem ela fica mais lento), então eles sobrevivem em
+ * versão dessaturada, calibrada para não brigar com a base neutra.
+ */
+
 @layer base {
   :root {
-    --background: 220 20% 98%;
-    --foreground: 224 71.4% 4.1%;
-    --card: 0 0% 100%;
-    --card-foreground: 224 71.4% 4.1%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 224 71.4% 4.1%;
-    --primary: 238.7 83.5% 66.7%;
-    --primary-foreground: 210 20% 98%;
-    --secondary: 220 14.3% 95.9%;
-    --secondary-foreground: 220.9 39.3% 11%;
-    --muted: 220 14.3% 95.9%;
-    --muted-foreground: 220 8.9% 46.1%;
-    --accent: 220 14.3% 95.9%;
-    --accent-foreground: 220.9 39.3% 11%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 20% 98%;
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 238.7 83.5% 66.7%;
-    --radius: 0.75rem;
+    --canvas: #F7F7F5;
+    --surface: #FFFFFF;
+    --surface-alt: #F0F0ED;
+    --border: #D9D9D4;
+    --border-strong: #BDBDB7;
+    --text-primary: #111111;
+    --text-secondary: #5F5F5A;
+    --text-muted: #85857E;
+
+    --background: var(--canvas);
+    --foreground: var(--text-primary);
+    --card: var(--surface);
+    --card-foreground: var(--text-primary);
+    --popover: var(--surface);
+    --popover-foreground: var(--text-primary);
+
+    --primary: #111111;
+    --primary-foreground: #FFFFFF;
+    --secondary: var(--surface-alt);
+    --secondary-foreground: var(--text-primary);
+    --muted: var(--surface-alt);
+    --muted-foreground: var(--text-secondary);
+    --accent: var(--surface-alt);
+    --accent-foreground: var(--text-primary);
+
+    --destructive: #A32B2B;
+    --destructive-foreground: #FFFFFF;
+
+    --input: var(--border);
+    --ring: #111111;
+
+    --sidebar: var(--surface);
+    --sidebar-foreground: var(--text-primary);
+    --sidebar-accent: var(--surface-alt);
+    --sidebar-accent-foreground: var(--text-primary);
+    --sidebar-border: var(--border);
+
+    --radius-sm: 2px;
+    --radius: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+
+    --shadow-overlay: 0 2px 12px rgba(0, 0, 0, 0.08);
+
+    /* Status — única cor semântica do sistema, dessaturada de propósito */
+    --status-available: #1F6F4A;
+    --status-available-bg: #E9F1EC;
+    --status-loaned: #1F5474;
+    --status-loaned-bg: #E8EFF4;
+    --status-pending: #7A5E17;
+    --status-pending-bg: #F4EEDD;
+    --status-return: #53397E;
+    --status-return-bg: #EDE9F4;
+    --status-danger: #A32B2B;
+    --status-danger-bg: #F6E8E8;
+    --status-neutral: var(--text-secondary);
+    --status-neutral-bg: var(--surface-alt);
   }
 
   .dark {
-    --background: 224 71.4% 4.1%;
-    --foreground: 210 20% 98%;
-    --card: 224 71.4% 4.1%;
-    --card-foreground: 210 20% 98%;
-    --primary: 210 20% 98%;
-    --primary-foreground: 220.9 39.3% 11%;
-    --secondary: 215 27.9% 16.9%;
-    --secondary-foreground: 210 20% 98%;
-    --muted: 215 27.9% 16.9%;
-    --muted-foreground: 217.9 10.6% 64.9%;
-    --accent: 215 27.9% 16.9%;
-    --accent-foreground: 210 20% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 20% 98%;
-    --border: 215 27.9% 16.9%;
-    --input: 215 27.9% 16.9%;
-    --ring: 216 12.2% 83.9%;
-  }
-}
+    --canvas: #050505;
+    --surface: #0C0C0C;
+    --surface-alt: #131313;
+    --border: #272727;
+    --border-strong: #3A3A3A;
+    --text-primary: #F2F2F0;
+    --text-secondary: #A4A4A0;
+    --text-muted: #70706C;
 
-@layer base {
+    --background: var(--canvas);
+    --foreground: var(--text-primary);
+    --card: var(--surface);
+    --card-foreground: var(--text-primary);
+    --popover: var(--surface);
+    --popover-foreground: var(--text-primary);
+
+    --primary: #F2F2F0;
+    --primary-foreground: #080808;
+    --secondary: var(--surface-alt);
+    --secondary-foreground: var(--text-primary);
+    --muted: var(--surface-alt);
+    --muted-foreground: var(--text-secondary);
+    --accent: var(--surface-alt);
+    --accent-foreground: var(--text-primary);
+
+    --destructive: #E4A0A0;
+    --destructive-foreground: #080808;
+
+    --input: var(--border);
+    --ring: #F2F2F0;
+
+    --sidebar: var(--surface);
+    --sidebar-foreground: var(--text-primary);
+    --sidebar-accent: var(--surface-alt);
+    --sidebar-accent-foreground: var(--text-primary);
+    --sidebar-border: var(--border);
+
+    --shadow-overlay: 0 4px 20px rgba(0, 0, 0, 0.6);
+
+    --status-available: #6FBF93;
+    --status-available-bg: #12261C;
+    --status-loaned: #7FB3D5;
+    --status-loaned-bg: #101F2A;
+    --status-pending: #D4B468;
+    --status-pending-bg: #2A2212;
+    --status-return: #AE96D9;
+    --status-return-bg: #1E1830;
+    --status-danger: #E4A0A0;
+    --status-danger-bg: #2B1414;
+    --status-neutral: var(--text-secondary);
+    --status-neutral-bg: var(--surface-alt);
+  }
+
   * {
-    @apply border-border font-sans;
+    border-color: var(--border);
   }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
   body {
-    @apply bg-slate-50/70 text-slate-900 antialiased selection:bg-indigo-500/20 selection:text-indigo-900;
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: theme('fontFamily.sans');
+    -webkit-font-smoothing: antialiased;
+    transition:
+      background-color 200ms cubic-bezier(0.16, 1, 0.3, 1),
+      border-color 200ms cubic-bezier(0.16, 1, 0.3, 1),
+      color 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
 }
 
-/* Custom Scrollbars */
+@layer utilities {
+  /* Escala tipográfica editorial */
+  .text-caption {
+    font-size: 0.75rem;
+    line-height: 1rem;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .text-body-sm {
+    font-size: 0.8125rem;
+    line-height: 1.25rem;
+    font-weight: 400;
+  }
+  .text-body {
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    font-weight: 400;
+  }
+  .text-body-lg {
+    font-size: 1rem;
+    line-height: 1.5rem;
+    font-weight: 500;
+  }
+  .text-heading-sm {
+    font-size: 1.125rem;
+    line-height: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .text-heading {
+    font-size: 1.375rem;
+    line-height: 1.75rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  .text-heading-lg {
+    font-size: 1.75rem;
+    line-height: 2rem;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+  }
+
+  /* Números tabulares para colunas de dados */
+  .num {
+    font-family: theme('fontFamily.mono');
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Containers de largura máxima */
+  .page-container-dense {
+    max-width: 1440px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+  }
+  .page-container-reading {
+    max-width: 1120px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+  }
+
+  /* Superfícies — sem sombra, separação por linha */
+  .surface-panel {
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+  }
+  .surface-interactive {
+    transition: background-color 150ms cubic-bezier(0.16, 1, 0.3, 1),
+      border-color 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .surface-interactive:hover {
+    background-color: var(--surface-alt);
+    border-color: var(--border-strong);
+  }
+
+  /* Painel de alto contraste para decisão crítica */
+  .figure-ground-panel {
+    background-color: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    padding: 1.5rem;
+  }
+
+  /* Status — cor semântica dessaturada */
+  .badge-status-available {
+    color: var(--status-available);
+    background-color: var(--status-available-bg);
+    border-color: var(--status-available);
+  }
+  .badge-status-loaned {
+    color: var(--status-loaned);
+    background-color: var(--status-loaned-bg);
+    border-color: var(--status-loaned);
+  }
+  .badge-status-pending {
+    color: var(--status-pending);
+    background-color: var(--status-pending-bg);
+    border-color: var(--status-pending);
+  }
+  .badge-status-return {
+    color: var(--status-return);
+    background-color: var(--status-return-bg);
+    border-color: var(--status-return);
+  }
+  .badge-status-danger {
+    color: var(--status-danger);
+    background-color: var(--status-danger-bg);
+    border-color: var(--status-danger);
+  }
+  .badge-status-neutral {
+    color: var(--status-neutral);
+    background-color: var(--status-neutral-bg);
+    border-color: var(--border);
+  }
+}
+
+/* Barra de rolagem discreta */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.4);
-  border-radius: 9999px;
+  background: var(--border-strong);
+  border-radius: var(--radius-sm);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 0.6);
+  background: var(--text-muted);
 }
 
-/* Glassmorphism Utilities */
-.glass-panel {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(226, 232, 240, 0.8);
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
-
-.glass-card {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(8px);
-  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05);
-  border: 1px solid rgba(226, 232, 240, 0.7);
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.glass-card:hover {
-  box-shadow: 0 12px 28px -4px rgba(15, 23, 42, 0.08);
-  transform: translateY(-2px);
-}
-
