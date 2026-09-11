@@ -66,9 +66,9 @@ export default function ReturnPage() {
     { accessorKey: 'tipo', header: 'Tipo' },
     { accessorKey: 'brand', header: 'Marca' },
     { accessorKey: 'assigned_to', header: 'Usuário' },
-    { accessorKey: 'cpf', header: 'CPF' },
+    { accessorKey: 'cpf', header: 'CPF', cell: ({ getValue }) => <span className="num">{getValue() as string}</span> },
     { accessorKey: 'revenda', header: 'Revenda' },
-    { accessorKey: 'date_issued', header: 'Empréstimo', cell: ({ getValue }) => formatDate(getValue() as string) },
+    { accessorKey: 'date_issued', header: 'Empréstimo', cell: ({ getValue }) => <span className="num">{formatDate(getValue() as string)}</span> },
     {
       id: 'actions',
       header: '',
@@ -98,24 +98,26 @@ export default function ReturnPage() {
   ]
 
   return (
-    <div className="space-y-8 max-w-4xl">
+    <div className="space-y-8">
       <div>
-        <h2 className="text-xl font-semibold">Devolver Equipamento</h2>
-        <p className="text-sm text-slate-500">Gerencie as devoluções de equipamentos emprestados.</p>
+        <h2 className="text-heading text-foreground">Devolver Equipamento</h2>
+        <p className="text-body-sm text-muted-foreground">Gerencie as devoluções de equipamentos emprestados.</p>
       </div>
 
       {/* Empréstimos ativos */}
       <div className="space-y-3">
-        <h3 className="font-medium text-slate-700">Empréstimos Ativos ({indisponivel.length})</h3>
-        <p className="text-sm text-slate-500">Selecione um item para gerar o termo de devolução.</p>
+        <h3 className="text-body-lg font-semibold text-foreground">Empréstimos Ativos (<span className="num">{indisponivel.length}</span>)</h3>
+        <p className="text-body-sm text-muted-foreground">Selecione um item para gerar o termo de devolução.</p>
         <DataTable data={indisponivel} columns={activeColumns} searchPlaceholder="Buscar por usuário, item..." />
       </div>
 
       {/* Confirmação de devolução */}
       {pendingReturnId && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 space-y-4">
-          <h3 className="font-medium text-amber-800">Confirmar Devolução — Item #{pendingReturnId}</h3>
-          <p className="text-sm text-amber-700">
+        <div className="figure-ground-panel space-y-4">
+          <h3 className="text-heading-sm text-foreground">
+            Confirmar Devolução — Item #<span className="num">{pendingReturnId}</span>
+          </h3>
+          <p className="text-body-sm text-muted-foreground">
             O termo de devolução foi gerado. Faça o upload do PDF assinado para confirmar.
           </p>
           <FileUpload onFile={setSignedPdf} label="Upload do Termo de Devolução Assinado (PDF)" />
@@ -135,7 +137,7 @@ export default function ReturnPage() {
       {/* Devoluções pendentes de confirmação */}
       {pendenteDevolucao.length > 0 && (
         <div className="space-y-3">
-          <h3 className="font-medium text-slate-700">Pendente de Confirmação ({pendenteDevolucao.length})</h3>
+          <h3 className="text-body-lg font-semibold text-foreground">Pendente de Confirmação (<span className="num">{pendenteDevolucao.length}</span>)</h3>
           <DataTable data={pendenteDevolucao} columns={pendingColumns} searchPlaceholder="Buscar..." />
         </div>
       )}
