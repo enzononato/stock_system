@@ -40,9 +40,7 @@ export function FileUpload({
       {...getRootProps()}
       className={cn(
         'group relative flex flex-col items-center justify-center gap-3 rounded-md border-2 border-dashed p-7 cursor-pointer transition-colors duration-micro select-none',
-        isDragActive
-          ? 'border-border-strong bg-surface-alt'
-          : file
+        isDragActive || file
           ? 'border-border-strong bg-surface-alt'
           : 'border-border bg-surface hover:border-border-strong hover:bg-surface-alt',
         className
@@ -50,7 +48,7 @@ export function FileUpload({
     >
       <input {...getInputProps()} />
       {file ? (
-        <div className="flex items-center gap-3 px-4 py-2 rounded border border-border bg-surface">
+        <div className="flex items-center gap-3 px-4 py-2 rounded-md border border-border bg-surface">
           <div className="h-8 w-8 rounded text-foreground flex items-center justify-center">
             <CheckCircle2 size={18} />
           </div>

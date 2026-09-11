@@ -106,7 +106,7 @@ export function SearchableSelect({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={searchPlaceholder}
-              className="w-full h-9 pl-9 pr-8 text-xs font-medium bg-surface-alt rounded border border-border focus:outline-none focus-visible:ring-1 focus-visible:ring-ring text-foreground placeholder:text-muted-foreground"
+              className="w-full h-9 pl-9 pr-8 text-xs font-medium bg-surface-alt rounded-md border border-border focus:outline-none focus-visible:ring-1 focus-visible:ring-ring text-foreground placeholder:text-muted-foreground"
             />
             {search && (
               <button
@@ -137,7 +137,7 @@ export function SearchableSelect({
                       setIsOpen(false)
                     }}
                     className={cn(
-                      'w-full flex items-center justify-between rounded px-3 py-2 text-left text-xs font-semibold transition-colors duration-micro',
+                      'w-full flex items-center justify-between rounded-md px-3 py-2 text-left text-xs font-semibold transition-colors duration-micro',
                       isSelected
                         ? 'bg-primary text-primary-foreground'
                         : 'text-foreground hover:bg-surface-alt'
