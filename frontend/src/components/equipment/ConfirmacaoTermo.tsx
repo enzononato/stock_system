@@ -47,7 +47,12 @@ interface ConfirmacaoTermoProps {
   itemId: number
   /** Texto/instruções exibidos entre o título e a área de upload. */
   description: React.ReactNode
-  /** Esquema de cor do painel — cada tela preserva a identidade visual que já tinha. */
+  /**
+   * Antigo esquema de cor do painel (âmbar para empréstimo, azul para
+   * devolução). Interface monocromática: as duas variantes hoje renderizam
+   * o mesmo tratamento neutro (ver `VARIANT_CLASSES`). Prop mantida apenas
+   * para não quebrar as chamadas existentes em LoanPage/TermsPage.
+   */
   variant?: 'amber' | 'blue'
   /** Rótulo da área de upload (FileUpload). */
   uploadLabel?: string

@@ -296,7 +296,7 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
                     {peripherals.map((p: Peripheral) => (
                       <div
                         key={p.id}
-                        className="flex items-center justify-between p-2.5 rounded-md bg-surface border border-border text-xs"
+                        className="flex items-center justify-between p-2.5 rounded-md bg-surface border border-border"
                       >
                         <div className="flex items-center gap-2 min-w-0">
                           <Cpu size={14} className="text-muted-foreground flex-shrink-0" />
