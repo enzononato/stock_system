@@ -24,7 +24,10 @@ describe('DataTable — sem a prop pagination (retrocompatibilidade)', () => {
   it('mantém busca e contagem no cliente com base em data.length', () => {
     render(<DataTable data={pessoas} columns={columns} />)
 
-    expect(screen.getByText('3 de 3 registros')).toBeInTheDocument()
+    // O restyle passou os dígitos para <span className="num">, então o texto some do textContent direto do nó — usa matcher de função comparando o textContent completo do <p>.
+    expect(
+      screen.getByText((_, el) => el instanceof HTMLParagraphElement && el.textContent === '3 de 3 registros')
+    ).toBeInTheDocument()
     expect(screen.getAllByRole('row')).toHaveLength(1 + pessoas.length) // header + linhas
 
     // Sem controles de paginação server-side.
@@ -43,7 +46,10 @@ describe('DataTable — sem a prop pagination (retrocompatibilidade)', () => {
     expect(screen.getByText('Bruno')).toBeInTheDocument()
     expect(screen.queryByText('Ana')).not.toBeInTheDocument()
     expect(screen.queryByText('Carla')).not.toBeInTheDocument()
-    expect(screen.getByText('1 de 3 registros')).toBeInTheDocument()
+    // O restyle passou os dígitos para <span className="num">, então o texto some do textContent direto do nó — usa matcher de função comparando o textContent completo do <p>.
+    expect(
+      screen.getByText((_, el) => el instanceof HTMLParagraphElement && el.textContent === '1 de 3 registros')
+    ).toBeInTheDocument()
   })
 })
 
@@ -63,8 +69,14 @@ describe('DataTable — com a prop pagination (server-side)', () => {
       />
     )
 
-    expect(screen.getByText('1–2 de 5 registros')).toBeInTheDocument()
-    expect(screen.getByText('Página 1 de 3')).toBeInTheDocument()
+    // O restyle passou os dígitos para <span className="num">, então o texto some do textContent direto do nó — usa matcher de função comparando o textContent completo do <p>.
+    expect(
+      screen.getByText((_, el) => el instanceof HTMLParagraphElement && el.textContent === '1–2 de 5 registros')
+    ).toBeInTheDocument()
+    // Idem para o indicador de página, que também ganhou <span className="num"> nos dígitos.
+    expect(
+      screen.getByText((_, el) => el instanceof HTMLSpanElement && el.textContent === 'Página 1 de 3')
+    ).toBeInTheDocument()
 
     // "Anterior" desabilitado na primeira página, "Próxima" habilitado.
     expect(screen.getByRole('button', { name: /Anterior/i })).toBeDisabled()
@@ -96,7 +108,10 @@ describe('DataTable — com a prop pagination (server-side)', () => {
       />
     )
 
-    expect(screen.getByText('Página 3 de 3')).toBeInTheDocument()
+    // O restyle passou os dígitos para <span className="num">, então o texto some do textContent direto do nó — usa matcher de função comparando o textContent completo do <span>.
+    expect(
+      screen.getByText((_, el) => el instanceof HTMLSpanElement && el.textContent === 'Página 3 de 3')
+    ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Próxima/i })).toBeDisabled()
     expect(screen.getByRole('button', { name: /Anterior/i })).not.toBeDisabled()
   })
@@ -150,7 +165,10 @@ describe('DataTable — com a prop pagination (server-side)', () => {
       />
     )
 
-    expect(screen.getByText('0 registros')).toBeInTheDocument()
+    // O restyle passou o dígito para <span className="num">, então o texto some do textContent direto do nó — usa matcher de função comparando o textContent completo do <p>.
+    expect(
+      screen.getByText((_, el) => el instanceof HTMLParagraphElement && el.textContent === '0 registros')
+    ).toBeInTheDocument()
     expect(within(screen.getByRole('table')).getByText('Nenhum resultado encontrado.')).toBeInTheDocument()
   })
 })
