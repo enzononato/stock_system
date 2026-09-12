@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from '@/components/ui/toast'
 import { useConstants } from '@/hooks/useConstants'
 import { isValidNotaFiscal, maskNotaFiscalInput } from '@/lib/utils'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft, Save, Loader2 } from 'lucide-react'
 
 interface Props { mode: 'create' | 'edit' }
 
@@ -102,7 +102,12 @@ export default function RegisterItemPage({ mode }: Props) {
   }
 
   if (mode === 'edit' && loadingItem) {
-    return <div className="py-12 text-center text-muted-foreground">Carregando...</div>
+    return (
+      <div className="py-12 flex items-center justify-center gap-2 text-body-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Carregando...
+      </div>
+    )
   }
 
   return (
@@ -189,7 +194,7 @@ export default function RegisterItemPage({ mode }: Props) {
 
         <div className="flex justify-end pt-2">
           <Button type="submit" disabled={mutation.isPending}>
-            <Save size={14} className="mr-2" />
+            <Save size={14} />
             {mutation.isPending ? 'Salvando...' : (mode === 'create' ? 'Cadastrar' : 'Salvar Alterações')}
           </Button>
         </div>

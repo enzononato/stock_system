@@ -178,7 +178,7 @@ export function DataTable<TData>({
               onClick={() => pagination.onPageChange(pagination.pageIndex - 1)}
               disabled={pagination.pageIndex <= 0}
             >
-              <ChevronLeft size={14} className="mr-1" />Anterior
+              <ChevronLeft size={14} />Anterior
             </Button>
             <span className="text-caption text-muted-foreground px-2 py-1 rounded-md bg-surface-alt whitespace-nowrap">
               Página <span className="num">{currentPage}</span> de <span className="num">{pageCount}</span>
@@ -190,7 +190,7 @@ export function DataTable<TData>({
               onClick={() => pagination.onPageChange(pagination.pageIndex + 1)}
               disabled={pagination.pageIndex + 1 >= pageCount}
             >
-              Próxima<ChevronRight size={14} className="ml-1" />
+              Próxima<ChevronRight size={14} />
             </Button>
           </div>
         </div>

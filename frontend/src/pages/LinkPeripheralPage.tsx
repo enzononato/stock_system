@@ -149,7 +149,7 @@ export default function LinkPeripheralPage() {
   const selectedItem = items.find(i => String(i.id) === selectedItemId)
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="page-container-reading space-y-6">
       <div>
         <h2 className="text-heading text-foreground">Vincular Periféricos</h2>
         <p className="text-body-sm text-muted-foreground">Associe periféricos a equipamentos como desktops, notebooks, switches e impressoras.</p>
@@ -183,13 +183,13 @@ export default function LinkPeripheralPage() {
           {/* Periféricos vinculados */}
           <div className="surface-panel p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-caption text-muted-foreground">Vinculados ({linkedPeripherals.length})</h3>
+              <h3 className="text-body-lg font-semibold text-foreground">Vinculados (<span className="num">{linkedPeripherals.length}</span>)</h3>
               <Button size="sm" variant="ghost" onClick={() => refetchLinked()}>
                 <RefreshCw size={13} />
               </Button>
             </div>
             {linkedPeripherals.length === 0 ? (
-              <p className="text-body-sm text-muted-foreground py-4 text-center border border-border rounded">Nenhum periférico vinculado.</p>
+              <p className="text-body-sm text-muted-foreground py-10 text-center">Nenhum periférico vinculado.</p>
             ) : (
               <div className="space-y-2">
                 {linkedPeripherals.map(p => (
@@ -215,9 +215,9 @@ export default function LinkPeripheralPage() {
 
           {/* Periféricos disponíveis */}
           <div className="surface-panel p-4 space-y-3">
-            <h3 className="text-caption text-muted-foreground">Disponíveis ({availablePeripherals.length})</h3>
+            <h3 className="text-body-lg font-semibold text-foreground">Disponíveis (<span className="num">{availablePeripherals.length}</span>)</h3>
             {availablePeripherals.length === 0 ? (
-              <p className="text-body-sm text-muted-foreground py-4 text-center border border-border rounded">Nenhum periférico disponível.</p>
+              <p className="text-body-sm text-muted-foreground py-10 text-center">Nenhum periférico disponível.</p>
             ) : (
               <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
                 {availablePeripherals.map(p => (
@@ -238,7 +238,7 @@ export default function LinkPeripheralPage() {
       {/* Painel de substituição */}
       {replacingLinkId && replacingOldId && (
         <div className="figure-ground-panel space-y-4">
-          <h3 className="text-heading-sm text-foreground">Substituir Periférico #{replacingOldId}</h3>
+          <h3 className="text-heading-sm text-foreground">Substituir Periférico #<span className="num">{replacingOldId}</span></h3>
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
               <Label>Novo Periférico (ID)</Label>

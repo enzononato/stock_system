@@ -11,7 +11,7 @@ import { ItemDetailsModal } from '@/components/equipment/ItemDetailsModal'
 import { useAuth } from '@/contexts/AuthContext'
 import { useConstants } from '@/hooks/useConstants'
 import { formatDate } from '@/lib/utils'
-import { Plus, Pencil, RefreshCw, Package, CheckCircle2, Clock, Laptop, Eye } from 'lucide-react'
+import { Plus, Pencil, RefreshCw, Package, CheckCircle2, Clock, Laptop, Eye, Loader2 } from 'lucide-react'
 
 const STATUS_OPTIONS = ['Disponível', 'Indisponível', 'Pendente', 'Pendente Devolução']
 const FETCH_ALL_LIMIT = 500
@@ -56,7 +56,7 @@ export default function StockPage() {
       cell: ({ row }) => (
         <button
           onClick={() => setSelectedItem(row.original)}
-          className="num font-semibold text-foreground hover:underline text-xs"
+          className="num font-semibold text-foreground hover:underline text-body-sm"
           title="Clique para ver detalhes do item"
         >
           #{row.original.id}
@@ -144,7 +144,7 @@ export default function StockPage() {
           </Button>
           {hasRole('Gestor', 'Técnico') && (
             <Button variant="gradient" size="sm" onClick={() => navigate('/register')}>
-              <Plus size={16} className="mr-1.5" />
+              <Plus size={16} />
               Novo Equipamento
             </Button>
           )}
@@ -153,43 +153,43 @@ export default function StockPage() {
 
       {/* KPI Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="surface-panel p-4 flex items-center gap-4">
+        <div className="surface-panel p-5 flex items-center gap-4">
           <div className="h-12 w-12 rounded-md bg-surface-alt border border-border text-foreground flex items-center justify-center">
             <Package size={24} />
           </div>
           <div>
             <p className="text-caption text-muted-foreground">Total em Estoque</p>
-            <p className="text-heading num text-foreground">{total}</p>
+            <p className="text-heading-lg num text-foreground">{total}</p>
           </div>
         </div>
 
-        <div className="surface-panel p-4 flex items-center gap-4">
+        <div className="surface-panel p-5 flex items-center gap-4">
           <div className="h-12 w-12 rounded-md bg-surface-alt border border-border text-foreground flex items-center justify-center">
             <CheckCircle2 size={24} />
           </div>
           <div>
             <p className="text-caption text-muted-foreground">Disponíveis</p>
-            <p className="text-heading num text-foreground">{disponiveisCount}</p>
+            <p className="text-heading-lg num text-foreground">{disponiveisCount}</p>
           </div>
         </div>
 
-        <div className="surface-panel p-4 flex items-center gap-4">
+        <div className="surface-panel p-5 flex items-center gap-4">
           <div className="h-12 w-12 rounded-md bg-surface-alt border border-border text-foreground flex items-center justify-center">
             <Laptop size={24} />
           </div>
           <div>
             <p className="text-caption text-muted-foreground">Em Empréstimo</p>
-            <p className="text-heading num text-foreground">{indisponiveisCount}</p>
+            <p className="text-heading-lg num text-foreground">{indisponiveisCount}</p>
           </div>
         </div>
 
-        <div className="surface-panel p-4 flex items-center gap-4">
+        <div className="surface-panel p-5 flex items-center gap-4">
           <div className="h-12 w-12 rounded-md bg-surface-alt border border-border text-foreground flex items-center justify-center">
             <Clock size={24} />
           </div>
           <div>
             <p className="text-caption text-muted-foreground">Ações Pendentes</p>
-            <p className="text-heading num text-foreground">{pendentesCount}</p>
+            <p className="text-heading-lg num text-foreground">{pendentesCount}</p>
           </div>
         </div>
       </div>
@@ -242,9 +242,9 @@ export default function StockPage() {
 
       {/* Data Table */}
       {isLoading ? (
-        <div className="surface-panel p-12 text-center text-muted-foreground flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-border-strong border-t-primary" />
-          <p className="text-body-sm">Carregando estoque...</p>
+        <div className="surface-panel p-12 flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <p className="text-body-sm text-muted-foreground">Carregando estoque...</p>
         </div>
       ) : (
         <DataTable

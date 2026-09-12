@@ -73,7 +73,7 @@ export function SearchableSelect({
         disabled={disabled}
         onClick={() => !disabled && setIsOpen(!isOpen)}
         className={cn(
-          'flex h-10 w-full items-center justify-between rounded-md border border-input bg-surface px-3 py-2 text-sm text-foreground transition-colors duration-micro focus:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
+          'flex h-10 w-full items-center justify-between rounded-md border border-input bg-surface px-3 py-2 text-sm text-foreground transition-colors duration-micro focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
           isOpen && 'ring-1 ring-ring border-border-strong'
         )}
       >

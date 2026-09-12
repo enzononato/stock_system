@@ -35,7 +35,7 @@ export default function TopBar({ title }: { title?: string }) {
 
   return (
     <header className="h-14 bg-surface border-b border-border px-4 sm:px-6 flex items-center justify-between gap-3 shrink-0 z-30">
-      <h1 className="text-body-lg font-semibold text-foreground truncate">
+      <h1 className="text-body-lg font-semibold text-foreground truncate min-w-0">
         {activeTitle}
       </h1>
 

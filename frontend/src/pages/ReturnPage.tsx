@@ -62,7 +62,7 @@ export default function ReturnPage() {
   })
 
   const activeColumns: ColumnDef<Item, unknown>[] = [
-    { accessorKey: 'id', header: 'ID', size: 60 },
+    { accessorKey: 'id', header: 'ID', size: 60, cell: ({ getValue }) => <span className="num">{getValue() as number}</span> },
     { accessorKey: 'tipo', header: 'Tipo' },
     { accessorKey: 'brand', header: 'Marca' },
     { accessorKey: 'assigned_to', header: 'Usuário' },
@@ -74,14 +74,14 @@ export default function ReturnPage() {
       header: '',
       cell: ({ row }) => (
         <Button size="sm" variant="outline" onClick={() => initiateMutation.mutate(row.original.id)}>
-          <FileDown size={14} className="mr-1" />Gerar Termo
+          <FileDown size={14} />Gerar Termo
         </Button>
       ),
     },
   ]
 
   const pendingColumns: ColumnDef<Item, unknown>[] = [
-    { accessorKey: 'id', header: 'ID', size: 60 },
+    { accessorKey: 'id', header: 'ID', size: 60, cell: ({ getValue }) => <span className="num">{getValue() as number}</span> },
     { accessorKey: 'tipo', header: 'Tipo' },
     { accessorKey: 'brand', header: 'Marca' },
     { accessorKey: 'assigned_to', header: 'Usuário' },
@@ -126,7 +126,7 @@ export default function ReturnPage() {
               disabled={!signedPdf || confirmMutation.isPending}
               onClick={() => signedPdf && confirmMutation.mutate({ itemId: pendingReturnId, pdf: signedPdf })}
             >
-              <CheckCircle size={14} className="mr-2" />
+              <CheckCircle size={14} />
               {confirmMutation.isPending ? 'Confirmando...' : 'Confirmar Devolução'}
             </Button>
             <Button variant="ghost" onClick={() => setPendingReturnId(null)}>Cancelar</Button>

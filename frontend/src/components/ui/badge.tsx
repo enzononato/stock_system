@@ -16,7 +16,7 @@ interface BadgeProps {
  * porque as páginas já os usam — trocar os nomes obrigaria a mexer em todas
  * as chamadas sem ganho visual nenhum.
  */
-const variantClasses = {
+const variantClasses: Record<NonNullable<BadgeProps['variant']>, string> = {
   default: 'badge-status-neutral',
   success: 'badge-status-available',
   warning: 'badge-status-pending',
@@ -25,7 +25,7 @@ const variantClasses = {
   purple: 'badge-status-return',
 }
 
-const dotClasses = {
+const dotClasses: Record<NonNullable<BadgeProps['variant']>, string> = {
   default: 'bg-[var(--status-neutral)]',
   success: 'bg-[var(--status-available)]',
   warning: 'bg-[var(--status-pending)]',

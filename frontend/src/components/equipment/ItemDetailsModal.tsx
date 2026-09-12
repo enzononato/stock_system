@@ -332,7 +332,7 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
                 onClick={() => generateAndDownloadLoanTerm(item.id)}
                 className="rounded-md"
               >
-                <FileDown size={14} className="mr-1.5" />
+                <FileDown size={14} />
                 Baixar Termo
               </Button>
             )}
@@ -347,7 +347,7 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
                 }}
                 className="rounded-md"
               >
-                <Pencil size={14} className="mr-1.5" />
+                <Pencil size={14} />
                 Editar Equipamento
               </Button>
             )}

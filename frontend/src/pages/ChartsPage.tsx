@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Calendar, Filter, ArrowUpRight, ArrowDownLeft, PackagePlus } from 'lucide-react'
+import { Calendar, Filter, ArrowUpRight, ArrowDownLeft, PackagePlus, Loader2 } from 'lucide-react'
 import { useTheme } from '@/lib/theme'
 
 const MONTHS = [
@@ -57,7 +57,18 @@ export default function ChartsPage() {
   // leem getComputedStyle no momento do render) nunca seriam chamados de
   // novo, e os gráficos ficariam com a paleta do tema anterior até algo
   // não relacionado forçar um re-render (ex.: "Aplicar Filtro").
-  const { theme } = useTheme()
+  //
+  // NÃO REMOVA esta chamada mesmo que pareça "não usada": o valor de retorno
+  // não é lido em lugar nenhum (por isso não é desestruturado), mas a
+  // CHAMADA de useTheme() é o que registra a assinatura ao contexto —
+  // é ela quem dispara o re-render. tsconfig.json tem noUnusedLocals:false
+  // e o projeto não tem eslint, então nada aqui acusaria erro de build se
+  // esta linha for apagada numa limpeza de "variável não usada": tsc, os
+  // 132+ testes e o vite build continuariam verdes, e os gráficos
+  // simplesmente parariam de acompanhar a troca de tema silenciosamente
+  // (nenhum teste cobre ChartsPage, e o jsdom não calcula CSS mesmo que
+  // cobrisse).
+  useTheme()
 
   const now = new Date()
   const [year, setYear] = useState(String(now.getFullYear()))
@@ -143,7 +154,7 @@ export default function ChartsPage() {
           variant="gradient"
           onClick={() => setParams({ year: Number(year), month: Number(month) })}
         >
-          <Calendar size={15} className="mr-1.5" />
+          <Calendar size={15} />
           Aplicar Filtro
         </Button>
       </div>
@@ -195,7 +206,10 @@ export default function ChartsPage() {
         </div>
 
         {loansLoading ? (
-          <div className="h-72 flex items-center justify-center text-muted-foreground text-sm">Carregando gráfico...</div>
+          <div className="h-72 flex items-center justify-center gap-2 text-body-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Carregando gráfico...
+          </div>
         ) : (
           <ResponsiveContainer width="100%" height={320}>
             <BarChart data={buildLoansChartData()} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -232,7 +246,10 @@ export default function ChartsPage() {
         </div>
 
         {regLoading ? (
-          <div className="h-72 flex items-center justify-center text-muted-foreground text-sm">Carregando gráfico...</div>
+          <div className="h-72 flex items-center justify-center gap-2 text-body-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Carregando gráfico...
+          </div>
         ) : (
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={buildRegChartData()} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>

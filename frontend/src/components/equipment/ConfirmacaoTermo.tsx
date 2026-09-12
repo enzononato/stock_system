@@ -123,7 +123,7 @@ export function ConfirmacaoTermo({
       <div className={colors.text}>{description}</div>
       {showGenerateButton && (
         <Button variant="outline" onClick={() => generateAndDownloadLoanTerm(itemId)}>
-          <FileDown size={14} className="mr-2" />Gerar Termo
+          <FileDown size={14} />Gerar Termo
         </Button>
       )}
       <FileUpload onFile={setSignedPdf} label={uploadLabel} />
@@ -132,7 +132,7 @@ export function ConfirmacaoTermo({
           disabled={!signedPdf || confirmMutation.isPending}
           onClick={() => signedPdf && confirmMutation.mutate(signedPdf)}
         >
-          <CheckCircle size={14} className="mr-2" />
+          <CheckCircle size={14} />
           {confirmMutation.isPending ? 'Confirmando...' : 'Confirmar Empréstimo'}
         </Button>
         {onCancel && (

@@ -24,7 +24,7 @@ import { useConstants } from '@/hooks/useConstants'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { Peripheral } from '@/api/peripherals'
 import { formatDate } from '@/lib/utils'
-import { Trash2 } from 'lucide-react'
+import { Trash2, Loader2 } from 'lucide-react'
 
 function PeripheralStatusBadge({ status }: { status?: string }) {
   if (status === 'Disponível') return <Badge variant="success">{status}</Badge>
@@ -76,7 +76,7 @@ export default function PeripheralsPage() {
   })
 
   const columns: ColumnDef<Peripheral, unknown>[] = [
-    { accessorKey: 'id', header: 'ID', size: 60 },
+    { accessorKey: 'id', header: 'ID', size: 60, cell: ({ getValue }) => <span className="num">{getValue() as number}</span> },
     { accessorKey: 'tipo', header: 'Tipo' },
     { accessorKey: 'brand', header: 'Marca', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'model', header: 'Modelo', cell: ({ getValue }) => getValue() as string || '-' },
@@ -160,7 +160,10 @@ export default function PeripheralsPage() {
 
       {/* Lista */}
       {isLoading ? (
-        <div className="py-8 text-center text-muted-foreground">Carregando...</div>
+        <div className="py-8 flex items-center justify-center gap-2 text-body-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Carregando...
+        </div>
       ) : (
         <DataTable data={peripherals} columns={columns} searchPlaceholder="Buscar periférico..." />
       )}

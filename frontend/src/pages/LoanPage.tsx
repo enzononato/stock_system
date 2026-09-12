@@ -78,7 +78,7 @@ export default function LoanPage() {
   }
 
   const pendingColumns: ColumnDef<Item, unknown>[] = [
-    { accessorKey: 'id', header: 'ID', size: 60 },
+    { accessorKey: 'id', header: 'ID', size: 60, cell: ({ getValue }) => <span className="num">{getValue() as number}</span> },
     { accessorKey: 'tipo', header: 'Tipo' },
     { accessorKey: 'brand', header: 'Marca' },
     { accessorKey: 'assigned_to', header: 'Usuário' },
@@ -90,7 +90,7 @@ export default function LoanPage() {
       cell: ({ row }) => (
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={() => generateAndDownloadLoanTerm(row.original.id)}>
-            <FileDown size={14} className="mr-1" />Termo
+            <FileDown size={14} />Termo
           </Button>
         </div>
       ),

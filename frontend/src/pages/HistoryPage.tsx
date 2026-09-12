@@ -11,7 +11,7 @@ import { toast } from '@/components/ui/toast'
 import { useAuth } from '@/contexts/AuthContext'
 import type { ColumnDef } from '@tanstack/react-table'
 import { formatCpf, formatDateTime } from '@/lib/utils'
-import { RotateCcw, Paperclip } from 'lucide-react'
+import { RotateCcw, Paperclip, Loader2 } from 'lucide-react'
 
 const REVERSIBLE_OPS = ['Cadastro','Empréstimo','Confirmação Empréstimo','Devolução','Confirmação Devolução']
 
@@ -69,7 +69,7 @@ function AttachmentCell({
           disabled={downloadingKey === key}
           onClick={() => onDownload(key)}
         >
-          <Paperclip size={12} className="mr-1" />
+          <Paperclip size={12} />
           {downloadingKey === key ? 'Baixando...' : label}
         </Button>
       ))}
@@ -178,7 +178,7 @@ export default function HistoryPage() {
   }
 
   const columns: ColumnDef<HistoryEntry, unknown>[] = [
-    { accessorKey: 'id', header: 'ID', size: 60 },
+    { accessorKey: 'id', header: 'ID', size: 60, cell: ({ getValue }) => <span className="num">{getValue() as number}</span> },
     { accessorKey: 'item_id', header: 'Item', size: 60, cell: ({ getValue }) => getValue() as number ?? '-' },
     { accessorKey: 'peripheral_id', header: 'Periférico', size: 80, cell: ({ getValue }) => getValue() as number ?? '-' },
     { accessorKey: 'operador', header: 'Operador' },
@@ -213,7 +213,7 @@ export default function HistoryPage() {
             className="text-muted-foreground hover:text-destructive"
             onClick={() => openReverseConfirm(row.original)}
           >
-            <RotateCcw size={14} className="mr-1" />Estornar
+            <RotateCcw size={14} />Estornar
           </Button>
         ) : null,
     } as ColumnDef<HistoryEntry, unknown>] : []),
@@ -230,7 +230,7 @@ export default function HistoryPage() {
           contraste proposital: essa ação reescreve o histórico registrado. */}
       {reversingEntry && (
         <div className="figure-ground-panel space-y-4">
-          <h3 className="text-heading-sm text-foreground">Confirmar Estorno — Operação #{reversingEntry.id}</h3>
+          <h3 className="text-heading-sm text-foreground">Confirmar Estorno — Operação #<span className="num">{reversingEntry.id}</span></h3>
           <p className="text-body-sm text-muted-foreground">
             Isso desfará a operação <strong>&quot;{reversingEntry.operation ?? '-'}&quot;</strong>
             {reversingEntry.item_id != null && ` do item #${reversingEntry.item_id}`}
@@ -263,7 +263,10 @@ export default function HistoryPage() {
       )}
 
       {isLoading ? (
-        <div className="py-8 text-center text-muted-foreground">Carregando...</div>
+        <div className="py-8 flex items-center justify-center gap-2 text-body-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Carregando...
+        </div>
       ) : (
         <DataTable
           data={history}

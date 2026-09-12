@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Boxes, Eye, EyeOff, Lock, User, ShieldCheck } from 'lucide-react'
+import { Boxes, Eye, EyeOff, Lock, User, ShieldCheck, Loader2 } from 'lucide-react'
 
 export default function LoginPage() {
   const [username, setUsername] = useState('')
@@ -37,7 +37,7 @@ export default function LoginPage() {
           <div className="flex h-10 w-10 items-center justify-center rounded-md border border-border">
             <Boxes size={22} />
           </div>
-          <span className="text-heading-lg font-semibold">Controle de Estoque</span>
+          <h1 className="text-heading-lg font-semibold">Controle de Estoque</h1>
         </div>
         <p className="flex items-center gap-1.5 text-body text-primary-foreground">
           <span>Revalle TI</span>
@@ -48,7 +48,18 @@ export default function LoginPage() {
 
       {/* Formulário */}
       <div className="flex items-center justify-center p-6">
-        <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-5">
+        <div className="w-full max-w-sm space-y-5">
+          {/* Identidade compacta — some a partir de lg (o painel institucional
+              ao lado já mostra a marca); abaixo de lg é o painel que some, e
+              sem isto a tela ficaria sem nenhuma identidade visual. */}
+          <div className="flex items-center gap-3 lg:hidden">
+            <div className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-primary text-primary-foreground">
+              <Boxes size={20} />
+            </div>
+            <h1 className="text-heading-sm font-semibold text-foreground">Controle de Estoque</h1>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-5">
           <div className="flex flex-col gap-2">
             <Label htmlFor="username">Usuário</Label>
             <div className="relative">
@@ -99,7 +110,7 @@ export default function LoginPage() {
           <Button type="submit" size="lg" className="w-full" disabled={loading}>
             {loading ? (
               <span className="flex items-center justify-center gap-2">
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-border-strong border-t-primary-foreground" />
+                <Loader2 className="h-4 w-4 animate-spin" />
                 <span>Entrando...</span>
               </span>
             ) : (
@@ -113,7 +124,8 @@ export default function LoginPage() {
               <span>Autenticação Segura JWT</span>
             </span>
           </div>
-        </form>
+          </form>
+        </div>
       </div>
     </div>
   )

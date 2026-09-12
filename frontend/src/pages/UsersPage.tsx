@@ -71,7 +71,7 @@ export default function UsersPage() {
   })
 
   const columns: ColumnDef<User, unknown>[] = [
-    { accessorKey: 'id', header: 'ID', size: 60 },
+    { accessorKey: 'id', header: 'ID', size: 60, cell: ({ getValue }) => <span className="num">{getValue() as number}</span> },
     { accessorKey: 'username', header: 'Usuário' },
     {
       accessorKey: 'role',
@@ -125,7 +125,7 @@ export default function UsersPage() {
   ]
 
   return (
-    <div className="space-y-8 max-w-2xl">
+    <div className="page-container-reading space-y-8">
       <div>
         <h2 className="text-heading text-foreground">Usuários</h2>
         <p className="text-body-sm text-muted-foreground">Gerencie os usuários do sistema.</p>
@@ -164,7 +164,7 @@ export default function UsersPage() {
       {/* Alterar senha */}
       {changingPasswordId && (
         <div className="figure-ground-panel space-y-3">
-          <h3 className="text-heading-sm text-foreground">Alterar Senha — Usuário #{changingPasswordId}</h3>
+          <h3 className="text-heading-sm text-foreground">Alterar Senha — Usuário #<span className="num">{changingPasswordId}</span></h3>
           <div className="flex gap-3">
             <Input
               type="password"

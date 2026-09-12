@@ -4,7 +4,7 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded text-sm font-medium transition-colors duration-micro focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 select-none [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded text-sm font-medium transition-colors duration-micro focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 select-none [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
   {
     variants: {
       variant: {
@@ -12,8 +12,7 @@ const buttonVariants = cva(
         // Mantida por compatibilidade: várias páginas pedem "gradient".
         // No design monocromático não há gradiente, então renderiza como default.
         gradient: 'bg-primary text-primary-foreground hover:opacity-90',
-        destructive:
-          'bg-transparent text-destructive border border-destructive hover:bg-destructive hover:text-destructive-foreground',
+        destructive: 'bg-destructive text-destructive-foreground hover:opacity-90',
         outline: 'border border-border bg-transparent text-foreground hover:bg-surface-alt',
         secondary: 'bg-surface-alt text-foreground border border-border hover:border-border-strong',
         ghost: 'text-foreground hover:bg-surface-alt',

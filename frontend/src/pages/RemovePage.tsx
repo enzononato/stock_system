@@ -104,7 +104,7 @@ export default function RemovePage() {
         )}
 
         <Button type="submit" variant="destructive" disabled={mutation.isPending} className="w-full">
-          <Trash2 size={14} className="mr-2" />
+          <Trash2 size={14} />
           {mutation.isPending ? 'Removendo...' : 'Confirmar Remoção'}
         </Button>
       </form>

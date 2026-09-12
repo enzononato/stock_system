@@ -29,7 +29,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Building2, Pencil, Ban, BarChart3, RotateCcw } from 'lucide-react'
+import { Building2, Pencil, Ban, BarChart3, RotateCcw, Loader2 } from 'lucide-react'
 
 // --- Validação e máscaras -----------------------------------------------------
 // `lib/utils.ts` (fora da posse deste módulo) já tem `isValidCpf` seguindo o
@@ -107,11 +107,14 @@ export function maskUfInput(value: string): string {
  */
 const STATUS_ORDER = ['Disponível', 'Indisponível', 'Pendente', 'Pendente Devolução']
 
+// Sem ícone (diferente do padrão de ChartsPage): esta variante do cartão de
+// métrica não tem um por padrão — mantido assim de propósito, só alinhando
+// superfície, raio e tipografia às demais.
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded border border-border bg-surface p-3">
+    <div className="surface-panel p-5">
       <p className="text-caption text-muted-foreground">{label}</p>
-      <p className="text-heading num text-foreground">{value}</p>
+      <p className="text-heading-lg num text-foreground">{value}</p>
     </div>
   )
 }
@@ -579,14 +582,17 @@ export default function UnidadesPage() {
         </label>
       </div>
       {isLoading ? (
-        <div className="py-8 text-center text-muted-foreground">Carregando...</div>
+        <div className="py-8 flex items-center justify-center gap-2 text-body-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Carregando...
+        </div>
       ) : (
         <DataTable data={unidades} columns={columns} searchPlaceholder="Buscar unidade..." />
       )}
 
       {/* Indicadores */}
       {indicadoresUnidadeId !== null && (
-        <div className="figure-ground-panel space-y-4">
+        <div className="surface-panel p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-body-lg font-semibold text-foreground flex items-center gap-2">
               <BarChart3 size={16} />

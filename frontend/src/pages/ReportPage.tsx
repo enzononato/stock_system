@@ -87,7 +87,7 @@ export default function ReportPage() {
         </div>
         <Button onClick={handleGenerate}>Gerar Relatório</Button>
         <Button variant="outline" onClick={handleExport} disabled={isExporting}>
-          <Download size={14} className="mr-2" />
+          <Download size={14} />
           {isExporting ? 'Exportando...' : 'Exportar CSV'}
         </Button>
       </div>
