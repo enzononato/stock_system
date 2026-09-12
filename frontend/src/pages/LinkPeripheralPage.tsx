@@ -59,7 +59,7 @@ function PeripheralCard({
         </Badge>
         <Button size="sm" variant={variant === 'destructive' ? 'destructive' : 'outline'} onClick={action}>
           {actionIcon}
-          <span className="ml-1">{actionLabel}</span>
+          <span>{actionLabel}</span>
         </Button>
       </div>
     </div>

@@ -139,7 +139,7 @@ export default function StockPage() {
         </div>
         <div className="flex items-center gap-3">
           <Button variant="outline" size="sm" onClick={handleRefresh}>
-            <RefreshCw size={14} className={`mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
             Atualizar
           </Button>
           {hasRole('Gestor', 'Técnico') && (

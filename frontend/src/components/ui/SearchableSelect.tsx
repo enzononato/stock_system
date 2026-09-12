@@ -106,7 +106,7 @@ export function SearchableSelect({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={searchPlaceholder}
-              className="w-full h-9 pl-9 pr-8 text-xs font-medium bg-surface-alt rounded-md border border-border focus:outline-none focus-visible:ring-1 focus-visible:ring-ring text-foreground placeholder:text-muted-foreground"
+              className="w-full h-9 pl-9 pr-8 text-xs font-medium bg-surface-alt rounded-md border border-border focus-visible:ring-1 focus-visible:ring-ring text-foreground placeholder:text-muted-foreground"
             />
             {search && (
               <button

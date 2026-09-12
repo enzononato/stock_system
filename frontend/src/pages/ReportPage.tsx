@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from '@/components/ui/toast'
 import { formatDateTime } from '@/lib/utils'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Download } from 'lucide-react'
+import { Download, Loader2 } from 'lucide-react'
 
 const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 
@@ -93,7 +93,10 @@ export default function ReportPage() {
       </div>
 
       {isLoading ? (
-        <div className="py-8 text-center text-muted-foreground">Gerando relatório...</div>
+        <div className="flex flex-col items-center gap-4 py-8">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <p className="text-body-sm text-muted-foreground">Gerando relatório...</p>
+        </div>
       ) : (
         <DataTable data={report} columns={columns} searchPlaceholder="Buscar no relatório..." />
       )}

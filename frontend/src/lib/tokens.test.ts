@@ -172,15 +172,38 @@ describe('guarda contra opacidade em token customizado', () => {
     // modal) NÃO são afetadas — usam o formato com <alpha-value> e
     // continuam de fora da lista de tokens abaixo.
     const tokens = extrairTokensDeCor(config)
+    // Sanidade: se `colors` for movido para fora do tailwind.config.js (ex.:
+    // um módulo importado), a extração acima degenera silenciosamente para
+    // uma lista vazia e o teste passaria para sempre sem checar nada. Hoje
+    // existem 29 tokens — exigir mais de 20 garante que a lista real foi
+    // derivada.
+    expect(tokens.length).toBeGreaterThan(20)
+
+    // Prefixos mais longos vêm antes dos mais curtos na alternação: numa
+    // classe direcional como "border-t" combinada com um token e sufixo de
+    // opacidade, se a alternativa "border" pudesse casar primeiro (sem o
+    // "t" seguinte pertencer à lista de tokens) o resultado seria
+    // simplesmente "não bate" em vez de recuar para a alternativa
+    // "border-t". Ordenar do mais específico para o mais genérico evita
+    // depender desse recuo.
     const prefixos = [
-      'bg', 'text', 'border', 'ring', 'divide', 'from', 'via', 'to', 'fill',
+      'ring-offset', 'ring',
+      'border-t', 'border-r', 'border-b', 'border-l', 'border-x', 'border-y', 'border',
+      'divide-x', 'divide-y', 'divide',
+      'bg', 'text', 'from', 'via', 'to', 'fill',
       'stroke', 'placeholder', 'outline', 'decoration', 'accent', 'caret', 'shadow',
     ]
     const padrao = new RegExp(`\\b(?:${prefixos.join('|')})-(?:${tokens.join('|')})/[0-9]+`, 'g')
 
     const srcDir = resolve(__dirname, '..')
+    const arquivos = listarArquivosFonte(srcDir)
+    // Mesma lógica de sanidade: se a varredura de arquivos degenerar (ex.:
+    // caminho errado, filtro de extensão quebrado), o teste não pode passar
+    // em silêncio só porque não encontrou nada para reprovar.
+    expect(arquivos.length).toBeGreaterThan(20)
+
     const ofensores: string[] = []
-    for (const arquivo of listarArquivosFonte(srcDir)) {
+    for (const arquivo of arquivos) {
       const conteudo = readFileSync(arquivo, 'utf8')
       conteudo.split('\n').forEach((linha, i) => {
         const achados = linha.match(padrao)
