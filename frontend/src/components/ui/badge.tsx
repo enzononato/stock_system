@@ -8,21 +8,25 @@ interface BadgeProps {
 }
 
 /*
- * A interface é monocromática, mas o status não: num inventário a cor do
- * status é sinal funcional, não enfeite. As variantes abaixo apontam para os
- * tokens --status-* (dessaturados) em vez da paleta cheia do Tailwind.
+ * Meio-termo escolhido pelo dono do produto: o selo em si virou monocromático
+ * (a interface já era), mas o status continua identificável à distância pelo
+ * ponto de 6px (`dotClasses` abaixo) — só ele carrega cor. Isso evita cinco
+ * tons brigando com uma base achromática, sem perder a varredura visual da
+ * coluna de status numa tabela cheia.
  *
  * Os nomes das variantes são preservados (success/warning/danger/info/purple)
  * porque as páginas já os usam — trocar os nomes obrigaria a mexer em todas
- * as chamadas sem ganho visual nenhum.
+ * as chamadas sem ganho visual nenhum. O mapa continua com um valor por
+ * variante (em vez de uma string única) pelo mesmo motivo: nenhum call site
+ * precisa mudar, mesmo que hoje os seis valores sejam idênticos.
  */
 const variantClasses: Record<NonNullable<BadgeProps['variant']>, string> = {
-  default: 'badge-status-neutral',
-  success: 'badge-status-available',
-  warning: 'badge-status-pending',
-  danger: 'badge-status-danger',
-  info: 'badge-status-loaned',
-  purple: 'badge-status-return',
+  default: 'border-border bg-transparent text-foreground',
+  success: 'border-border bg-transparent text-foreground',
+  warning: 'border-border bg-transparent text-foreground',
+  danger: 'border-border bg-transparent text-foreground',
+  info: 'border-border bg-transparent text-foreground',
+  purple: 'border-border bg-transparent text-foreground',
 }
 
 const dotClasses: Record<NonNullable<BadgeProps['variant']>, string> = {
@@ -38,7 +42,7 @@ export function Badge({ children, className, variant = 'default', showDot = fals
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5 text-xs font-semibold tracking-wide select-none transition-colors duration-micro',
+        'inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5 font-mono text-xs font-medium uppercase tracking-wider select-none transition-colors duration-micro',
         variantClasses[variant],
         className
       )}

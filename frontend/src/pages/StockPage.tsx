@@ -5,6 +5,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { listItemsPaginated, type Item } from '@/api/items'
 import { DataTable } from '@/components/ui/DataTable'
 import { StatusBadge } from '@/components/ui/badge'
+import { StatBlock } from '@/components/ui/StatBlock'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ItemDetailsModal } from '@/components/equipment/ItemDetailsModal'
@@ -12,7 +13,7 @@ import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
 import { useAuth } from '@/contexts/AuthContext'
 import { useConstants } from '@/hooks/useConstants'
 import { formatDate } from '@/lib/utils'
-import { Plus, Pencil, RefreshCw, Package, CheckCircle2, Clock, Laptop, Eye, Loader2 } from 'lucide-react'
+import { Plus, Pencil, RefreshCw, Eye, Loader2 } from 'lucide-react'
 
 const STATUS_OPTIONS = ['Disponível', 'Indisponível', 'Pendente', 'Pendente Devolução']
 const FETCH_ALL_LIMIT = 500
@@ -152,44 +153,20 @@ export default function StockPage() {
 
       {/* KPI Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="surface-panel p-5 flex items-center gap-4">
-          <div className="h-12 w-12 rounded-md bg-surface-alt border border-border text-foreground flex items-center justify-center">
-            <Package size={24} />
-          </div>
-          <div>
-            <p className="text-caption text-muted-foreground">Total em Estoque</p>
-            <p className="text-heading-lg num text-foreground">{total}</p>
-          </div>
+        <div className="surface-panel p-4">
+          <StatBlock label="Total em Estoque" value={total} symbol="#" />
         </div>
 
-        <div className="surface-panel p-5 flex items-center gap-4">
-          <div className="h-12 w-12 rounded-md bg-surface-alt border border-border text-foreground flex items-center justify-center">
-            <CheckCircle2 size={24} />
-          </div>
-          <div>
-            <p className="text-caption text-muted-foreground">Disponíveis</p>
-            <p className="text-heading-lg num text-foreground">{disponiveisCount}</p>
-          </div>
+        <div className="surface-panel p-4">
+          <StatBlock label="Disponíveis" value={disponiveisCount} symbol="○" />
         </div>
 
-        <div className="surface-panel p-5 flex items-center gap-4">
-          <div className="h-12 w-12 rounded-md bg-surface-alt border border-border text-foreground flex items-center justify-center">
-            <Laptop size={24} />
-          </div>
-          <div>
-            <p className="text-caption text-muted-foreground">Em Empréstimo</p>
-            <p className="text-heading-lg num text-foreground">{indisponiveisCount}</p>
-          </div>
+        <div className="surface-panel p-4">
+          <StatBlock label="Em Empréstimo" value={indisponiveisCount} />
         </div>
 
-        <div className="surface-panel p-5 flex items-center gap-4">
-          <div className="h-12 w-12 rounded-md bg-surface-alt border border-border text-foreground flex items-center justify-center">
-            <Clock size={24} />
-          </div>
-          <div>
-            <p className="text-caption text-muted-foreground">Ações Pendentes</p>
-            <p className="text-heading-lg num text-foreground">{pendentesCount}</p>
-          </div>
+        <div className="surface-panel p-4">
+          <StatBlock label="Ações Pendentes" value={pendentesCount} symbol="!" />
         </div>
       </div>
 

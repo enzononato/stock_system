@@ -242,37 +242,15 @@
     padding: 1.5rem;
   }
 
-  /* Status — cor semântica dessaturada */
-  .badge-status-available {
-    color: var(--status-available);
-    background-color: var(--status-available-bg);
-    border-color: var(--status-available);
-  }
-  .badge-status-loaned {
-    color: var(--status-loaned);
-    background-color: var(--status-loaned-bg);
-    border-color: var(--status-loaned);
-  }
-  .badge-status-pending {
-    color: var(--status-pending);
-    background-color: var(--status-pending-bg);
-    border-color: var(--status-pending);
-  }
-  .badge-status-return {
-    color: var(--status-return);
-    background-color: var(--status-return-bg);
-    border-color: var(--status-return);
-  }
-  .badge-status-danger {
-    color: var(--status-danger);
-    background-color: var(--status-danger-bg);
-    border-color: var(--status-danger);
-  }
-  .badge-status-neutral {
-    color: var(--status-neutral);
-    background-color: var(--status-neutral-bg);
-    border-color: var(--border);
-  }
+  /*
+   * As classes .badge-status-available/-loaned/-pending/-return/-danger/-neutral
+   * que pintavam fundo+borda+texto do selo por variante foram removidas: desde
+   * que Badge (components/ui/badge.tsx) virou monocromático, nada mais as
+   * referencia (a cor da variante agora só sobrevive no ponto de 6px, via
+   * `dotClasses`, que lê `var(--status-*)` diretamente). Os tokens
+   * --status-available-bg etc. continuam definidos acima porque
+   * --status-danger-bg ainda é usado por components/ui/toast.tsx.
+   */
 }
 
 /* Barra de rolagem discreta */

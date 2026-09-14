@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { StatBlock } from '@/components/ui/StatBlock'
 import { DataTable } from '@/components/ui/DataTable'
 import { toast } from '@/components/ui/toast'
 import {
@@ -108,18 +109,6 @@ export function maskUfInput(value: string): string {
  */
 const STATUS_ORDER = ['Disponível', 'Indisponível', 'Pendente', 'Pendente Devolução']
 
-// Sem ícone (diferente do padrão de ChartsPage): esta variante do cartão de
-// métrica não tem um por padrão — mantido assim de propósito, só alinhando
-// superfície, raio e tipografia às demais.
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="surface-panel p-5">
-      <p className="text-caption text-muted-foreground">{label}</p>
-      <p className="text-heading-lg num text-foreground">{value}</p>
-    </div>
-  )
-}
-
 function IndicadoresPanel({ dados }: { dados: IndicadoresUnidade }) {
   // "Sem movimento" não é um erro — é o estado normal de uma unidade recém
   // criada ou que nunca recebeu equipamentos. Sem este aviso explícito, uma
@@ -135,12 +124,24 @@ function IndicadoresPanel({ dados }: { dados: IndicadoresUnidade }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <Stat label="Termos Emitidos" value={dados.termos_emitidos} />
-        <Stat label="Termos Confirmados" value={dados.termos_confirmados} />
-        <Stat label="Devoluções Concluídas" value={dados.devolucoes_concluidas} />
-        <Stat label="Total de Itens" value={dados.itens_total} />
-        <Stat label="Empréstimos Ativos" value={dados.emprestimos_ativos} />
-        <Stat label="Periféricos Vinculados" value={dados.perifericos_vinculados} />
+        <div className="surface-panel p-4">
+          <StatBlock label="Termos Emitidos" value={dados.termos_emitidos} />
+        </div>
+        <div className="surface-panel p-4">
+          <StatBlock label="Termos Confirmados" value={dados.termos_confirmados} />
+        </div>
+        <div className="surface-panel p-4">
+          <StatBlock label="Devoluções Concluídas" value={dados.devolucoes_concluidas} symbol="↓" />
+        </div>
+        <div className="surface-panel p-4">
+          <StatBlock label="Total de Itens" value={dados.itens_total} symbol="◯" />
+        </div>
+        <div className="surface-panel p-4">
+          <StatBlock label="Empréstimos Ativos" value={dados.emprestimos_ativos} symbol="↑" />
+        </div>
+        <div className="surface-panel p-4">
+          <StatBlock label="Periféricos Vinculados" value={dados.perifericos_vinculados} />
+        </div>
       </div>
 
       <div>
