@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Boxes, Eye, EyeOff, Lock, User, ShieldCheck } from 'lucide-react'
+import { Boxes, Eye, EyeOff, Lock, User, ShieldCheck, Loader2 } from 'lucide-react'
 
 export default function LoginPage() {
   const [username, setUsername] = useState('')
@@ -30,106 +30,103 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center bg-slate-950 overflow-hidden p-4 select-none">
-      {/* Background Decorative Glow Blobs */}
-      <div className="absolute -top-40 -left-40 w-96 h-96 bg-indigo-600/30 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-violet-600/25 rounded-full blur-[120px] pointer-events-none" />
+    <div className="min-h-screen grid lg:grid-cols-2 bg-canvas text-foreground">
+      {/* Painel institucional — some abaixo de lg, só o formulário aparece */}
+      <div className="hidden lg:flex bg-primary text-primary-foreground flex-col justify-between p-10">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-md border border-border">
+            <Boxes size={22} />
+          </div>
+          <h1 className="text-heading-lg font-semibold">Controle de Estoque</h1>
+        </div>
+        <p className="flex items-center gap-1.5 text-body text-primary-foreground">
+          <span>Revalle TI</span>
+          <span className="h-1 w-1 rounded-full bg-primary-foreground" />
+          <span>Portal Corporativo</span>
+        </p>
+      </div>
 
-      <div className="relative w-full max-w-md animate-scale-in">
-        <div className="rounded-3xl bg-white/95 backdrop-blur-xl shadow-2xl p-8 sm:p-10 border border-white/20">
-          {/* Logo & Header */}
-          <div className="flex flex-col items-center mb-8 text-center">
-            <div className="h-16 w-16 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 flex items-center justify-center text-white shadow-xl shadow-indigo-500/35 ring-4 ring-indigo-50 mb-4">
-              <Boxes size={34} className="stroke-[2.2]" />
+      {/* Formulário */}
+      <div className="flex items-center justify-center p-6">
+        <div className="w-full max-w-sm space-y-5">
+          {/* Identidade compacta — some a partir de lg (o painel institucional
+              ao lado já mostra a marca); abaixo de lg é o painel que some, e
+              sem isto a tela ficaria sem nenhuma identidade visual. */}
+          <div className="flex items-center gap-3 lg:hidden">
+            <div className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-primary text-primary-foreground">
+              <Boxes size={20} />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 font-heading">
-              Controle de Estoque
-            </h1>
-            <p className="text-sm font-medium text-slate-500 mt-1 flex items-center gap-1">
-              <span>Revalle TI</span>
-              <span className="h-1 w-1 rounded-full bg-slate-300" />
-              <span className="text-indigo-600 font-bold">Portal Corporativo</span>
-            </p>
+            <h1 className="text-heading-sm font-semibold text-foreground">Controle de Estoque</h1>
           </div>
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="username" className="text-xs font-bold uppercase tracking-wider text-slate-600">
-                Usuário
-              </Label>
-              <div className="relative">
-                <User size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                <Input
-                  id="username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Digite seu usuário"
-                  className="pl-11 h-11 bg-slate-50/70 border-slate-200 focus-visible:ring-indigo-500/30 rounded-xl font-medium"
-                  autoFocus
-                  required
-                />
-              </div>
+          <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="username">Usuário</Label>
+            <div className="relative">
+              <User
+                size={18}
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+              />
+              <Input
+                id="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Digite seu usuário"
+                className="pl-10"
+                autoFocus
+                required
+              />
             </div>
+          </div>
 
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="password" className="text-xs font-bold uppercase tracking-wider text-slate-600">
-                Senha
-              </Label>
-              <div className="relative">
-                <Lock size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                <Input
-                  id="password"
-                  type={showPass ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Digite sua senha"
-                  className="pl-11 pr-11 h-11 bg-slate-50/70 border-slate-200 focus-visible:ring-indigo-500/30 rounded-xl font-medium"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPass(!showPass)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors"
-                >
-                  {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="password">Senha</Label>
+            <div className="relative">
+              <Lock
+                size={18}
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+              />
+              <Input
+                id="password"
+                type={showPass ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Digite sua senha"
+                className="pl-10 pr-10"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPass(!showPass)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground transition-colors duration-micro hover:bg-surface-alt hover:text-foreground"
+              >
+                {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </div>
+          </div>
 
-            {error && (
-              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200/80 text-rose-700 text-xs font-semibold text-center animate-fade-in">
-                {error}
-              </div>
+          {error && <p className="text-body-sm text-destructive text-center">{error}</p>}
+
+          <Button type="submit" size="lg" className="w-full" disabled={loading}>
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Entrando...</span>
+              </span>
+            ) : (
+              'Entrar'
             )}
+          </Button>
 
-            <Button
-              type="submit"
-              variant="gradient"
-              size="lg"
-              className="mt-2 w-full h-11 rounded-xl text-base shadow-lg shadow-indigo-500/30 font-bold"
-              disabled={loading}
-            >
-              {loading ? (
-                <div className="flex items-center justify-center gap-2">
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                  <span>Entrando...</span>
-                </div>
-              ) : (
-                'Entrar'
-              )}
-            </Button>
-          </form>
-
-          {/* Footer badge */}
-          <div className="mt-8 pt-6 border-t border-slate-100 text-center">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-[11px] font-semibold text-slate-500">
-              <ShieldCheck size={13} className="text-emerald-600" />
+          <div className="border-t border-border pt-4 text-center">
+            <span className="inline-flex items-center gap-1.5 rounded-sm bg-surface-alt px-3 py-1 text-caption text-muted-foreground">
+              <ShieldCheck size={13} />
               <span>Autenticação Segura JWT</span>
-            </div>
+            </span>
           </div>
+          </form>
         </div>
       </div>
     </div>
   )
 }
-

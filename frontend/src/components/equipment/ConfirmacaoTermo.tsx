@@ -47,7 +47,12 @@ interface ConfirmacaoTermoProps {
   itemId: number
   /** Texto/instruções exibidos entre o título e a área de upload. */
   description: React.ReactNode
-  /** Esquema de cor do painel — cada tela preserva a identidade visual que já tinha. */
+  /**
+   * Antigo esquema de cor do painel (âmbar para empréstimo, azul para
+   * devolução). Interface monocromática: as duas variantes hoje renderizam
+   * o mesmo tratamento neutro (ver `VARIANT_CLASSES`). Prop mantida apenas
+   * para não quebrar as chamadas existentes em LoanPage/TermsPage.
+   */
   variant?: 'amber' | 'blue'
   /** Rótulo da área de upload (FileUpload). */
   uploadLabel?: string
@@ -61,9 +66,14 @@ interface ConfirmacaoTermoProps {
   onCancel?: () => void
 }
 
+// Interface monocromática: os dois esquemas de cor (âmbar para empréstimo,
+// azul para devolução) colapsam no mesmo tratamento neutro — como o variant
+// "gradient" do Button, que também renderiza como default hoje. O prop
+// `variant` continua aceito para não quebrar quem já o passa (LoanPage,
+// TermsPage), mas não produz mais diferença visual entre as duas telas.
 const VARIANT_CLASSES: Record<'amber' | 'blue', { container: string; heading: string; text: string }> = {
-  amber: { container: 'bg-amber-50 border-amber-200', heading: 'text-amber-800', text: 'text-amber-700' },
-  blue: { container: 'bg-blue-50 border-blue-200', heading: 'text-blue-800', text: 'text-blue-700' },
+  amber: { container: 'figure-ground-panel', heading: 'text-heading-sm text-foreground', text: 'text-body-sm text-muted-foreground' },
+  blue: { container: 'figure-ground-panel', heading: 'text-heading-sm text-foreground', text: 'text-body-sm text-muted-foreground' },
 }
 
 /**
@@ -106,12 +116,14 @@ export function ConfirmacaoTermo({
   })
 
   return (
-    <div className={cn('rounded-xl border p-6 space-y-4', colors.container)}>
-      <h3 className={cn('font-medium', colors.heading)}>Confirmar Empréstimo — Item #{itemId}</h3>
-      <div className={cn('text-sm', colors.text)}>{description}</div>
+    <div className={cn('space-y-4', colors.container)}>
+      <h3 className={colors.heading}>
+        Confirmar Empréstimo — Item #<span className="num">{itemId}</span>
+      </h3>
+      <div className={colors.text}>{description}</div>
       {showGenerateButton && (
         <Button variant="outline" onClick={() => generateAndDownloadLoanTerm(itemId)}>
-          <FileDown size={14} className="mr-2" />Gerar Termo
+          <FileDown size={14} />Gerar Termo
         </Button>
       )}
       <FileUpload onFile={setSignedPdf} label={uploadLabel} />
@@ -120,7 +132,7 @@ export function ConfirmacaoTermo({
           disabled={!signedPdf || confirmMutation.isPending}
           onClick={() => signedPdf && confirmMutation.mutate(signedPdf)}
         >
-          <CheckCircle size={14} className="mr-2" />
+          <CheckCircle size={14} />
           {confirmMutation.isPending ? 'Confirmando...' : 'Confirmar Empréstimo'}
         </Button>
         {onCancel && (

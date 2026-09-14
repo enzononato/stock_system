@@ -71,7 +71,7 @@ export default function UsersPage() {
   })
 
   const columns: ColumnDef<User, unknown>[] = [
-    { accessorKey: 'id', header: 'ID', size: 60 },
+    { accessorKey: 'id', header: 'ID', size: 60, cell: ({ getValue }) => <span className="num">{getValue() as number}</span> },
     { accessorKey: 'username', header: 'Usuário' },
     {
       accessorKey: 'role',
@@ -97,7 +97,7 @@ export default function UsersPage() {
               <Button
                 size="sm"
                 variant="ghost"
-                className="text-red-500 hover:text-red-700"
+                className="text-muted-foreground hover:text-destructive"
                 disabled={removeMutation.isPending}
               >
                 <Trash2 size={14} />
@@ -125,18 +125,18 @@ export default function UsersPage() {
   ]
 
   return (
-    <div className="space-y-8 max-w-2xl">
+    <div className="page-container-reading space-y-8">
       <div>
-        <h2 className="text-xl font-semibold">Usuários</h2>
-        <p className="text-sm text-slate-500">Gerencie os usuários do sistema.</p>
+        <h2 className="text-heading text-foreground">Usuários</h2>
+        <p className="text-body-sm text-muted-foreground">Gerencie os usuários do sistema.</p>
       </div>
 
       {/* Criar usuário */}
       <form
         onSubmit={(e) => { e.preventDefault(); createMutation.mutate() }}
-        className="bg-white rounded-xl border p-6 space-y-4"
+        className="surface-panel p-6 space-y-4"
       >
-        <h3 className="font-medium flex items-center gap-2"><UserPlus size={16} />Novo Usuário</h3>
+        <h3 className="text-body-lg font-semibold text-foreground flex items-center gap-2"><UserPlus size={16} />Novo Usuário</h3>
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
             <Label>Nome de Usuário *</Label>
@@ -163,8 +163,8 @@ export default function UsersPage() {
 
       {/* Alterar senha */}
       {changingPasswordId && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
-          <h3 className="font-medium text-amber-800">Alterar Senha — Usuário #{changingPasswordId}</h3>
+        <div className="figure-ground-panel space-y-3">
+          <h3 className="text-heading-sm text-foreground">Alterar Senha — Usuário #<span className="num">{changingPasswordId}</span></h3>
           <div className="flex gap-3">
             <Input
               type="password"

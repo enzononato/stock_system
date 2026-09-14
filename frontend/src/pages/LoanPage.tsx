@@ -78,19 +78,19 @@ export default function LoanPage() {
   }
 
   const pendingColumns: ColumnDef<Item, unknown>[] = [
-    { accessorKey: 'id', header: 'ID', size: 60 },
+    { accessorKey: 'id', header: 'ID', size: 60, cell: ({ getValue }) => <span className="num">{getValue() as number}</span> },
     { accessorKey: 'tipo', header: 'Tipo' },
     { accessorKey: 'brand', header: 'Marca' },
     { accessorKey: 'assigned_to', header: 'Usuário' },
     { accessorKey: 'revenda', header: 'Revenda' },
-    { accessorKey: 'date_issued', header: 'Data', cell: ({ getValue }) => formatDate(getValue() as string) },
+    { accessorKey: 'date_issued', header: 'Data', cell: ({ getValue }) => <span className="num">{formatDate(getValue() as string)}</span> },
     {
       id: 'actions',
       header: 'Ações',
       cell: ({ row }) => (
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={() => generateAndDownloadLoanTerm(row.original.id)}>
-            <FileDown size={14} className="mr-1" />Termo
+            <FileDown size={14} />Termo
           </Button>
         </div>
       ),
@@ -98,13 +98,13 @@ export default function LoanPage() {
   ]
 
   return (
-    <div className="space-y-8 max-w-3xl">
+    <div className="page-container-reading space-y-8">
       <div>
-        <h2 className="text-xl font-semibold">Emprestar Equipamento</h2>
-        <p className="text-sm text-slate-500">Preencha os dados e inicie o processo de empréstimo.</p>
+        <h2 className="text-heading text-foreground">Emprestar Equipamento</h2>
+        <p className="text-body-sm text-muted-foreground">Preencha os dados e inicie o processo de empréstimo.</p>
       </div>
 
-      <form onSubmit={handleLoanSubmit} className="bg-white rounded-xl border p-6 space-y-4">
+      <form onSubmit={handleLoanSubmit} className="surface-panel p-6 space-y-4">
         <div className="flex flex-col gap-1.5">
           <Label>Equipamento *</Label>
           <SearchableSelect
@@ -128,12 +128,12 @@ export default function LoanPage() {
           <div className="flex flex-col gap-1.5">
             <Label>CPF *</Label>
             <Input value={cpf} onChange={e => setCpf(maskCpfInput(e.target.value))} placeholder="000.000.000-00" maxLength={14} required />
-            <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none mt-1">
+            <label className="flex items-center gap-2 text-body-sm text-foreground cursor-pointer select-none mt-1">
               <input
                 type="checkbox"
                 checked={pessoaJuridica}
                 onChange={(e) => setPessoaJuridica(e.target.checked)}
-                className="rounded border-slate-300"
+                className="rounded-sm border-border-strong"
               />
               É pessoa jurídica
             </label>
@@ -195,7 +195,7 @@ export default function LoanPage() {
       {/* Lista de empréstimos pendentes de confirmação */}
       {pendentes.length > 0 && (
         <div className="space-y-3">
-          <h3 className="font-medium text-slate-700">Empréstimos Pendentes de Confirmação</h3>
+          <h3 className="text-body-lg font-semibold text-foreground">Empréstimos Pendentes de Confirmação</h3>
           <DataTable data={pendentes} columns={pendingColumns} searchPlaceholder="Buscar..." />
         </div>
       )}

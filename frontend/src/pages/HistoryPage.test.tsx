@@ -54,7 +54,10 @@ describe('HistoryPage — estorno', () => {
     const botaoEstornar = await screen.findByRole('button', { name: /Estornar/i })
     await user.click(botaoEstornar)
 
-    expect(screen.getByText('Confirmar Estorno — Operação #10')).toBeInTheDocument()
+    // O restyle passou o dígito para <span className="num">, então o texto some do textContent direto do nó — usa matcher de função comparando o textContent completo do <h3>.
+    expect(
+      screen.getByText((_, el) => el instanceof HTMLHeadingElement && el.textContent === 'Confirmar Estorno — Operação #10')
+    ).toBeInTheDocument()
     // BUG DE ACESSIBILIDADE (encontrado, não corrigido — fora da posse deste módulo):
     // o <Label>Confirme sua senha</Label> em HistoryPage.tsx não tem `htmlFor`/`id`
     // associando-o ao <Input>, então getByLabelText não encontra a associação
@@ -90,7 +93,12 @@ describe('HistoryPage — estorno', () => {
     expect(senhaRecebida).toBe('SenhaForte#123')
 
     // Painel fecha depois do sucesso.
-    await waitFor(() => expect(screen.queryByText('Confirmar Estorno — Operação #10')).not.toBeInTheDocument())
+    // O restyle passou o dígito para <span className="num">, então o texto some do textContent direto do nó — usa matcher de função comparando o textContent completo do <h3>.
+    await waitFor(() =>
+      expect(
+        screen.queryByText((_, el) => el instanceof HTMLHeadingElement && el.textContent === 'Confirmar Estorno — Operação #10')
+      ).not.toBeInTheDocument()
+    )
   })
 
   it('senha errada (403) mantém o painel aberto mostrando a mensagem de erro', async () => {
@@ -110,7 +118,10 @@ describe('HistoryPage — estorno', () => {
 
     expect(await screen.findByText('Senha incorreta. Ação não autorizada.')).toBeInTheDocument()
     // O painel continua aberto para o usuário tentar de novo.
-    expect(screen.getByText('Confirmar Estorno — Operação #10')).toBeInTheDocument()
+    // O restyle passou o dígito para <span className="num">, então o texto some do textContent direto do nó — usa matcher de função comparando o textContent completo do <h3>.
+    expect(
+      screen.getByText((_, el) => el instanceof HTMLHeadingElement && el.textContent === 'Confirmar Estorno — Operação #10')
+    ).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Sua senha de acesso')).toBeInTheDocument()
   })
 
@@ -130,7 +141,10 @@ describe('HistoryPage — estorno', () => {
     await user.click(await screen.findByRole('button', { name: /Estornar/i }))
     await user.click(screen.getByRole('button', { name: 'Cancelar' }))
 
-    expect(screen.queryByText('Confirmar Estorno — Operação #10')).not.toBeInTheDocument()
+    // O restyle passou o dígito para <span className="num">, então o texto some do textContent direto do nó — usa matcher de função comparando o textContent completo do <h3>.
+    expect(
+      screen.queryByText((_, el) => el instanceof HTMLHeadingElement && el.textContent === 'Confirmar Estorno — Operação #10')
+    ).not.toBeInTheDocument()
     expect(chamadasReverse).toBe(0)
   })
 })

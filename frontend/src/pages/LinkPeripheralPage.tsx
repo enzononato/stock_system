@@ -46,12 +46,12 @@ function PeripheralCard({
   variant?: 'default' | 'destructive'
 }) {
   return (
-    <div className="flex items-center justify-between rounded-lg border bg-white px-4 py-3 shadow-sm">
+    <div className="flex items-center justify-between border border-border rounded p-3 surface-interactive">
       <div className="flex flex-col gap-0.5">
-        <span className="text-sm font-medium text-slate-800">
+        <span className="text-body-sm font-medium text-foreground">
           {peripheral.tipo} — {peripheral.brand || '-'} {peripheral.model || ''}
         </span>
-        <span className="text-xs text-slate-400">S/N: {peripheral.identificador || '-'}</span>
+        <span className="text-[11px] text-muted-foreground">S/N: <span className="num">{peripheral.identificador || '-'}</span></span>
       </div>
       <div className="flex items-center gap-3">
         <Badge variant={peripheral.status === 'Disponível' ? 'success' : peripheral.status === 'Em Uso' ? 'warning' : 'danger'}>
@@ -59,7 +59,7 @@ function PeripheralCard({
         </Badge>
         <Button size="sm" variant={variant === 'destructive' ? 'destructive' : 'outline'} onClick={action}>
           {actionIcon}
-          <span className="ml-1">{actionLabel}</span>
+          <span>{actionLabel}</span>
         </Button>
       </div>
     </div>
@@ -149,14 +149,14 @@ export default function LinkPeripheralPage() {
   const selectedItem = items.find(i => String(i.id) === selectedItemId)
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="page-container-reading space-y-6">
       <div>
-        <h2 className="text-xl font-semibold">Vincular Periféricos</h2>
-        <p className="text-sm text-slate-500">Associe periféricos a equipamentos como desktops, notebooks, switches e impressoras.</p>
+        <h2 className="text-heading text-foreground">Vincular Periféricos</h2>
+        <p className="text-body-sm text-muted-foreground">Associe periféricos a equipamentos como desktops, notebooks, switches e impressoras.</p>
       </div>
 
       {/* Seletor de equipamento */}
-      <div className="bg-white rounded-xl border p-4 flex flex-col gap-2">
+      <div className="surface-panel p-4 flex flex-col gap-2">
         <Label>Selecione o Equipamento</Label>
         <div className="max-w-md">
           <SearchableSelect
@@ -172,7 +172,7 @@ export default function LinkPeripheralPage() {
           />
         </div>
         {selectedItem && (
-          <p className="text-sm text-slate-500">
+          <p className="text-body-sm text-muted-foreground">
             Status: <strong>{selectedItem.status}</strong> · Revenda: <strong>{selectedItem.revenda}</strong>
           </p>
         )}
@@ -181,15 +181,15 @@ export default function LinkPeripheralPage() {
       {selectedItemId && (
         <div className="grid grid-cols-2 gap-6">
           {/* Periféricos vinculados */}
-          <div className="space-y-3">
+          <div className="surface-panel p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="font-medium text-slate-700">Vinculados ({linkedPeripherals.length})</h3>
+              <h3 className="text-body-lg font-semibold text-foreground">Vinculados (<span className="num">{linkedPeripherals.length}</span>)</h3>
               <Button size="sm" variant="ghost" onClick={() => refetchLinked()}>
                 <RefreshCw size={13} />
               </Button>
             </div>
             {linkedPeripherals.length === 0 ? (
-              <p className="text-sm text-slate-400 py-4 text-center border rounded-lg">Nenhum periférico vinculado.</p>
+              <p className="text-body-sm text-muted-foreground py-10 text-center">Nenhum periférico vinculado.</p>
             ) : (
               <div className="space-y-2">
                 {linkedPeripherals.map(p => (
@@ -202,7 +202,7 @@ export default function LinkPeripheralPage() {
                       variant="destructive"
                     />
                     <button
-                      className="text-xs text-blue-500 hover:underline text-left ml-1"
+                      className="text-xs text-muted-foreground hover:text-foreground hover:underline text-left ml-1"
                       onClick={() => { setReplacingLinkId(p.link_id!); setReplacingOldId(p.id) }}
                     >
                       Substituir...
@@ -214,10 +214,10 @@ export default function LinkPeripheralPage() {
           </div>
 
           {/* Periféricos disponíveis */}
-          <div className="space-y-3">
-            <h3 className="font-medium text-slate-700">Disponíveis ({availablePeripherals.length})</h3>
+          <div className="surface-panel p-4 space-y-3">
+            <h3 className="text-body-lg font-semibold text-foreground">Disponíveis (<span className="num">{availablePeripherals.length}</span>)</h3>
             {availablePeripherals.length === 0 ? (
-              <p className="text-sm text-slate-400 py-4 text-center border rounded-lg">Nenhum periférico disponível.</p>
+              <p className="text-body-sm text-muted-foreground py-10 text-center">Nenhum periférico disponível.</p>
             ) : (
               <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
                 {availablePeripherals.map(p => (
@@ -237,8 +237,8 @@ export default function LinkPeripheralPage() {
 
       {/* Painel de substituição */}
       {replacingLinkId && replacingOldId && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 space-y-4">
-          <h3 className="font-medium text-amber-800">Substituir Periférico #{replacingOldId}</h3>
+        <div className="figure-ground-panel space-y-4">
+          <h3 className="text-heading-sm text-foreground">Substituir Periférico #<span className="num">{replacingOldId}</span></h3>
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
               <Label>Novo Periférico (ID)</Label>

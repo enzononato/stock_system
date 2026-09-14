@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from '@/components/ui/toast'
 import { useConstants } from '@/hooks/useConstants'
 import { isValidNotaFiscal, maskNotaFiscalInput } from '@/lib/utils'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft, Save, Loader2 } from 'lucide-react'
 
 interface Props { mode: 'create' | 'edit' }
 
@@ -102,19 +102,24 @@ export default function RegisterItemPage({ mode }: Props) {
   }
 
   if (mode === 'edit' && loadingItem) {
-    return <div className="py-12 text-center text-slate-400">Carregando...</div>
+    return (
+      <div className="py-12 flex items-center justify-center gap-2 text-body-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Carregando...
+      </div>
+    )
   }
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="page-container-reading space-y-6">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
           <ArrowLeft size={16} />
         </Button>
-        <h2 className="text-xl font-semibold">{mode === 'create' ? 'Cadastrar Item' : 'Editar Item'}</h2>
+        <h2 className="text-heading text-foreground">{mode === 'create' ? 'Cadastrar Item' : 'Editar Item'}</h2>
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-xl border p-6 space-y-4">
+      <form onSubmit={handleSubmit} className="surface-panel p-6 space-y-4">
         {/* Tipo */}
         <div className="flex flex-col gap-1.5">
           <Label>Tipo *</Label>
@@ -177,8 +182,8 @@ export default function RegisterItemPage({ mode }: Props) {
 
         {/* Campos específicos do tipo */}
         {tipo && (
-          <div className="border-t pt-4 space-y-4">
-            <p className="text-sm font-medium text-slate-600">Informações específicas — {tipo}</p>
+          <div className="border-t border-border pt-4 space-y-4">
+            <p className="text-caption text-muted-foreground">Informações específicas — {tipo}</p>
             <TypeSpecificFields
               tipo={tipo}
               values={specificFields}
@@ -189,7 +194,7 @@ export default function RegisterItemPage({ mode }: Props) {
 
         <div className="flex justify-end pt-2">
           <Button type="submit" disabled={mutation.isPending}>
-            <Save size={14} className="mr-2" />
+            <Save size={14} />
             {mutation.isPending ? 'Salvando...' : (mode === 'create' ? 'Cadastrar' : 'Salvar Alterações')}
           </Button>
         </div>

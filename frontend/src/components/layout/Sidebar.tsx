@@ -59,87 +59,66 @@ export default function Sidebar() {
   const { user } = useAuth()
 
   return (
-    <aside className="flex flex-col w-64 min-h-screen bg-slate-950 text-slate-200 border-r border-slate-800/80 py-5 px-3.5 flex-shrink-0 justify-between select-none">
-      <div className="space-y-6">
-        {/* Brand Header */}
-        <div className="flex items-center gap-3 px-2 py-1">
-          <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30 ring-1 ring-white/20">
-            <Boxes size={22} className="stroke-[2.2]" />
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-base font-bold tracking-tight text-white font-heading">Revalle</span>
-              <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                PRO
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 font-medium">Controle de Estoque TI</p>
-          </div>
+    <aside className="flex flex-col w-64 h-full bg-sidebar border-r border-sidebar-border select-none shrink-0">
+      {/* Brand Header */}
+      <div className="flex items-center gap-2.5 h-14 px-3.5 border-b border-border shrink-0">
+        <div className="h-8 w-8 rounded-md bg-primary flex items-center justify-center text-primary-foreground shrink-0">
+          <Boxes size={16} />
         </div>
-
-        {/* Navigation Groups */}
-        <nav className="space-y-5">
-          {navGroups.map((group) => {
-            const visibleItems = group.items.filter(
-              (item) => !item.roles || (user && item.roles.includes(user.role))
-            )
-            if (visibleItems.length === 0) return null
-
-            return (
-              <div key={group.title} className="space-y-1">
-                <h3 className="px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                  {group.title}
-                </h3>
-                <div className="space-y-0.5">
-                  {visibleItems.map((item) => (
-                    <NavLink
-                      key={item.to}
-                      to={item.to}
-                      end={item.to === '/'}
-                      className={({ isActive }) =>
-                        cn(
-                          'group relative flex items-center gap-3 rounded-xl px-3 py-2 text-xs font-semibold transition-all duration-200',
-                          isActive
-                            ? 'bg-indigo-600/90 text-white shadow-md shadow-indigo-600/20 font-bold backdrop-blur-sm'
-                            : 'text-slate-400 hover:bg-slate-900/80 hover:text-slate-100'
-                        )
-                      }
-                    >
-                      {({ isActive }) => (
-                        <>
-                          <span
-                            className={cn(
-                              'transition-transform duration-200 group-hover:scale-110',
-                              isActive ? 'text-white' : 'text-slate-400 group-hover:text-indigo-400'
-                            )}
-                          >
-                            {item.icon}
-                          </span>
-                          <span className="truncate">{item.label}</span>
-                          {isActive && (
-                            <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-1 rounded-r-full bg-white shadow-glow-indigo" />
-                          )}
-                        </>
-                      )}
-                    </NavLink>
-                  ))}
-                </div>
-              </div>
-            )
-          })}
-        </nav>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold tracking-tight truncate">Revalle</p>
+          <p className="text-[11px] text-muted-foreground truncate">Controle de Estoque TI</p>
+        </div>
       </div>
+
+      {/* Navigation Groups */}
+      <nav className="flex-1 overflow-y-auto py-4 px-2.5 space-y-5">
+        {navGroups.map((group) => {
+          const visibleItems = group.items.filter(
+            (item) => !item.roles || (user && item.roles.includes(user.role))
+          )
+          if (visibleItems.length === 0) return null
+
+          return (
+            <div key={group.title} className="space-y-0.5">
+              <h3 className="text-caption text-muted-foreground px-2 py-1">
+                {group.title}
+              </h3>
+              <div className="space-y-0.5">
+                {visibleItems.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.to === '/'}
+                    className={({ isActive }) =>
+                      cn(
+                        'flex items-center gap-2.5 px-2.5 py-1.5 rounded text-body-sm transition-colors duration-micro',
+                        isActive
+                          ? 'bg-surface-alt text-foreground font-semibold border-l-2 border-foreground'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-surface-alt'
+                      )
+                    }
+                  >
+                    {item.icon}
+                    <span className="truncate">{item.label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </nav>
 
       {/* User Footer Summary */}
       {user && (
-        <div className="pt-4 border-t border-slate-800/80 px-2">
-          <div className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-900/70 border border-slate-800/60">
-            <div className="h-8 w-8 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center justify-center text-xs font-bold uppercase">
+        <div className="border-t border-border p-3 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded bg-surface-alt text-foreground border border-border-strong flex items-center justify-center text-xs font-semibold uppercase shrink-0">
               {user.username.substring(0, 2)}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold text-white truncate">{user.username}</p>
-              <div className="flex items-center gap-1 text-[10px] text-indigo-400 font-medium">
+              <p className="text-body-sm font-medium truncate">{user.username}</p>
+              <div className="flex items-center gap-1 text-[11px] text-muted-foreground font-mono">
                 <ShieldCheck size={11} />
                 <span>{user.role}</span>
               </div>
@@ -150,4 +129,3 @@ export default function Sidebar() {
     </aside>
   )
 }
-

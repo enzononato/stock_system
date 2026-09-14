@@ -30,24 +30,24 @@ export default function TermsPage() {
   const ativos = items.filter(i => i.status === 'Indisponível')
 
   const pendingColumns: ColumnDef<Item, unknown>[] = [
-    { accessorKey: 'id', header: 'ID', size: 60 },
+    { accessorKey: 'id', header: 'ID', size: 60, cell: ({ getValue }) => <span className="num">{getValue() as number}</span> },
     { accessorKey: 'tipo', header: 'Tipo' },
     { accessorKey: 'brand', header: 'Marca' },
     { accessorKey: 'model', header: 'Modelo' },
     { accessorKey: 'assigned_to', header: 'Usuário' },
-    { accessorKey: 'cpf', header: 'CPF' },
+    { accessorKey: 'cpf', header: 'CPF', cell: ({ getValue }) => <span className="num">{getValue() as string}</span> },
     { accessorKey: 'revenda', header: 'Revenda' },
-    { accessorKey: 'date_issued', header: 'Data', cell: ({ getValue }) => formatDate(getValue() as string) },
+    { accessorKey: 'date_issued', header: 'Data', cell: ({ getValue }) => <span className="num">{formatDate(getValue() as string)}</span> },
     {
       id: 'actions',
       header: 'Ações',
       cell: ({ row }) => (
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={() => generateAndDownloadLoanTerm(row.original.id)}>
-            <FileDown size={13} className="mr-1" />Gerar Termo
+            <FileDown size={13} />Gerar Termo
           </Button>
           <Button size="sm" onClick={() => setConfirmingId(row.original.id)}>
-            <CheckCircle size={13} className="mr-1" />Confirmar
+            <CheckCircle size={13} />Confirmar
           </Button>
         </div>
       ),
@@ -55,13 +55,13 @@ export default function TermsPage() {
   ]
 
   const activeColumns: ColumnDef<Item, unknown>[] = [
-    { accessorKey: 'id', header: 'ID', size: 60 },
+    { accessorKey: 'id', header: 'ID', size: 60, cell: ({ getValue }) => <span className="num">{getValue() as number}</span> },
     { accessorKey: 'tipo', header: 'Tipo' },
     { accessorKey: 'brand', header: 'Marca' },
     { accessorKey: 'assigned_to', header: 'Usuário' },
-    { accessorKey: 'cpf', header: 'CPF' },
+    { accessorKey: 'cpf', header: 'CPF', cell: ({ getValue }) => <span className="num">{getValue() as string}</span> },
     { accessorKey: 'revenda', header: 'Revenda' },
-    { accessorKey: 'date_issued', header: 'Data Empréstimo', cell: ({ getValue }) => formatDate(getValue() as string) },
+    { accessorKey: 'date_issued', header: 'Data Empréstimo', cell: ({ getValue }) => <span className="num">{formatDate(getValue() as string)}</span> },
     {
       id: 'actions',
       header: 'Termo',
@@ -76,34 +76,29 @@ export default function TermsPage() {
             toast('Termo assinado não encontrado.', 'error')
           }
         }}>
-          <FileDown size={13} className="mr-1" />Ver Termo
+          <FileDown size={13} />Ver Termo
         </Button>
       ),
     },
   ]
 
   return (
-    <div className="space-y-8 max-w-5xl">
+    <div className="space-y-8">
       <div>
-        <h2 className="text-xl font-semibold">Termos de Responsabilidade</h2>
-        <p className="text-sm text-slate-500">Gerencie os termos de empréstimo pendentes e confirmados.</p>
+        <h2 className="text-heading text-foreground">Termos de Responsabilidade</h2>
+        <p className="text-body-sm text-muted-foreground">Gerencie os termos de empréstimo pendentes e confirmados.</p>
       </div>
 
       {/* Pendentes de confirmação */}
       <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <h3 className="font-medium text-slate-700">Pendentes de Confirmação</h3>
-          {pendentes.length > 0 && (
-            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
-              {pendentes.length}
-            </span>
-          )}
-        </div>
-        <p className="text-sm text-slate-500">
+        <h3 className="text-body-lg font-semibold text-foreground">
+          Pendentes de Confirmação{pendentes.length > 0 && <> (<span className="num">{pendentes.length}</span>)</>}
+        </h3>
+        <p className="text-body-sm text-muted-foreground">
           Gere o termo, imprima, colete a assinatura e confirme o empréstimo com o PDF assinado.
         </p>
         {pendentes.length === 0 ? (
-          <p className="text-sm text-slate-400 py-6 text-center border rounded-xl bg-white">
+          <p className="text-body-sm text-muted-foreground py-10 text-center">
             Nenhum empréstimo pendente de confirmação.
           </p>
         ) : (
@@ -126,9 +121,9 @@ export default function TermsPage() {
 
       {/* Empréstimos ativos (termos já confirmados) */}
       <div className="space-y-3">
-        <h3 className="font-medium text-slate-700">Empréstimos Ativos ({ativos.length})</h3>
+        <h3 className="text-body-lg font-semibold text-foreground">Empréstimos Ativos (<span className="num">{ativos.length}</span>)</h3>
         {ativos.length === 0 ? (
-          <p className="text-sm text-slate-400 py-6 text-center border rounded-xl bg-white">
+          <p className="text-body-sm text-muted-foreground py-10 text-center">
             Nenhum empréstimo ativo no momento.
           </p>
         ) : (

@@ -34,8 +34,10 @@ export function ToastContainer() {
         <div
           key={t.id}
           className={cn(
-            'flex items-center gap-3 rounded-lg px-4 py-3 shadow-lg text-sm min-w-[280px] max-w-sm',
-            t.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+            'flex items-center gap-3 rounded border px-4 py-3 shadow-overlay text-sm min-w-[280px] max-w-sm',
+            t.type === 'success'
+              ? 'border-border bg-surface text-foreground'
+              : 'border-destructive bg-[var(--status-danger-bg)] text-destructive'
           )}
         >
           {t.type === 'success' ? <CheckCircle size={16} /> : <AlertCircle size={16} />}

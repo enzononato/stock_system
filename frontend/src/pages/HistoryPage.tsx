@@ -11,7 +11,7 @@ import { toast } from '@/components/ui/toast'
 import { useAuth } from '@/contexts/AuthContext'
 import type { ColumnDef } from '@tanstack/react-table'
 import { formatCpf, formatDateTime } from '@/lib/utils'
-import { RotateCcw, Paperclip } from 'lucide-react'
+import { RotateCcw, Paperclip, Loader2 } from 'lucide-react'
 
 const REVERSIBLE_OPS = ['Cadastro','Empréstimo','Confirmação Empréstimo','Devolução','Confirmação Devolução']
 
@@ -19,11 +19,10 @@ const PAGE_SIZE = 20
 
 function OperationBadge({ op }: { op?: string }) {
   if (!op) return <Badge>-</Badge>
-  if (op.includes('Empréstimo')) return <Badge variant="info">{op}</Badge>
-  if (op.includes('Devolução')) return <Badge variant="success">{op}</Badge>
-  if (op === 'Exclusão') return <Badge variant="danger">{op}</Badge>
-  if (op === 'Estorno') return <Badge variant="warning">{op}</Badge>
-  return <Badge>{op}</Badge>
+  // Monocromático: só as operações destrutivas (Exclusão, Estorno) carregam
+  // cor de sinal (danger). Todas as demais são neutras (default).
+  if (op === 'Exclusão' || op === 'Estorno') return <Badge variant="danger">{op}</Badge>
+  return <Badge variant="default">{op}</Badge>
 }
 
 /**
@@ -56,7 +55,7 @@ function AttachmentCell({
   if (entry.operacao_anexo) attachments.push({ key: entry.operacao_anexo, label: 'Comprovante' })
   if (entry.termo_assinado_anexo) attachments.push({ key: entry.termo_assinado_anexo, label: 'Termo' })
 
-  if (attachments.length === 0) return <span className="text-slate-400">-</span>
+  if (attachments.length === 0) return <span className="text-muted-foreground">-</span>
 
   return (
     <div className="flex flex-col items-start gap-1">
@@ -66,11 +65,11 @@ function AttachmentCell({
           type="button"
           size="sm"
           variant="ghost"
-          className="h-7 px-2 text-slate-600 hover:text-slate-900"
+          className="h-7 px-2 text-muted-foreground hover:text-foreground"
           disabled={downloadingKey === key}
           onClick={() => onDownload(key)}
         >
-          <Paperclip size={12} className="mr-1" />
+          <Paperclip size={12} />
           {downloadingKey === key ? 'Baixando...' : label}
         </Button>
       ))}
@@ -179,7 +178,7 @@ export default function HistoryPage() {
   }
 
   const columns: ColumnDef<HistoryEntry, unknown>[] = [
-    { accessorKey: 'id', header: 'ID', size: 60 },
+    { accessorKey: 'id', header: 'ID', size: 60, cell: ({ getValue }) => <span className="num">{getValue() as number}</span> },
     { accessorKey: 'item_id', header: 'Item', size: 60, cell: ({ getValue }) => getValue() as number ?? '-' },
     { accessorKey: 'peripheral_id', header: 'Periférico', size: 80, cell: ({ getValue }) => getValue() as number ?? '-' },
     { accessorKey: 'operador', header: 'Operador' },
@@ -187,14 +186,14 @@ export default function HistoryPage() {
     { accessorKey: 'tipo', header: 'Tipo', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'marca', header: 'Marca', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'modelo', header: 'Modelo', cell: ({ getValue }) => getValue() as string || '-' },
-    { accessorKey: 'identificador', header: 'Identificador', cell: ({ getValue }) => getValue() as string || '-' },
+    { accessorKey: 'identificador', header: 'Identificador', cell: ({ getValue }) => <span className="num">{(getValue() as string) || '-'}</span> },
     { accessorKey: 'nota_fiscal', header: 'Nota Fiscal', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'usuario', header: 'Usuário', cell: ({ getValue }) => getValue() as string || '-' },
-    { accessorKey: 'cpf', header: 'CPF', cell: ({ getValue }) => formatCpf(getValue() as string) },
+    { accessorKey: 'cpf', header: 'CPF', cell: ({ getValue }) => <span className="num">{formatCpf(getValue() as string)}</span> },
     { accessorKey: 'cargo', header: 'Cargo', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'setor', header: 'Setor', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'revenda', header: 'Revenda', cell: ({ getValue }) => getValue() as string || '-' },
-    { accessorKey: 'data_operacao', header: 'Data', cell: ({ getValue }) => formatDateTime(getValue() as string) },
+    { accessorKey: 'data_operacao', header: 'Data', cell: ({ getValue }) => <span className="num">{formatDateTime(getValue() as string)}</span> },
     { accessorKey: 'details', header: 'Detalhes', cell: ({ getValue }) => getValue() as string || '-' },
     {
       id: 'anexo',
@@ -211,10 +210,10 @@ export default function HistoryPage() {
           <Button
             size="sm"
             variant="ghost"
-            className="text-red-600 hover:text-red-700"
+            className="text-muted-foreground hover:text-destructive"
             onClick={() => openReverseConfirm(row.original)}
           >
-            <RotateCcw size={14} className="mr-1" />Estornar
+            <RotateCcw size={14} />Estornar
           </Button>
         ) : null,
     } as ColumnDef<HistoryEntry, unknown>] : []),
@@ -223,15 +222,16 @@ export default function HistoryPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-xl font-semibold">Histórico</h2>
-        <p className="text-sm text-slate-500">Registro completo de todas as operações.</p>
+        <h2 className="text-heading text-foreground">Histórico</h2>
+        <p className="text-body-sm text-muted-foreground">Registro completo de todas as operações.</p>
       </div>
 
-      {/* Confirmação de estorno — exige a senha do operador logado (T4) */}
+      {/* Confirmação de estorno — exige a senha do operador logado (T4). Alto
+          contraste proposital: essa ação reescreve o histórico registrado. */}
       {reversingEntry && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 space-y-4">
-          <h3 className="font-medium text-amber-800">Confirmar Estorno — Operação #{reversingEntry.id}</h3>
-          <p className="text-sm text-amber-700">
+        <div className="figure-ground-panel space-y-4">
+          <h3 className="text-heading-sm text-foreground">Confirmar Estorno — Operação #<span className="num">{reversingEntry.id}</span></h3>
+          <p className="text-body-sm text-muted-foreground">
             Isso desfará a operação <strong>&quot;{reversingEntry.operation ?? '-'}&quot;</strong>
             {reversingEntry.item_id != null && ` do item #${reversingEntry.item_id}`}
             {reversingEntry.peripheral_id != null && ` do periférico #${reversingEntry.peripheral_id}`}
@@ -248,7 +248,7 @@ export default function HistoryPage() {
               autoFocus
             />
           </div>
-          {reverseError && <p className="text-sm text-red-600">{reverseError}</p>}
+          {reverseError && <p className="text-body-sm text-destructive">{reverseError}</p>}
           <div className="flex gap-3">
             <Button
               variant="destructive"
@@ -263,7 +263,10 @@ export default function HistoryPage() {
       )}
 
       {isLoading ? (
-        <div className="py-8 text-center text-slate-400">Carregando...</div>
+        <div className="py-8 flex items-center justify-center gap-2 text-body-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Carregando...
+        </div>
       ) : (
         <DataTable
           data={history}
