@@ -74,6 +74,36 @@
     --status-danger-bg: #F6E8E8;
     --status-neutral: var(--text-secondary);
     --status-neutral-bg: var(--surface-alt);
+
+    /*
+     * Tokens da tela de login (Enterprise Editorial + logo 3D) — únicos
+     * consumidores de valores translúcidos hoje. Existem porque os tokens
+     * acima são registrados no tailwind.config.js como string literal
+     * "var(--x)", não no formato "rgb(var(--x) / <alpha-value>)" exigido
+     * pelo Tailwind para o modificador de opacidade (ex.: bg-primary com
+     * sufixo /10) — aplicado a um token deste projeto, esse modificador compila para
+     * NENHUM CSS. --primary INVERTE entre os temas (quase preto no claro,
+     * quase branco no escuro), então cada valor abaixo foi escolhido por
+     * tema, não copiado de um único valor. Não registrar em
+     * tailwind.config.js: a lista de tokens do guard test (tokens.test.ts)
+     * passaria a casar com eles.
+     */
+    /* Véu difuso de primary — glows de fundo, tile do logo, chip "Enterprise Core" */
+    --login-wash: rgba(17, 17, 17, 0.08);
+    /* Véu ainda mais fraco — segundo glow ambiente, mais discreto */
+    --login-wash-soft: rgba(17, 17, 17, 0.04);
+    /* Borda fio-de-cabelo em primary — anéis decorativos, borda padrão de chip/tile/card */
+    --login-border: rgba(17, 17, 17, 0.14);
+    /* Borda mais forte em primary — estado hover/foco dos cards e badges */
+    --login-border-strong: rgba(17, 17, 17, 0.32);
+    /* Superfície translúcida (para uso com backdrop-blur) — cards e chips de vidro */
+    --login-glass: rgba(255, 255, 255, 0.72);
+    /* Borda neutra translúcida — divisores de painel e contornos de card */
+    --login-divider: rgba(217, 217, 212, 0.7);
+    /* Fundo translúcido de erro — alerta de credencial inválida */
+    --login-danger-wash: rgba(163, 43, 43, 0.08);
+    /* Borda translúcida de erro — contorno do alerta */
+    --login-danger-border: rgba(163, 43, 43, 0.32);
   }
 
   .dark {
@@ -130,6 +160,16 @@
     --status-danger-bg: #2B1414;
     --status-neutral: var(--text-secondary);
     --status-neutral-bg: var(--surface-alt);
+
+    /* Ver comentário completo em :root — mesmos papéis, tonalidade invertida (primary é quase branco aqui) */
+    --login-wash: rgba(242, 242, 240, 0.14);
+    --login-wash-soft: rgba(242, 242, 240, 0.06);
+    --login-border: rgba(242, 242, 240, 0.18);
+    --login-border-strong: rgba(242, 242, 240, 0.38);
+    --login-glass: rgba(12, 12, 12, 0.72);
+    --login-divider: rgba(39, 39, 39, 0.7);
+    --login-danger-wash: rgba(228, 160, 160, 0.12);
+    --login-danger-border: rgba(228, 160, 160, 0.32);
   }
 
   * {
@@ -240,6 +280,18 @@
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-md);
     padding: 1.5rem;
+  }
+
+  /*
+   * Malha técnica de fundo do painel de login. Na referência `bg-grid-tech`
+   * é usada mas nunca definida (renderiza como nada lá também); aqui optamos
+   * por implementá-la de verdade — um grid sutil reforça a identidade
+   * "Enterprise Core" do painel institucional sem introduzir cor.
+   */
+  .bg-grid-tech {
+    background-image:
+      repeating-linear-gradient(0deg, var(--login-divider) 0, var(--login-divider) 1px, transparent 1px, transparent 40px),
+      repeating-linear-gradient(90deg, var(--login-divider) 0, var(--login-divider) 1px, transparent 1px, transparent 40px);
   }
 
   /*
