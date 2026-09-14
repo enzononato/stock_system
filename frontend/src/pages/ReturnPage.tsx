@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { FileUpload } from '@/components/ui/FileUpload'
 import { DataTable } from '@/components/ui/DataTable'
 import { toast } from '@/components/ui/toast'
+import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { Item } from '@/api/items'
 import { formatDate } from '@/lib/utils'
@@ -99,21 +100,26 @@ export default function ReturnPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h2 className="text-heading text-foreground">Devolver Equipamento</h2>
-        <p className="text-body-sm text-muted-foreground">Gerencie as devoluções de equipamentos emprestados.</p>
-      </div>
+      <PageHeader
+        eyebrow="Movimentação de Ativos"
+        eyebrowDetail="Encerramento de Empréstimo"
+        title="Devolver Equipamento"
+        description="Gerencie as devoluções de equipamentos emprestados."
+      />
 
       {/* Empréstimos ativos */}
       <div className="space-y-3">
-        <h3 className="text-body-lg font-semibold text-foreground">Empréstimos Ativos (<span className="num">{indisponivel.length}</span>)</h3>
-        <p className="text-body-sm text-muted-foreground">Selecione um item para gerar o termo de devolução.</p>
+        <PanelHeader
+          title={<>Empréstimos Ativos (<span className="num">{indisponivel.length}</span>)</>}
+          description="Selecione um item para gerar o termo de devolução."
+        />
         <DataTable data={indisponivel} columns={activeColumns} searchPlaceholder="Buscar por usuário, item..." />
       </div>
 
       {/* Confirmação de devolução */}
       {pendingReturnId && (
         <div className="figure-ground-panel space-y-4">
+          <PanelHeader title="Confirmação de Devolução" />
           <h3 className="text-heading-sm text-foreground">
             Confirmar Devolução — Item #<span className="num">{pendingReturnId}</span>
           </h3>

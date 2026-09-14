@@ -86,3 +86,73 @@ Existe um teste-guarda em `frontend/src/lib/tokens.test.ts` que deriva a lista d
 do próprio config e reprova apontando `arquivo:linha:classe`. Se precisar de uma cor mais
 clara, use um token real (`text-muted-foreground`, `border-border`, `border-border-strong`)
 em vez da opacidade.
+
+---
+
+# Rodada 2 — aproximação da referência (branch `feat/fidelidade-redesign`)
+
+O dono comparou com `origin/redesign-frontend` e apontou que não estava parecido. A
+investigação mostrou que **os tokens estavam fiéis** — cor, raio, escala tipográfica,
+tracking e peso batiam valor por valor. A diferença era estrutural.
+
+O que mudou:
+
+- **Tema escuro por padrão.** O redesign é dark-first: na referência o provider é
+  `useState("dark")` e o script de boot só usa claro quando `'light'` está explicitamente
+  salvo. Nosso port tinha invertido isso, então o design estava sendo visto num casco
+  claro. Sozinho, era o maior item isolado da diferença.
+- **Gramática de composição.** `PageHeader` e `PanelHeader` novos: sobrelinha em caixa
+  alta + bullet + detalhe, título, descrição, slot de ações, sobre régua. Aplicados às 13
+  telas do shell. O `PAGE_TITLES` saiu da TopBar — o título vivia na barra de 56px a 16px,
+  competindo com o título da própria página.
+- **Indicadores sem ícone.** Os cartões com ladrilho de 48px viraram `StatBlock`
+  (legenda em caption + valor em mono), como na referência. Nenhum número ou rótulo foi
+  perdido.
+- **Selos de status monocromáticos com ponto colorido.** Decisão do dono: borda, fundo e
+  texto neutros; sobra só o ponto de 6px como sinal de cor.
+- **Tabelas sangrando até a borda** do painel, em vez de flutuarem com recuo de 20px.
+
+## three.js foi adicionado deliberadamente
+
+A pedido explícito do dono, o login recebeu o logo 3D da referência. Isso adicionou
+`three` e `@types/three` às dependências e os assets em `frontend/public/`
+(`3d/logo.glb`, `draco/`, `logo-revalle.png/.jpg`, `favicon.png`, `icons/role-*.png`).
+Antes desta rodada o projeto não tinha `frontend/public/` — por isso a marca aparecia como
+ícone genérico, no login e na sidebar.
+
+O canvas é carregado sob demanda (`lazy` + `Suspense`) e só acima de 1024px, com
+`LogoFallback` abaixo disso, enquanto carrega e se o WebGL falhar. Verificado: three.js
+fica em chunk próprio (617 kB / 159 kB gzip) e **não** entrou no bundle principal, que foi
+de 985 para 993 kB.
+
+### A tela de login é a exceção do sistema, de propósito
+
+Ela usa `rounded-2xl`, `backdrop-blur-xl` e `shadow-2xl`, que o resto do app proíbe. Isso
+é intencional e foi aceito pelo dono: a tela de login **da própria referência** contradiz o
+design dela — usa vidro, desfoque, brilhos radiais e um ponto verde num sistema acromático
+de raio máximo 8px. Uma das classes dela (`bg-grid-tech`) nem sequer existe no CSS daquela
+branch. Se alguém for revisar coerência de design system, esta tela é a exceção conhecida;
+verificado por grep que nada disso vazou para componente compartilhado.
+
+### Desperdício conhecido de ~1.3MB no build
+
+O three 0.185 declara `new URL('../libs/draco/...', import.meta.url)` no topo do
+`DRACOLoader`. O Vite resolve isso estaticamente e emite os decodificadores em
+`dist/assets/`, mesmo o runtime buscando os nossos em `/draco/` por causa do
+`setDecoderPath`. Resultado: `dist` tem duas cópias do draco e fica em ~6.3MB.
+
+Dá para cortar removendo `setDecoderPath('/draco/')` e apagando `frontend/public/draco/`,
+deixando o Vite servir as cópias que ele já empacota — cairia para ~3MB. Não foi feito
+porque muda o caminho de carregamento exatamente do recurso recém-adicionado e não havia
+como verificar num navegador. Vale fazer depois de confirmar que o logo 3D funciona.
+
+## Ficou de fora
+
+O dono escolheu "visual + componentes estruturais novos", não "reestruturar telas". Então
+duas diferenças reais contra a referência permanecem, ambas markup puro e portáveis sem
+dependência nova:
+
+- **Empréstimo** como assistente de 4 passos com trilho de contexto fixo de 340px à
+  direita, em vez do formulário único atual.
+- **Histórico** como linha do tempo de duas colunas (trilho de filtros e sumário + eventos
+  com nós em mono) em vez da tabela de 19 colunas com rolagem horizontal.

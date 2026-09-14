@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useAuth } from '@/contexts/AuthContext'
 import { useConstants } from '@/hooks/useConstants'
+import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { Peripheral } from '@/api/peripherals'
 import { formatDate } from '@/lib/utils'
@@ -117,17 +118,19 @@ export default function PeripheralsPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h2 className="text-heading text-foreground">Periféricos</h2>
-        <p className="text-body-sm text-muted-foreground">Cadastre e gerencie periféricos como mouse, teclado, monitor etc.</p>
-      </div>
+      <PageHeader
+        eyebrow="Ativos de Suporte"
+        eyebrowDetail="Periféricos"
+        title="Periféricos"
+        description="Cadastre e gerencie periféricos como mouse, teclado, monitor etc."
+      />
 
       {/* Formulário de cadastro */}
       <form
         onSubmit={(e) => { e.preventDefault(); mutation.mutate({ tipo, brand, model, identificador }) }}
         className="surface-panel p-6 space-y-4"
       >
-        <h3 className="text-body-lg font-semibold text-foreground">Cadastrar Periférico</h3>
+        <PanelHeader title="Cadastrar Periférico" description="Tipo, identificador e dados opcionais do periférico." />
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
             <Label>Tipo *</Label>

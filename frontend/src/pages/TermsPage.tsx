@@ -6,6 +6,7 @@ import { DataTable } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
 import { ConfirmacaoTermo, generateAndDownloadLoanTerm } from '@/components/equipment/ConfirmacaoTermo'
+import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { Item } from '@/api/items'
 import { formatDate } from '@/lib/utils'
@@ -84,19 +85,19 @@ export default function TermsPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h2 className="text-heading text-foreground">Termos de Responsabilidade</h2>
-        <p className="text-body-sm text-muted-foreground">Gerencie os termos de empréstimo pendentes e confirmados.</p>
-      </div>
+      <PageHeader
+        eyebrow="Conformidade Documental"
+        eyebrowDetail="Assinaturas Pendentes"
+        title="Termos de Responsabilidade"
+        description="Gerencie os termos de empréstimo pendentes e confirmados."
+      />
 
       {/* Pendentes de confirmação */}
       <div className="space-y-3">
-        <h3 className="text-body-lg font-semibold text-foreground">
-          Pendentes de Confirmação{pendentes.length > 0 && <> (<span className="num">{pendentes.length}</span>)</>}
-        </h3>
-        <p className="text-body-sm text-muted-foreground">
-          Gere o termo, imprima, colete a assinatura e confirme o empréstimo com o PDF assinado.
-        </p>
+        <PanelHeader
+          title={<>Pendentes de Confirmação{pendentes.length > 0 && <> (<span className="num">{pendentes.length}</span>)</>}</>}
+          description="Gere o termo, imprima, colete a assinatura e confirme o empréstimo com o PDF assinado."
+        />
         {pendentes.length === 0 ? (
           <p className="text-body-sm text-muted-foreground py-10 text-center">
             Nenhum empréstimo pendente de confirmação.
@@ -121,7 +122,7 @@ export default function TermsPage() {
 
       {/* Empréstimos ativos (termos já confirmados) */}
       <div className="space-y-3">
-        <h3 className="text-body-lg font-semibold text-foreground">Empréstimos Ativos (<span className="num">{ativos.length}</span>)</h3>
+        <PanelHeader title={<>Empréstimos Ativos (<span className="num">{ativos.length}</span>)</>} />
         {ativos.length === 0 ? (
           <p className="text-body-sm text-muted-foreground py-10 text-center">
             Nenhum empréstimo ativo no momento.

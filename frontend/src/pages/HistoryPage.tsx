@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { toast } from '@/components/ui/toast'
+import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
 import { useAuth } from '@/contexts/AuthContext'
 import type { ColumnDef } from '@tanstack/react-table'
 import { formatCpf, formatDateTime } from '@/lib/utils'
@@ -221,15 +222,18 @@ export default function HistoryPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-heading text-foreground">Histórico</h2>
-        <p className="text-body-sm text-muted-foreground">Registro completo de todas as operações.</p>
-      </div>
+      <PageHeader
+        eyebrow="Auditoria e Rastreabilidade"
+        eyebrowDetail="Linha Temporal"
+        title="Histórico"
+        description="Registro completo de todas as operações."
+      />
 
       {/* Confirmação de estorno — exige a senha do operador logado (T4). Alto
           contraste proposital: essa ação reescreve o histórico registrado. */}
       {reversingEntry && (
         <div className="figure-ground-panel space-y-4">
+          <PanelHeader title="Confirmação de Estorno" />
           <h3 className="text-heading-sm text-foreground">Confirmar Estorno — Operação #<span className="num">{reversingEntry.id}</span></h3>
           <p className="text-body-sm text-muted-foreground">
             Isso desfará a operação <strong>&quot;{reversingEntry.operation ?? '-'}&quot;</strong>
@@ -268,19 +272,25 @@ export default function HistoryPage() {
           Carregando...
         </div>
       ) : (
-        <DataTable
-          data={history}
-          columns={columns}
-          searchPlaceholder="Buscar por operador, usuário, tipo, marca, identificador..."
-          pagination={{
-            total,
-            pageIndex,
-            pageSize: PAGE_SIZE,
-            onPageChange: setPageIndex,
-            search,
-            onSearchChange: setSearch,
-          }}
-        />
+        <div className="space-y-3">
+          <PanelHeader
+            title="Consulta de Operações"
+            description="Busque por operador, usuário, tipo, marca ou identificador."
+          />
+          <DataTable
+            data={history}
+            columns={columns}
+            searchPlaceholder="Buscar por operador, usuário, tipo, marca, identificador..."
+            pagination={{
+              total,
+              pageIndex,
+              pageSize: PAGE_SIZE,
+              onPageChange: setPageIndex,
+              search,
+              onSearchChange: setSearch,
+            }}
+          />
+        </div>
       )}
     </div>
   )

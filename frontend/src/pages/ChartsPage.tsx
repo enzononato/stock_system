@@ -15,7 +15,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Calendar, Filter, ArrowUpRight, ArrowDownLeft, PackagePlus, Loader2 } from 'lucide-react'
+import { StatBlock } from '@/components/ui/StatBlock'
+import { Calendar, Filter, Loader2 } from 'lucide-react'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { useTheme } from '@/lib/theme'
 
 const MONTHS = [
@@ -110,16 +112,12 @@ export default function ChartsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-heading text-foreground">
-            Dashboard & Indicadores
-          </h2>
-          <p className="text-body-sm text-muted-foreground">
-            Análise temporal de empréstimos, devoluções e novos cadastros de equipamentos
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Business Intelligence"
+        eyebrowDetail="Indicadores Operacionais"
+        title="Dashboard & Indicadores"
+        description="Análise temporal de empréstimos, devoluções e novos cadastros de equipamentos"
+      />
 
       {/* Filter Control Bar */}
       <div className="flex flex-wrap items-end gap-4 surface-panel p-4">
@@ -161,34 +159,16 @@ export default function ChartsPage() {
 
       {/* Summary KPI Cards for Selected Month */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="surface-panel p-5 flex items-center gap-4">
-          <div className="h-12 w-12 rounded-md bg-surface-alt border border-border text-foreground flex items-center justify-center">
-            <ArrowUpRight size={24} />
-          </div>
-          <div>
-            <p className="text-caption text-muted-foreground">Empréstimos no Mês</p>
-            <p className="text-heading-lg num text-foreground">{totalEmprestimos}</p>
-          </div>
+        <div className="surface-panel p-4">
+          <StatBlock label="Empréstimos no Mês" value={totalEmprestimos} symbol="↑" />
         </div>
 
-        <div className="surface-panel p-5 flex items-center gap-4">
-          <div className="h-12 w-12 rounded-md bg-surface-alt border border-border text-foreground flex items-center justify-center">
-            <ArrowDownLeft size={24} />
-          </div>
-          <div>
-            <p className="text-caption text-muted-foreground">Devoluções no Mês</p>
-            <p className="text-heading-lg num text-foreground">{totalDevolucoes}</p>
-          </div>
+        <div className="surface-panel p-4">
+          <StatBlock label="Devoluções no Mês" value={totalDevolucoes} symbol="↓" />
         </div>
 
-        <div className="surface-panel p-5 flex items-center gap-4">
-          <div className="h-12 w-12 rounded-md bg-surface-alt border border-border text-foreground flex items-center justify-center">
-            <PackagePlus size={24} />
-          </div>
-          <div>
-            <p className="text-caption text-muted-foreground">Cadastros no Mês</p>
-            <p className="text-heading-lg num text-foreground">{totalCadastros}</p>
-          </div>
+        <div className="surface-panel p-4">
+          <StatBlock label="Cadastros no Mês" value={totalCadastros} symbol="#" />
         </div>
       </div>
 

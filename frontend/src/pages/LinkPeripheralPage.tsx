@@ -17,6 +17,7 @@ import { FileUpload } from '@/components/ui/FileUpload'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import { toast } from '@/components/ui/toast'
+import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
 import { Link2, Unlink, RefreshCw } from 'lucide-react'
 
 // Tipos de equipamento que aceitam periféricos. Regra própria desta tela
@@ -150,10 +151,12 @@ export default function LinkPeripheralPage() {
 
   return (
     <div className="page-container-reading space-y-6">
-      <div>
-        <h2 className="text-heading text-foreground">Vincular Periféricos</h2>
-        <p className="text-body-sm text-muted-foreground">Associe periféricos a equipamentos como desktops, notebooks, switches e impressoras.</p>
-      </div>
+      <PageHeader
+        eyebrow="Ativos de Suporte"
+        eyebrowDetail="Vínculo de Periféricos"
+        title="Vincular Periféricos"
+        description="Associe periféricos a equipamentos como desktops, notebooks, switches e impressoras."
+      />
 
       {/* Seletor de equipamento */}
       <div className="surface-panel p-4 flex flex-col gap-2">
@@ -182,12 +185,14 @@ export default function LinkPeripheralPage() {
         <div className="grid grid-cols-2 gap-6">
           {/* Periféricos vinculados */}
           <div className="surface-panel p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-body-lg font-semibold text-foreground">Vinculados (<span className="num">{linkedPeripherals.length}</span>)</h3>
-              <Button size="sm" variant="ghost" onClick={() => refetchLinked()}>
-                <RefreshCw size={13} />
-              </Button>
-            </div>
+            <PanelHeader
+              title={<>Periféricos Vinculados (<span className="num">{linkedPeripherals.length}</span>)</>}
+              actions={
+                <Button size="sm" variant="ghost" onClick={() => refetchLinked()}>
+                  <RefreshCw size={13} />
+                </Button>
+              }
+            />
             {linkedPeripherals.length === 0 ? (
               <p className="text-body-sm text-muted-foreground py-10 text-center">Nenhum periférico vinculado.</p>
             ) : (
@@ -215,7 +220,7 @@ export default function LinkPeripheralPage() {
 
           {/* Periféricos disponíveis */}
           <div className="surface-panel p-4 space-y-3">
-            <h3 className="text-body-lg font-semibold text-foreground">Disponíveis (<span className="num">{availablePeripherals.length}</span>)</h3>
+            <PanelHeader title={<>Periféricos Disponíveis (<span className="num">{availablePeripherals.length}</span>)</>} />
             {availablePeripherals.length === 0 ? (
               <p className="text-body-sm text-muted-foreground py-10 text-center">Nenhum periférico disponível.</p>
             ) : (
@@ -238,6 +243,7 @@ export default function LinkPeripheralPage() {
       {/* Painel de substituição */}
       {replacingLinkId && replacingOldId && (
         <div className="figure-ground-panel space-y-4">
+          <PanelHeader title="Substituição de Periférico" />
           <h3 className="text-heading-sm text-foreground">Substituir Periférico #<span className="num">{replacingOldId}</span></h3>
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">

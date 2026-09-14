@@ -1,32 +1,13 @@
 import { useAuth } from '@/contexts/AuthContext'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { LogOut, Moon, Sun } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useTheme } from '@/lib/theme'
 
-const PAGE_TITLES: Record<string, string> = {
-  '/': 'Visão Geral do Estoque',
-  '/register': 'Cadastrar Novo Equipamento',
-  '/peripherals': 'Gestão de Periféricos',
-  '/link': 'Vincular Periférico a Equipamento',
-  '/loan': 'Realizar Empréstimo',
-  '/return': 'Confirmar Devolução',
-  '/remove': 'Remover / Estornar Itens',
-  '/history': 'Histórico & Auditoria de Movimentações',
-  '/report': 'Relatórios Gerenciais BI',
-  '/charts': 'Dashboard & Análise de Gráficos',
-  '/terms': 'Termos de Responsabilidade',
-  '/users': 'Gestão de Usuários do Sistema',
-  '/unidades': 'Unidades Operacionais & Revendas',
-}
-
-export default function TopBar({ title }: { title?: string }) {
+export default function TopBar() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-  const location = useLocation()
   const { theme, toggle } = useTheme()
-
-  const activeTitle = title || PAGE_TITLES[location.pathname] || 'Controle de Estoque'
 
   async function handleLogout() {
     await logout()
@@ -34,11 +15,7 @@ export default function TopBar({ title }: { title?: string }) {
   }
 
   return (
-    <header className="h-14 bg-surface border-b border-border px-4 sm:px-6 flex items-center justify-between gap-3 shrink-0 z-30">
-      <h1 className="text-body-lg font-semibold text-foreground truncate min-w-0">
-        {activeTitle}
-      </h1>
-
+    <header className="h-14 bg-surface border-b border-border px-4 sm:px-6 flex items-center justify-end gap-3 shrink-0 z-30">
       {user && (
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">

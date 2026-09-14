@@ -73,10 +73,18 @@ export function DataTable<TData>({
   const showSearchInput = pagination ? Boolean(pagination.onSearchChange) : true
 
   return (
-    <div className={cn('surface-panel p-5 space-y-4', className)}>
-      {/* Search Header Bar */}
+    <div className={cn('space-y-4', className)}>
+      {/*
+       * Busca em painel próprio (toolbar), separado do painel da tabela — o
+       * mesmo padrão da referência: a busca não compartilha borda com os
+       * dados, e a tabela fica livre para correr de ponta a ponta no painel
+       * abaixo. Sem caption de PanelHeader aqui de propósito: toda página que
+       * chama DataTable já renderiza um PanelHeader ou <h3> imediatamente
+       * acima (ex.: "Empréstimos Ativos (N)", "Unidades cadastradas") — uma
+       * legenda aqui duplicaria essa faixa.
+       */}
       {showSearchInput && (
-        <div className="flex items-center justify-between gap-4">
+        <div className="surface-panel p-3">
           <div className="relative max-w-md w-full">
             <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
@@ -97,111 +105,115 @@ export function DataTable<TData>({
         </div>
       )}
 
-      {/* Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-surface-alt border-b border-border">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <th
-                    key={header.id}
-                    className="text-caption text-muted-foreground px-4 py-2.5 text-left whitespace-nowrap select-none"
-                    onClick={header.column.getToggleSortingHandler()}
-                    style={{ cursor: header.column.getCanSort() ? 'pointer' : 'default' }}
-                  >
-                    <div className="flex items-center gap-1.5 hover:text-foreground transition-colors">
-                      {flexRender(header.column.columnDef.header, header.getContext())}
-                      {header.column.getCanSort() && <ArrowUpDown size={12} className="opacity-50" />}
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            ))}
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={columns.length} className="text-body-sm text-muted-foreground py-10 text-center">
-                  <p>Nenhum resultado encontrado.</p>
-                  <p className="mt-1">Tente ajustar seus termos de busca ou filtros.</p>
-                </td>
-              </tr>
-            ) : (
-              rows.map((row) => (
-                <tr
-                  key={row.id}
-                  onClick={(e) => {
-                    const target = e.target as HTMLElement
-                    if (target.closest('button, a, input, select, [role="button"]')) {
-                      return
-                    }
-                    onRowClick?.(row.original)
-                  }}
-                  className={cn(
-                    'border-b border-border last:border-0 hover:bg-surface-alt transition-colors duration-micro',
-                    onRowClick && 'cursor-pointer'
-                  )}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-4 py-2.5 text-body-sm whitespace-nowrap">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
+      {/* Painel da tabela: overflow-hidden para o cabeçalho (bg-surface-alt) chegar até a borda do painel. */}
+      <div className="surface-panel overflow-hidden">
+        {/* overflow-x-auto fica só ao redor de <table> — preserva a correção
+            anterior de tabela larga rolar sem arrastar busca/paginação para fora da tela. */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-surface-alt border-b border-border">
+              {table.getHeaderGroups().map((headerGroup) => (
+                <tr key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <th
+                      key={header.id}
+                      className="text-caption text-muted-foreground px-4 py-2.5 text-left whitespace-nowrap select-none"
+                      onClick={header.column.getToggleSortingHandler()}
+                      style={{ cursor: header.column.getCanSort() ? 'pointer' : 'default' }}
+                    >
+                      <div className="flex items-center gap-1.5 hover:text-foreground transition-colors">
+                        {flexRender(header.column.columnDef.header, header.getContext())}
+                        {header.column.getCanSort() && <ArrowUpDown size={12} className="opacity-50" />}
+                      </div>
+                    </th>
                   ))}
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ))}
+            </thead>
+            <tbody>
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={columns.length} className="text-body-sm text-muted-foreground py-10 text-center">
+                    <p>Nenhum resultado encontrado.</p>
+                    <p className="mt-1">Tente ajustar seus termos de busca ou filtros.</p>
+                  </td>
+                </tr>
+              ) : (
+                rows.map((row) => (
+                  <tr
+                    key={row.id}
+                    onClick={(e) => {
+                      const target = e.target as HTMLElement
+                      if (target.closest('button, a, input, select, [role="button"]')) {
+                        return
+                      }
+                      onRowClick?.(row.original)
+                    }}
+                    className={cn(
+                      'border-b border-border last:border-0 hover:bg-surface-alt transition-colors duration-micro',
+                      onRowClick && 'cursor-pointer'
+                    )}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <td key={cell.id} className="px-4 py-2.5 text-body-sm whitespace-nowrap">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
 
-      {/* Pagination Footer */}
-      {pagination ? (
-        <div className="flex items-center justify-between gap-4 pt-1">
-          <p className="text-caption text-muted-foreground whitespace-nowrap">
-            {pagination.total === 0 ? (
-              <>
-                <span className="num">0</span> registros
-              </>
-            ) : (
-              <>
-                <span className="num">{rangeStart}</span>–<span className="num">{rangeEnd}</span> de{' '}
-                <span className="num">{pagination.total}</span> registros
-              </>
-            )}
-          </p>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => pagination.onPageChange(pagination.pageIndex - 1)}
-              disabled={pagination.pageIndex <= 0}
-            >
-              <ChevronLeft size={14} />Anterior
-            </Button>
-            <span className="text-caption text-muted-foreground px-2 py-1 rounded-md bg-surface-alt whitespace-nowrap">
-              Página <span className="num">{currentPage}</span> de <span className="num">{pageCount}</span>
-            </span>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => pagination.onPageChange(pagination.pageIndex + 1)}
-              disabled={pagination.pageIndex + 1 >= pageCount}
-            >
-              Próxima<ChevronRight size={14} />
-            </Button>
+        {/* Pagination Footer — dentro do painel da tabela, com padding próprio já que o painel não tem mais p-5. */}
+        {pagination ? (
+          <div className="flex items-center justify-between gap-4 px-4 py-3 border-t border-border">
+            <p className="text-caption text-muted-foreground whitespace-nowrap">
+              {pagination.total === 0 ? (
+                <>
+                  <span className="num">0</span> registros
+                </>
+              ) : (
+                <>
+                  <span className="num">{rangeStart}</span>–<span className="num">{rangeEnd}</span> de{' '}
+                  <span className="num">{pagination.total}</span> registros
+                </>
+              )}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => pagination.onPageChange(pagination.pageIndex - 1)}
+                disabled={pagination.pageIndex <= 0}
+              >
+                <ChevronLeft size={14} />Anterior
+              </Button>
+              <span className="text-caption text-muted-foreground px-2 py-1 rounded-md bg-surface-alt whitespace-nowrap">
+                Página <span className="num">{currentPage}</span> de <span className="num">{pageCount}</span>
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => pagination.onPageChange(pagination.pageIndex + 1)}
+                disabled={pagination.pageIndex + 1 >= pageCount}
+              >
+                Próxima<ChevronRight size={14} />
+              </Button>
+            </div>
           </div>
-        </div>
-      ) : (
-        <div className="flex items-center justify-between pt-1">
-          <p className="text-caption text-muted-foreground">
-            <span className="num">{table.getFilteredRowModel().rows.length}</span> de{' '}
-            <span className="num">{data.length}</span> registros
-          </p>
-        </div>
-      )}
+        ) : (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+            <p className="text-caption text-muted-foreground">
+              <span className="num">{table.getFilteredRowModel().rows.length}</span> de{' '}
+              <span className="num">{data.length}</span> registros
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

@@ -19,38 +19,46 @@ describe('ThemeProvider', () => {
     document.documentElement.classList.remove('dark')
   })
 
-  it('começa no modo claro quando não há preferência salva', () => {
+  it('começa no modo escuro quando não há preferência salva', () => {
     render(<ThemeProvider><Sonda /></ThemeProvider>)
-    expect(screen.getByTestId('tema')).toHaveTextContent('light')
-    expect(document.documentElement).not.toHaveClass('dark')
+    expect(screen.getByTestId('tema')).toHaveTextContent('dark')
+    expect(document.documentElement).toHaveClass('dark')
   })
 
-  it('alterna para escuro e aplica a classe no html', async () => {
+  it('alterna para claro e remove a classe do html', async () => {
     const user = userEvent.setup()
     render(<ThemeProvider><Sonda /></ThemeProvider>)
     await user.click(screen.getByRole('button', { name: 'alternar' }))
-    expect(screen.getByTestId('tema')).toHaveTextContent('dark')
-    expect(document.documentElement).toHaveClass('dark')
+    expect(screen.getByTestId('tema')).toHaveTextContent('light')
+    expect(document.documentElement).not.toHaveClass('dark')
   })
 
   it('persiste a escolha no localStorage', async () => {
     const user = userEvent.setup()
     render(<ThemeProvider><Sonda /></ThemeProvider>)
     await user.click(screen.getByRole('button', { name: 'alternar' }))
-    expect(localStorage.getItem('tema')).toBe('dark')
+    expect(localStorage.getItem('tema')).toBe('light')
   })
 
   it('restaura a preferência salva ao montar', () => {
+    localStorage.setItem('tema', 'light')
+    render(<ThemeProvider><Sonda /></ThemeProvider>)
+    expect(screen.getByTestId('tema')).toHaveTextContent('light')
+    expect(document.documentElement).not.toHaveClass('dark')
+  })
+
+  it('respeita o modo escuro salvo explicitamente', () => {
     localStorage.setItem('tema', 'dark')
     render(<ThemeProvider><Sonda /></ThemeProvider>)
     expect(screen.getByTestId('tema')).toHaveTextContent('dark')
     expect(document.documentElement).toHaveClass('dark')
   })
 
-  it('ignora valor inválido no localStorage e cai no claro', () => {
+  it('ignora valor inválido no localStorage e cai no escuro', () => {
     localStorage.setItem('tema', 'roxo')
     render(<ThemeProvider><Sonda /></ThemeProvider>)
-    expect(screen.getByTestId('tema')).toHaveTextContent('light')
+    expect(screen.getByTestId('tema')).toHaveTextContent('dark')
+    expect(document.documentElement).toHaveClass('dark')
   })
 
   it('useTheme fora do provider lança erro explicativo', () => {

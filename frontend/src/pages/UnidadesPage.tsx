@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { StatBlock } from '@/components/ui/StatBlock'
 import { DataTable } from '@/components/ui/DataTable'
 import { toast } from '@/components/ui/toast'
 import {
@@ -28,8 +29,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Building2, Pencil, Ban, BarChart3, RotateCcw, Loader2 } from 'lucide-react'
+import { Pencil, Ban, BarChart3, RotateCcw, Loader2 } from 'lucide-react'
 
 // --- Validação e máscaras -----------------------------------------------------
 // `lib/utils.ts` (fora da posse deste módulo) já tem `isValidCpf` seguindo o
@@ -107,18 +109,6 @@ export function maskUfInput(value: string): string {
  */
 const STATUS_ORDER = ['Disponível', 'Indisponível', 'Pendente', 'Pendente Devolução']
 
-// Sem ícone (diferente do padrão de ChartsPage): esta variante do cartão de
-// métrica não tem um por padrão — mantido assim de propósito, só alinhando
-// superfície, raio e tipografia às demais.
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="surface-panel p-5">
-      <p className="text-caption text-muted-foreground">{label}</p>
-      <p className="text-heading-lg num text-foreground">{value}</p>
-    </div>
-  )
-}
-
 function IndicadoresPanel({ dados }: { dados: IndicadoresUnidade }) {
   // "Sem movimento" não é um erro — é o estado normal de uma unidade recém
   // criada ou que nunca recebeu equipamentos. Sem este aviso explícito, uma
@@ -134,12 +124,24 @@ function IndicadoresPanel({ dados }: { dados: IndicadoresUnidade }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <Stat label="Termos Emitidos" value={dados.termos_emitidos} />
-        <Stat label="Termos Confirmados" value={dados.termos_confirmados} />
-        <Stat label="Devoluções Concluídas" value={dados.devolucoes_concluidas} />
-        <Stat label="Total de Itens" value={dados.itens_total} />
-        <Stat label="Empréstimos Ativos" value={dados.emprestimos_ativos} />
-        <Stat label="Periféricos Vinculados" value={dados.perifericos_vinculados} />
+        <div className="surface-panel p-4">
+          <StatBlock label="Termos Emitidos" value={dados.termos_emitidos} />
+        </div>
+        <div className="surface-panel p-4">
+          <StatBlock label="Termos Confirmados" value={dados.termos_confirmados} />
+        </div>
+        <div className="surface-panel p-4">
+          <StatBlock label="Devoluções Concluídas" value={dados.devolucoes_concluidas} symbol="↓" />
+        </div>
+        <div className="surface-panel p-4">
+          <StatBlock label="Total de Itens" value={dados.itens_total} symbol="◯" />
+        </div>
+        <div className="surface-panel p-4">
+          <StatBlock label="Empréstimos Ativos" value={dados.emprestimos_ativos} symbol="↑" />
+        </div>
+        <div className="surface-panel p-4">
+          <StatBlock label="Periféricos Vinculados" value={dados.perifericos_vinculados} />
+        </div>
       </div>
 
       <div>
@@ -438,19 +440,19 @@ export default function UnidadesPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h2 className="text-heading text-foreground">Unidades</h2>
-        <p className="text-body-sm text-muted-foreground">
-          Dados jurídicos e fiscais das unidades (antigas "revendas") e indicadores por unidade.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Estrutura Organizacional"
+        eyebrowDetail="Unidades e Revendas"
+        title="Unidades"
+        description='Dados jurídicos e fiscais das unidades (antigas "revendas") e indicadores por unidade.'
+      />
 
       {/* Criar / editar unidade */}
       <form onSubmit={handleSubmit} className="surface-panel p-6 space-y-4 max-w-3xl">
-        <h3 className="text-body-lg font-semibold text-foreground flex items-center gap-2">
-          <Building2 size={16} />
-          {editingId !== null ? `Editar Unidade #${editingId}` : 'Nova Unidade'}
-        </h3>
+        <PanelHeader
+          title={editingId !== null ? `Editar Unidade #${editingId}` : 'Nova Unidade'}
+          description="Dados jurídicos, fiscais e de localização da unidade."
+        />
 
         {editingId !== null && (
           <p className="border border-border-strong bg-surface-alt p-3 rounded text-body-sm">
@@ -593,15 +595,14 @@ export default function UnidadesPage() {
       {/* Indicadores */}
       {indicadoresUnidadeId !== null && (
         <div className="surface-panel p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-body-lg font-semibold text-foreground flex items-center gap-2">
-              <BarChart3 size={16} />
-              Indicadores — {unidadeSelecionadaIndicadores?.nome ?? `Unidade #${indicadoresUnidadeId}`}
-            </h3>
-            <Button variant="ghost" size="sm" onClick={() => setIndicadoresUnidadeId(null)}>
-              Fechar
-            </Button>
-          </div>
+          <PanelHeader
+            title={`Indicadores — ${unidadeSelecionadaIndicadores?.nome ?? `Unidade #${indicadoresUnidadeId}`}`}
+            actions={
+              <Button variant="ghost" size="sm" onClick={() => setIndicadoresUnidadeId(null)}>
+                Fechar
+              </Button>
+            }
+          />
 
           {indicadoresLoading ? (
             <p className="text-body-sm text-muted-foreground">Carregando indicadores...</p>

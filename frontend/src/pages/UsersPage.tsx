@@ -19,8 +19,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
 import type { ColumnDef } from '@tanstack/react-table'
-import { UserPlus, Trash2, Key } from 'lucide-react'
+import { Trash2, Key } from 'lucide-react'
 
 const ROLES = ['Gestor','Técnico','Jovem Aprendiz']
 
@@ -126,17 +127,19 @@ export default function UsersPage() {
 
   return (
     <div className="page-container-reading space-y-8">
-      <div>
-        <h2 className="text-heading text-foreground">Usuários</h2>
-        <p className="text-body-sm text-muted-foreground">Gerencie os usuários do sistema.</p>
-      </div>
+      <PageHeader
+        eyebrow="Administração"
+        eyebrowDetail="Controle de Acesso"
+        title="Usuários"
+        description="Gerencie os usuários do sistema."
+      />
 
       {/* Criar usuário */}
       <form
         onSubmit={(e) => { e.preventDefault(); createMutation.mutate() }}
         className="surface-panel p-6 space-y-4"
       >
-        <h3 className="text-body-lg font-semibold text-foreground flex items-center gap-2"><UserPlus size={16} />Novo Usuário</h3>
+        <PanelHeader title="Cadastro de Usuário" description="Defina usuário, senha e função de acesso." />
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
             <Label>Nome de Usuário *</Label>
@@ -164,6 +167,7 @@ export default function UsersPage() {
       {/* Alterar senha */}
       {changingPasswordId && (
         <div className="figure-ground-panel space-y-3">
+          <PanelHeader title="Segurança da Conta" />
           <h3 className="text-heading-sm text-foreground">Alterar Senha — Usuário #<span className="num">{changingPasswordId}</span></h3>
           <div className="flex gap-3">
             <Input

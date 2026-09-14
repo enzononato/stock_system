@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from '@/components/ui/toast'
+import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
 import { formatDateTime } from '@/lib/utils'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Download, Loader2 } from 'lucide-react'
@@ -66,30 +67,35 @@ export default function ReportPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-heading text-foreground">Relatório Mensal</h2>
-        <p className="text-body-sm text-muted-foreground">Visualize todas as operações de um determinado mês.</p>
-      </div>
+      <PageHeader
+        eyebrow="Inteligência de Negócio"
+        eyebrowDetail="Relatórios Gerenciais"
+        title="Relatório Mensal"
+        description="Visualize todas as operações de um determinado mês."
+      />
 
-      <div className="surface-panel flex items-end gap-4 p-4">
-        <div className="flex flex-col gap-1.5">
-          <Label>Ano</Label>
-          <Input value={year} onChange={e => setYear(e.target.value)} className="w-24" />
+      <div className="surface-panel p-4 space-y-3">
+        <PanelHeader title="Filtros de Período" />
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label>Ano</Label>
+            <Input value={year} onChange={e => setYear(e.target.value)} className="w-24" />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Mês</Label>
+            <Select value={month} onValueChange={setMonth}>
+              <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {MONTHS.map((m, i) => <SelectItem key={i+1} value={String(i+1)}>{m}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button onClick={handleGenerate}>Gerar Relatório</Button>
+          <Button variant="outline" onClick={handleExport} disabled={isExporting}>
+            <Download size={14} />
+            {isExporting ? 'Exportando...' : 'Exportar CSV'}
+          </Button>
         </div>
-        <div className="flex flex-col gap-1.5">
-          <Label>Mês</Label>
-          <Select value={month} onValueChange={setMonth}>
-            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {MONTHS.map((m, i) => <SelectItem key={i+1} value={String(i+1)}>{m}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <Button onClick={handleGenerate}>Gerar Relatório</Button>
-        <Button variant="outline" onClick={handleExport} disabled={isExporting}>
-          <Download size={14} />
-          {isExporting ? 'Exportando...' : 'Exportar CSV'}
-        </Button>
       </div>
 
       {isLoading ? (
