@@ -7,25 +7,26 @@
     <title>Controle de Estoque — Revalle</title>
     <!--
       Aplica o tema salvo ANTES da primeira pintura, para quem prefere o modo
-      escuro não ver um flash de tela clara no recarregamento. Precisa ser
+      claro não ver um flash de tela escura no recarregamento. Precisa ser
       inline e síncrono (não um <script src> nem type="module", que carregam
       de forma assíncrona/adiada) e rodar aqui, antes da folha de estilo do
       Google Fonts e do script de módulo do app — senão a página já pintou de
-      claro antes de sabermos que o tema é escuro. Usa a mesma chave e a mesma
-      semântica de theme.tsx (chave 'tema'; qualquer valor que não seja
-      'dark' é claro). O useEffect de theme.tsx continua necessário — ele
-      cuida da persistência e do estado inicial do React; este script só evita
-      o flash visual antes disso.
+      escuro antes de sabermos que o tema é claro. O design é escuro por
+      padrão: usa a mesma chave e a mesma semântica de theme.tsx (chave
+      'tema'; só fica claro quando o valor salvo for exatamente 'light').
+      O useEffect de theme.tsx continua necessário — ele cuida da
+      persistência e do estado inicial do React; este script só evita o
+      flash visual antes disso.
     -->
     <script>
       (function () {
         try {
-          if (localStorage.getItem('tema') === 'dark') {
+          if (localStorage.getItem('tema') !== 'light') {
             document.documentElement.classList.add('dark')
           }
         } catch (e) {
           // localStorage pode lançar em janela anônima — sem persistência,
-          // a página segue no tema claro (mesmo comportamento de lerTemaSalvo em theme.tsx).
+          // a página segue no tema escuro (mesmo comportamento de lerTemaSalvo em theme.tsx).
         }
       })()
     </script>

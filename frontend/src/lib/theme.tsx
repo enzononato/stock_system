@@ -13,16 +13,17 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | null>(null)
 
 /**
- * Lê a preferência salva. Qualquer valor que não seja 'light' ou 'dark'
- * (lixo, versão antiga, edição manual) cai no claro em vez de quebrar.
+ * Lê a preferência salva. O design é escuro por padrão: só cai no claro
+ * quando o valor salvo for exatamente 'light'. Qualquer outro valor (lixo,
+ * versão antiga, edição manual) cai no escuro em vez de quebrar.
  * localStorage pode lançar em janela anônima — por isso o try/catch.
  */
 function lerTemaSalvo(): Tema {
   try {
     const salvo = localStorage.getItem(CHAVE_ARMAZENAMENTO)
-    return salvo === 'dark' ? 'dark' : 'light'
+    return salvo === 'light' ? 'light' : 'dark'
   } catch {
-    return 'light'
+    return 'dark'
   }
 }
 
