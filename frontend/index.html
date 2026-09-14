@@ -20,13 +20,20 @@
     -->
     <script>
       (function () {
+        // Lê o valor salvo DENTRO do try/catch, mas aplica a classe FORA dele:
+        // se localStorage.getItem lançar (janela anônima, storage bloqueado), a
+        // variável fica no valor padrão e o tema escuro ainda é aplicado — antes,
+        // o classList.add ficava dentro do mesmo `if` cuja condição podia lançar,
+        // e uma exceção aí pulava a aplicação da classe, deixando <html> sem
+        // 'dark' até o React montar (flash de tema claro).
+        var temaSalvo = null
         try {
-          if (localStorage.getItem('tema') !== 'light') {
-            document.documentElement.classList.add('dark')
-          }
+          temaSalvo = localStorage.getItem('tema')
         } catch (e) {
-          // localStorage pode lançar em janela anônima — sem persistência,
-          // a página segue no tema escuro (mesmo comportamento de lerTemaSalvo em theme.tsx).
+          // sem persistência disponível — segue com temaSalvo = null (padrão escuro)
+        }
+        if (temaSalvo !== 'light') {
+          document.documentElement.classList.add('dark')
         }
       })()
     </script>

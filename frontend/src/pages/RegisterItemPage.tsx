@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from '@/components/ui/toast'
+import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
 import { useConstants } from '@/hooks/useConstants'
 import { isValidNotaFiscal, maskNotaFiscalInput } from '@/lib/utils'
 import { ArrowLeft, Save, Loader2 } from 'lucide-react'
@@ -112,14 +113,23 @@ export default function RegisterItemPage({ mode }: Props) {
 
   return (
     <div className="page-container-reading space-y-6">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
-          <ArrowLeft size={16} />
-        </Button>
-        <h2 className="text-heading text-foreground">{mode === 'create' ? 'Cadastrar Item' : 'Editar Item'}</h2>
-      </div>
+      <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
+        <ArrowLeft size={16} />
+      </Button>
+
+      <PageHeader
+        eyebrow="Inventário"
+        eyebrowDetail={mode === 'create' ? 'Novo Cadastro' : 'Edição de Item'}
+        title={mode === 'create' ? 'Cadastrar Item' : 'Editar Item'}
+        description={
+          mode === 'create'
+            ? 'Cadastre um novo equipamento no estoque.'
+            : 'Atualize os dados do equipamento selecionado.'
+        }
+      />
 
       <form onSubmit={handleSubmit} className="surface-panel p-6 space-y-4">
+        <PanelHeader title="Dados do Equipamento" description="Informações gerais do item a ser cadastrado." />
         {/* Tipo */}
         <div className="flex flex-col gap-1.5">
           <Label>Tipo *</Label>

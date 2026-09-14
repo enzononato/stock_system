@@ -10,6 +10,7 @@ import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import { toast } from '@/components/ui/toast'
 import { DataTable } from '@/components/ui/DataTable'
 import { ConfirmacaoTermo, generateAndDownloadLoanTerm } from '@/components/equipment/ConfirmacaoTermo'
+import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { Item } from '@/api/items'
 import { useConstants } from '@/hooks/useConstants'
@@ -99,12 +100,18 @@ export default function LoanPage() {
 
   return (
     <div className="page-container-reading space-y-8">
-      <div>
-        <h2 className="text-heading text-foreground">Emprestar Equipamento</h2>
-        <p className="text-body-sm text-muted-foreground">Preencha os dados e inicie o processo de empréstimo.</p>
-      </div>
+      <PageHeader
+        eyebrow="Movimentação de Ativos"
+        eyebrowDetail="Concessão de Equipamento"
+        title="Emprestar Equipamento"
+        description="Preencha os dados e inicie o processo de empréstimo."
+      />
 
       <form onSubmit={handleLoanSubmit} className="surface-panel p-6 space-y-4">
+        <PanelHeader
+          title="Dados do Empréstimo"
+          description="Informe o equipamento e os dados do colaborador responsável."
+        />
         <div className="flex flex-col gap-1.5">
           <Label>Equipamento *</Label>
           <SearchableSelect

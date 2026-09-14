@@ -52,11 +52,16 @@ export default function LoginPage() {
           {/* Identidade compacta — some a partir de lg (o painel institucional
               ao lado já mostra a marca); abaixo de lg é o painel que some, e
               sem isto a tela ficaria sem nenhuma identidade visual. */}
-          <div className="flex items-center gap-3 lg:hidden">
-            <div className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-primary text-primary-foreground">
-              <Boxes size={20} />
+          <div className="flex flex-col gap-1.5 lg:hidden">
+            <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
+              Acesso Restrito
+            </span>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-primary text-primary-foreground">
+                <Boxes size={20} />
+              </div>
+              <h1 className="text-heading-sm font-semibold text-foreground">Controle de Estoque</h1>
             </div>
-            <h1 className="text-heading-sm font-semibold text-foreground">Controle de Estoque</h1>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">

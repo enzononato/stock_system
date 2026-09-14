@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import { FileUpload } from '@/components/ui/FileUpload'
 import { toast } from '@/components/ui/toast'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { useConstants } from '@/hooks/useConstants'
 import { Trash2 } from 'lucide-react'
 
@@ -59,10 +60,12 @@ export default function RemovePage() {
 
   return (
     <div className="page-container-reading space-y-6">
-      <div>
-        <h2 className="text-heading text-destructive">Remover Equipamento</h2>
-        <p className="text-body-sm text-muted-foreground">Remove permanentemente o item do estoque. Esta ação não pode ser desfeita.</p>
-      </div>
+      <PageHeader
+        eyebrow="Baixa de Ativos"
+        eyebrowDetail="Ação Irreversível"
+        title="Remover Equipamento"
+        description="Remove permanentemente o item do estoque. Esta ação não pode ser desfeita."
+      />
 
       <form onSubmit={handleSubmit} className="figure-ground-panel space-y-4">
         <div className="flex flex-col gap-1.5">

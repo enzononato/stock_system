@@ -8,6 +8,7 @@ import { StatusBadge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ItemDetailsModal } from '@/components/equipment/ItemDetailsModal'
+import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
 import { useAuth } from '@/contexts/AuthContext'
 import { useConstants } from '@/hooks/useConstants'
 import { formatDate } from '@/lib/utils'
@@ -128,28 +129,26 @@ export default function StockPage() {
   return (
     <div className="space-y-6">
       {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
-        <div>
-          <h2 className="text-heading text-foreground">
-            Estoque de Equipamentos
-          </h2>
-          <p className="text-body-sm text-muted-foreground">
-            Gerenciamento centralizado de hardware e insumos de TI
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" onClick={handleRefresh}>
-            <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
-            Atualizar
-          </Button>
-          {hasRole('Gestor', 'Técnico') && (
-            <Button variant="gradient" size="sm" onClick={() => navigate('/register')}>
-              <Plus size={16} />
-              Novo Equipamento
+      <PageHeader
+        eyebrow="Inventário"
+        eyebrowDetail="Painel Operacional de Equipamentos"
+        title="Estoque de Equipamentos"
+        description="Gerenciamento centralizado de hardware e insumos de TI"
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={handleRefresh}>
+              <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
+              Atualizar
             </Button>
-          )}
-        </div>
-      </div>
+            {hasRole('Gestor', 'Técnico') && (
+              <Button variant="gradient" size="sm" onClick={() => navigate('/register')}>
+                <Plus size={16} />
+                Novo Equipamento
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {/* KPI Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -195,49 +194,51 @@ export default function StockPage() {
       </div>
 
       {/* Filter Bar */}
-      <div className="surface-panel p-3 flex flex-wrap items-center gap-3">
-        <span className="text-caption text-muted-foreground px-2">Filtros:</span>
-        <Select value={filterTipo} onValueChange={setFilterTipo} disabled={constantsLoading}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Tipo de Equipamento" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os tipos</SelectItem>
-            {equipmentTypes.map((t) => (
-              <SelectItem key={t} value={t}>
-                {t}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="surface-panel p-3 space-y-3">
+        <PanelHeader title="Filtros de Consulta" />
+        <div className="flex flex-wrap items-center gap-3">
+          <Select value={filterTipo} onValueChange={setFilterTipo} disabled={constantsLoading}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Tipo de Equipamento" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os tipos</SelectItem>
+              {equipmentTypes.map((t) => (
+                <SelectItem key={t} value={t}>
+                  {t}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-        <Select value={filterStatus} onValueChange={setFilterStatus}>
-          <SelectTrigger className="w-56">
-            <SelectValue placeholder="Status do Item" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os status</SelectItem>
-            {STATUS_OPTIONS.map((s) => (
-              <SelectItem key={s} value={s}>
-                {s}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="w-56">
+              <SelectValue placeholder="Status do Item" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os status</SelectItem>
+              {STATUS_OPTIONS.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-        {(filterTipo !== 'all' || filterStatus !== 'all') && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setFilterTipo('all')
-              setFilterStatus('all')
-            }}
-            className="text-xs text-muted-foreground hover:text-foreground"
-          >
-            Limpar Filtros
-          </Button>
-        )}
+          {(filterTipo !== 'all' || filterStatus !== 'all') && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setFilterTipo('all')
+                setFilterStatus('all')
+              }}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              Limpar Filtros
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Data Table */}

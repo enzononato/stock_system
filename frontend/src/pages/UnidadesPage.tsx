@@ -28,8 +28,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Building2, Pencil, Ban, BarChart3, RotateCcw, Loader2 } from 'lucide-react'
+import { Pencil, Ban, BarChart3, RotateCcw, Loader2 } from 'lucide-react'
 
 // --- Validação e máscaras -----------------------------------------------------
 // `lib/utils.ts` (fora da posse deste módulo) já tem `isValidCpf` seguindo o
@@ -438,19 +439,19 @@ export default function UnidadesPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h2 className="text-heading text-foreground">Unidades</h2>
-        <p className="text-body-sm text-muted-foreground">
-          Dados jurídicos e fiscais das unidades (antigas "revendas") e indicadores por unidade.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Estrutura Organizacional"
+        eyebrowDetail="Unidades e Revendas"
+        title="Unidades"
+        description='Dados jurídicos e fiscais das unidades (antigas "revendas") e indicadores por unidade.'
+      />
 
       {/* Criar / editar unidade */}
       <form onSubmit={handleSubmit} className="surface-panel p-6 space-y-4 max-w-3xl">
-        <h3 className="text-body-lg font-semibold text-foreground flex items-center gap-2">
-          <Building2 size={16} />
-          {editingId !== null ? `Editar Unidade #${editingId}` : 'Nova Unidade'}
-        </h3>
+        <PanelHeader
+          title={editingId !== null ? `Editar Unidade #${editingId}` : 'Nova Unidade'}
+          description="Dados jurídicos, fiscais e de localização da unidade."
+        />
 
         {editingId !== null && (
           <p className="border border-border-strong bg-surface-alt p-3 rounded text-body-sm">
@@ -593,15 +594,14 @@ export default function UnidadesPage() {
       {/* Indicadores */}
       {indicadoresUnidadeId !== null && (
         <div className="surface-panel p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-body-lg font-semibold text-foreground flex items-center gap-2">
-              <BarChart3 size={16} />
-              Indicadores — {unidadeSelecionadaIndicadores?.nome ?? `Unidade #${indicadoresUnidadeId}`}
-            </h3>
-            <Button variant="ghost" size="sm" onClick={() => setIndicadoresUnidadeId(null)}>
-              Fechar
-            </Button>
-          </div>
+          <PanelHeader
+            title={`Indicadores — ${unidadeSelecionadaIndicadores?.nome ?? `Unidade #${indicadoresUnidadeId}`}`}
+            actions={
+              <Button variant="ghost" size="sm" onClick={() => setIndicadoresUnidadeId(null)}>
+                Fechar
+              </Button>
+            }
+          />
 
           {indicadoresLoading ? (
             <p className="text-body-sm text-muted-foreground">Carregando indicadores...</p>

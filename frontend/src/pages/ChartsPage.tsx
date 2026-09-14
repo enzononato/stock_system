@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Calendar, Filter, ArrowUpRight, ArrowDownLeft, PackagePlus, Loader2 } from 'lucide-react'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { useTheme } from '@/lib/theme'
 
 const MONTHS = [
@@ -110,16 +111,12 @@ export default function ChartsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-heading text-foreground">
-            Dashboard & Indicadores
-          </h2>
-          <p className="text-body-sm text-muted-foreground">
-            Análise temporal de empréstimos, devoluções e novos cadastros de equipamentos
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Business Intelligence"
+        eyebrowDetail="Indicadores Operacionais"
+        title="Dashboard & Indicadores"
+        description="Análise temporal de empréstimos, devoluções e novos cadastros de equipamentos"
+      />
 
       {/* Filter Control Bar */}
       <div className="flex flex-wrap items-end gap-4 surface-panel p-4">
