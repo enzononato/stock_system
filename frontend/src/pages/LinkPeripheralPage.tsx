@@ -193,14 +193,11 @@ export default function LinkPeripheralPage() {
       {/* Seletor de equipamento */}
       <div className="surface-panel p-4 flex flex-col gap-2">
         <Label>Selecione o Equipamento</Label>
-        <div className="max-w-md flex flex-col gap-2">
-          {/* Busca no servidor (debounce de 400ms): digite para procurar entre
-              todos os equipamentos linkáveis, não só os 20 exibidos abaixo. */}
-          <Input
-            value={itemSearch}
-            onChange={(e) => setItemSearch(e.target.value)}
-            placeholder="Buscar por marca, modelo ou identificador (patrimônio)..."
-          />
+        <div className="max-w-md">
+          {/* Busca no servidor (debounce de 400ms) controlando o próprio campo
+              de busca do dropdown via `search`/`onSearchChange` — sem isso, o
+              usuário veria uma segunda caixa de busca (a interna do
+              SearchableSelect) além desta, filtrando só os 20 já carregados. */}
           <SearchableSelect
             options={linkableItems.map((i) => ({
               value: String(i.id),
@@ -210,7 +207,9 @@ export default function LinkPeripheralPage() {
             value={selectedItemId}
             onValueChange={handleSelectItem}
             placeholder="Selecione um equipamento..."
-            searchPlaceholder="Filtrar nos resultados abaixo..."
+            searchPlaceholder="Buscar por marca, modelo ou identificador (patrimônio)..."
+            search={itemSearch}
+            onSearchChange={setItemSearch}
           />
         </div>
         {selectedItem && (

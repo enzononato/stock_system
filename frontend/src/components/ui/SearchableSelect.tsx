@@ -17,6 +17,18 @@ interface SearchableSelectProps {
   className?: string
   disabled?: boolean
   required?: boolean
+  /**
+   * Controle externo da busca (mesma convenção de `pagination.search` /
+   * `pagination.onSearchChange` do `DataTable`): quando `onSearchChange` é
+   * passado, o campo de busca do dropdown deixa de ser interno — passa a
+   * exibir `search` e delegar toda digitação para `onSearchChange`, e o
+   * componente PARA de filtrar `options` localmente (assume que quem chamou
+   * já mandou a lista filtrada, tipicamente por busca no servidor). Sem essa
+   * prop, o componente se comporta exatamente como antes: busca interna,
+   * não controlada, filtrando a lista local.
+   */
+  search?: string
+  onSearchChange?: (termo: string) => void
 }
 
 export function SearchableSelect({
@@ -27,11 +39,26 @@ export function SearchableSelect({
   searchPlaceholder = 'Digitar para buscar...',
   className,
   disabled = false,
+  search: searchControlado,
+  onSearchChange,
 }: SearchableSelectProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [search, setSearch] = useState('')
+  const [searchInterno, setSearchInterno] = useState('')
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Modo controlado: só existe quando quem chama passa `onSearchChange`
+  // (mesmo espírito do `DataTable`, que só liga a busca externa quando
+  // `pagination.onSearchChange` é fornecido).
+  const isControlado = onSearchChange !== undefined
+  const search = isControlado ? (searchControlado ?? '') : searchInterno
+  function handleSearchChange(termo: string) {
+    if (isControlado) {
+      onSearchChange?.(termo)
+    } else {
+      setSearchInterno(termo)
+    }
+  }
 
   const selectedOption = options.find((o) => o.value === value)
 
@@ -46,24 +73,32 @@ export function SearchableSelect({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Foca no input de busca automaticamente ao abrir
+  // Foca no input de busca automaticamente ao abrir. Só limpa a busca ao
+  // fechar no modo não controlado — no modo controlado, quem dona o estado é
+  // quem chama, e o componente não decide por ela quando limpar.
   useEffect(() => {
     if (isOpen) {
       setTimeout(() => inputRef.current?.focus(), 50)
-    } else {
-      setSearch('')
+    } else if (!isControlado) {
+      setSearchInterno('')
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen])
 
-  const filtered = options.filter((o) => {
-    if (!search.trim()) return true
-    const term = search.toLowerCase().trim()
-    return (
-      o.label.toLowerCase().includes(term) ||
-      (o.subtitle && o.subtitle.toLowerCase().includes(term)) ||
-      o.value.toLowerCase().includes(term)
-    )
-  })
+  // No modo controlado, `options` já chega filtrada (busca no servidor) —
+  // filtrar de novo aqui seria redundante e, pior, esconderia resultados que
+  // não batem com o texto ainda não aplicado (debounce em andamento).
+  const filtered = isControlado
+    ? options
+    : options.filter((o) => {
+        if (!search.trim()) return true
+        const term = search.toLowerCase().trim()
+        return (
+          o.label.toLowerCase().includes(term) ||
+          (o.subtitle && o.subtitle.toLowerCase().includes(term)) ||
+          o.value.toLowerCase().includes(term)
+        )
+      })
 
   return (
     <div ref={containerRef} className={cn('relative w-full select-none', className)}>
@@ -104,14 +139,14 @@ export function SearchableSelect({
               ref={inputRef}
               type="text"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               placeholder={searchPlaceholder}
               className="w-full h-9 pl-9 pr-8 text-xs font-medium bg-surface-alt rounded-md border border-border focus-visible:ring-1 focus-visible:ring-ring text-foreground placeholder:text-muted-foreground"
             />
             {search && (
               <button
                 type="button"
-                onClick={() => setSearch('')}
+                onClick={() => handleSearchChange('')}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5 rounded-full hover:bg-surface-alt"
               >
                 <X size={12} />

@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { listItemsPaginated, removeItem } from '@/api/items'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
@@ -84,13 +83,10 @@ export default function RemovePage() {
       <form onSubmit={handleSubmit} className="figure-ground-panel space-y-4">
         <div className="flex flex-col gap-1.5">
           <Label>Equipamento *</Label>
-          {/* Busca no servidor (debounce de 400ms): digite para procurar entre
-              todos os equipamentos "Disponível", não só os 20 exibidos abaixo. */}
-          <Input
-            value={itemSearch}
-            onChange={(e) => setItemSearch(e.target.value)}
-            placeholder="Buscar por marca, modelo ou identificador (patrimônio)..."
-          />
+          {/* Busca no servidor (debounce de 400ms) controlando o próprio campo
+              de busca do dropdown via `search`/`onSearchChange` — sem isso, o
+              usuário veria uma segunda caixa de busca (a interna do
+              SearchableSelect) além desta, filtrando só os 20 já carregados. */}
           <SearchableSelect
             options={disponiveis.map((i) => ({
               value: String(i.id),
@@ -100,7 +96,9 @@ export default function RemovePage() {
             value={selectedId}
             onValueChange={setSelectedId}
             placeholder="Selecione um equipamento disponível..."
-            searchPlaceholder="Filtrar nos resultados abaixo..."
+            searchPlaceholder="Buscar por marca, modelo ou identificador (patrimônio)..."
+            search={itemSearch}
+            onSearchChange={setItemSearch}
           />
         </div>
 

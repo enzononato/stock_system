@@ -156,13 +156,10 @@ export default function LoanPage() {
         />
         <div className="flex flex-col gap-1.5">
           <Label>Equipamento *</Label>
-          {/* Busca no servidor (debounce de 400ms): digite para procurar entre
-              todos os equipamentos "Disponível", não só os 20 exibidos abaixo. */}
-          <Input
-            value={itemSearch}
-            onChange={(e) => setItemSearch(e.target.value)}
-            placeholder="Buscar por marca, modelo ou identificador (patrimônio)..."
-          />
+          {/* Busca no servidor (debounce de 400ms) controlando o próprio campo
+              de busca do dropdown via `search`/`onSearchChange` — sem isso, o
+              usuário veria uma segunda caixa de busca (a interna do
+              SearchableSelect) além desta, filtrando só os 20 já carregados. */}
           <SearchableSelect
             options={disponivel.map((i) => ({
               value: String(i.id),
@@ -172,7 +169,9 @@ export default function LoanPage() {
             value={selectedItemId}
             onValueChange={setSelectedItemId}
             placeholder="Selecione um equipamento disponível..."
-            searchPlaceholder="Filtrar nos resultados abaixo..."
+            searchPlaceholder="Buscar por marca, modelo ou identificador (patrimônio)..."
+            search={itemSearch}
+            onSearchChange={setItemSearch}
           />
         </div>
 
