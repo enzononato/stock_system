@@ -142,14 +142,24 @@ export default function ReportPage() {
   // Contar por ela ser truthy infla o total; operation_type é o único campo
   // que distingue de fato um empréstimo das demais operações.
   //
-  // "Devoluções" não pode ser contada por operation_type: o UNION nunca gera
-  // uma linha com operation_type='Devolução' — a devolução aparece só como o
-  // campo data_devolucao embutido na própria linha 'Empréstimo' (subquery
-  // MIN(...) dentro da função). Por isso o critério aqui é "empréstimos deste
-  // mês que já foram devolvidos": linhas Empréstimo com data_devolucao
-  // preenchida. A referência tenta `operation_type === 'Devolução' ||
+  // "Empréstimos já devolvidos" (rótulo deliberadamente não é "Devoluções") não
+  // pode ser contado por operation_type: o UNION nunca gera uma linha com
+  // operation_type='Devolução' — a devolução aparece só como o campo
+  // data_devolucao embutido na própria linha 'Empréstimo' (subquery MIN(...)
+  // dentro da função). Por isso o critério aqui é "empréstimos deste mês que
+  // já foram devolvidos": linhas Empréstimo com data_devolucao preenchida. A
+  // referência tenta `operation_type === 'Devolução' ||
   // operation_type?.includes('Devol')`, que nunca bate com nenhuma linha real
   // — o contador dela fica sempre zerado; corrigido aqui.
+  //
+  // O rótulo evita a palavra "Devoluções" de propósito: essa métrica NÃO é
+  // "devoluções ocorridas neste mês" — é "dos empréstimos emitidos neste mês,
+  // quantos já foram devolvidos (em qualquer data)". As duas grandezas
+  // divergem nos dois sentidos: uma devolução em março de um empréstimo de
+  // fevereiro não entra aqui, e um empréstimo de março devolvido em maio
+  // entra. Rotular como "Devoluções" prometeria algo que o número não
+  // entrega, sem o usuário ter como perceber — o mesmo tipo de armadilha
+  // sinalizada nos avisos do CSV e do filtro de unidade.
   const totalRegistros = report.length
   const totalEmprestimos = report.filter((r) => r.operation_type === 'Empréstimo').length
   const totalDevolucoes = report.filter((r) => r.operation_type === 'Empréstimo' && r.data_devolucao).length
@@ -234,7 +244,12 @@ export default function ReportPage() {
           <div className="grid grid-cols-2 gap-6 sm:grid-cols-4 mt-3">
             <StatBlock label="Total" value={totalRegistros} symbol="#" />
             <StatBlock label="Empréstimos" value={totalEmprestimos} symbol="↑" />
-            <StatBlock label="Devoluções" value={totalDevolucoes} symbol="↓" />
+            <StatBlock
+              label="Empréstimos já devolvidos"
+              value={totalDevolucoes}
+              hint="dos emitidos no período"
+              symbol="↓"
+            />
             <StatBlock label="Colaboradores Únicos" value={totalColaboradores} symbol="◯" />
           </div>
         </div>
