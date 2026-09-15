@@ -43,7 +43,11 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
 
   if (!item) return null
 
-  const isLaptopOrPC = ['Computador', 'Notebook'].includes(item.tipo || '')
+  // Enum real de tipos (backend/app/core/config.py EQUIPMENT_TYPES) usa
+  // "Desktop", nunca "Computador" — só Desktop e Notebook têm os campos de
+  // hardware/rede abaixo (host, cpu, ram, storage, sistema, dominio, etc.),
+  // conforme TypeSpecificFields.tsx.
+  const isLaptopOrPC = ['Desktop', 'Notebook'].includes(item.tipo || '')
   const isNobreak = item.tipo === 'Nobreak'
   const isSwitch = item.tipo === 'Switch'
 
@@ -185,7 +189,7 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
             </div>
           </div>
 
-          {/* Section 3: Hardware & Rede (Computadores / Notebooks) */}
+          {/* Section 3: Hardware & Rede (Desktops / Notebooks) */}
           {isLaptopOrPC && (
             <div className="surface-panel p-4 space-y-3">
               <div className="flex items-center gap-2 text-caption text-muted-foreground">

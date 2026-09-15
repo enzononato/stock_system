@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createItem, updateItem, getItem } from '@/api/items'
@@ -42,25 +42,32 @@ export default function RegisterItemPage({ mode }: Props) {
     return `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()}`
   })
   const [specificFields, setSpecificFields] = useState<Record<string, string>>({})
+  // Hidratação uma-única-vez: a guarda antiga (`!brand`) recarregava o
+  // formulário inteiro do servidor sempre que o usuário limpasse o campo
+  // Marca, apagando qualquer edição em andamento. Com a flag, a hidratação
+  // roda só na primeira vez que `existingItem` chega.
+  const [hydrated, setHydrated] = useState(false)
 
-  // Quando o item existente carregar, preenche os campos
-  if (existingItem && !brand && existingItem.brand) {
-    setTipo(existingItem.tipo ?? '')
-    setBrand(existingItem.brand ?? '')
-    setModel(existingItem.model ?? '')
-    setRevenda(existingItem.revenda ?? '')
-    setNotaFiscal(existingItem.nota_fiscal ?? '')
-    setFornecedor(existingItem.fornecedor ?? '')
-    const fields: Record<string, string> = {}
-    const specificKeys = ['identificador','dominio','host','endereco_fisico','cpu','ram','storage',
-      'sistema','licenca','anydesk','setor','ip','mac','potencia_nominal','autonomia_estimada',
-      'ip_snmp','codigo_patrimonial','responsavel','local_instalacao','poe','quantidade_portas']
-    specificKeys.forEach(k => {
-      const val = (existingItem as unknown as Record<string, unknown>)[k]
-      if (val) fields[k] = String(val)
-    })
-    setSpecificFields(fields)
-  }
+  useEffect(() => {
+    if (existingItem && !hydrated) {
+      setTipo(existingItem.tipo ?? '')
+      setBrand(existingItem.brand ?? '')
+      setModel(existingItem.model ?? '')
+      setRevenda(existingItem.revenda ?? '')
+      setNotaFiscal(existingItem.nota_fiscal ?? '')
+      setFornecedor(existingItem.fornecedor ?? '')
+      const fields: Record<string, string> = {}
+      const specificKeys = ['identificador','dominio','host','endereco_fisico','cpu','ram','storage',
+        'sistema','licenca','anydesk','setor','ip','mac','potencia_nominal','autonomia_estimada',
+        'ip_snmp','codigo_patrimonial','responsavel','local_instalacao','poe','quantidade_portas']
+      specificKeys.forEach(k => {
+        const val = (existingItem as unknown as Record<string, unknown>)[k]
+        if (val) fields[k] = String(val)
+      })
+      setSpecificFields(fields)
+      setHydrated(true)
+    }
+  }, [existingItem, hydrated])
 
   const mutation = useMutation({
     mutationFn: (data: Record<string, unknown>) =>
@@ -68,7 +75,10 @@ export default function RegisterItemPage({ mode }: Props) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['items'] })
       toast(mode === 'create' ? 'Item cadastrado com sucesso!' : 'Item atualizado com sucesso!')
-      navigate('/')
+      // Antes da Task 7 deste plano, "/" era a lista de estoque; agora é o
+      // Dashboard. Quem cadastra ou edita um item quer voltar para a lista,
+      // não para o painel de indicadores — por isso o destino é "/stock".
+      navigate('/stock')
     },
     onError: (err: unknown) => {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erro ao salvar item.'

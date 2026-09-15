@@ -1,65 +1,21 @@
 import { NavLink } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
-import {
-  Package, PackagePlus, Cpu, Link2,
-  ArrowRightLeft, Undo2, Trash2, History, BarChart2, LineChart,
-  FileText, Users, Building2, Boxes, ShieldCheck
-} from 'lucide-react'
+import { Boxes, ShieldCheck } from 'lucide-react'
+import { getVisibleNavGroups } from './navigation'
 
-interface NavItem {
-  to: string
-  label: string
-  icon: React.ReactNode
-  roles?: string[]
+interface SidebarProps {
+  className?: string
+  /** Chamado ao clicar em um item de navegação — usado pela gaveta mobile para fechar após navegar. */
+  onNavigate?: () => void
 }
 
-interface NavGroup {
-  title: string
-  items: NavItem[]
-}
-
-const navGroups: NavGroup[] = [
-  {
-    title: 'Visão Geral',
-    items: [
-      { to: '/', label: 'Estoque', icon: <Package size={18} /> },
-      { to: '/charts', label: 'Dashboard & Gráficos', icon: <LineChart size={18} /> },
-    ],
-  },
-  {
-    title: 'Gestão de Itens',
-    items: [
-      { to: '/register', label: 'Cadastrar Equipamento', icon: <PackagePlus size={18} />, roles: ['Gestor', 'Técnico'] },
-      { to: '/peripherals', label: 'Periféricos', icon: <Cpu size={18} />, roles: ['Gestor', 'Técnico'] },
-      { to: '/link', label: 'Vincular Periférico', icon: <Link2 size={18} />, roles: ['Gestor', 'Técnico'] },
-      { to: '/loan', label: 'Emprestar', icon: <ArrowRightLeft size={18} />, roles: ['Gestor', 'Técnico'] },
-      { to: '/return', label: 'Devolver', icon: <Undo2 size={18} />, roles: ['Gestor', 'Técnico'] },
-      { to: '/terms', label: 'Termos de Resp.', icon: <FileText size={18} />, roles: ['Gestor', 'Técnico'] },
-    ],
-  },
-  {
-    title: 'Relatórios & Auditoria',
-    items: [
-      { to: '/history', label: 'Histórico de Ações', icon: <History size={18} />, roles: ['Gestor', 'Técnico'] },
-      { to: '/report', label: 'Relatórios BI', icon: <BarChart2 size={18} />, roles: ['Gestor', 'Técnico'] },
-    ],
-  },
-  {
-    title: 'Administração',
-    items: [
-      { to: '/remove', label: 'Remover / Estorno', icon: <Trash2 size={18} />, roles: ['Gestor'] },
-      { to: '/unidades', label: 'Unidades de Revenda', icon: <Building2 size={18} />, roles: ['Gestor'] },
-      { to: '/users', label: 'Gestão de Usuários', icon: <Users size={18} />, roles: ['Gestor'] },
-    ],
-  },
-]
-
-export default function Sidebar() {
+export default function Sidebar({ className, onNavigate }: SidebarProps) {
   const { user } = useAuth()
+  const visibleGroups = getVisibleNavGroups(user?.role)
 
   return (
-    <aside className="flex flex-col w-64 h-full bg-sidebar border-r border-sidebar-border select-none shrink-0">
+    <aside className={cn('flex flex-col w-64 h-full bg-sidebar border-r border-sidebar-border select-none shrink-0', className)}>
       {/* Brand Header */}
       <div className="flex items-center gap-2.5 h-14 px-3.5 border-b border-border shrink-0">
         <div className="h-8 w-8 rounded-md bg-primary flex items-center justify-center text-primary-foreground shrink-0">
@@ -73,40 +29,34 @@ export default function Sidebar() {
 
       {/* Navigation Groups */}
       <nav className="flex-1 overflow-y-auto py-4 px-2.5 space-y-5">
-        {navGroups.map((group) => {
-          const visibleItems = group.items.filter(
-            (item) => !item.roles || (user && item.roles.includes(user.role))
-          )
-          if (visibleItems.length === 0) return null
-
-          return (
-            <div key={group.title} className="space-y-0.5">
-              <h3 className="text-caption text-muted-foreground px-2 py-1">
-                {group.title}
-              </h3>
-              <div className="space-y-0.5">
-                {visibleItems.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.to === '/'}
-                    className={({ isActive }) =>
-                      cn(
-                        'flex items-center gap-2.5 px-2.5 py-1.5 rounded text-body-sm transition-colors duration-micro',
-                        isActive
-                          ? 'bg-surface-alt text-foreground font-semibold border-l-2 border-foreground'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-surface-alt'
-                      )
-                    }
-                  >
-                    {item.icon}
-                    <span className="truncate">{item.label}</span>
-                  </NavLink>
-                ))}
-              </div>
+        {visibleGroups.map((group) => (
+          <div key={group.title} className="space-y-0.5">
+            <h3 className="text-caption text-muted-foreground px-2 py-1">
+              {group.title}
+            </h3>
+            <div className="space-y-0.5">
+              {group.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.to === '/'}
+                  onClick={onNavigate}
+                  className={({ isActive }) =>
+                    cn(
+                      'flex items-center gap-2.5 px-2.5 py-1.5 rounded text-body-sm transition-colors duration-micro',
+                      isActive
+                        ? 'bg-surface-alt text-foreground font-semibold border-l-2 border-foreground'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-surface-alt'
+                    )
+                  }
+                >
+                  <item.icon size={18} />
+                  <span className="truncate">{item.label}</span>
+                </NavLink>
+              ))}
             </div>
-          )
-        })}
+          </div>
+        ))}
       </nav>
 
       {/* User Footer Summary */}

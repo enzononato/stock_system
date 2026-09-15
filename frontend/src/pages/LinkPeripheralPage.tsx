@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { listItemsPaginated } from '@/api/items'
+import { useEffect, useState } from 'react'
+import { useQueries, useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
+import { listItemsPaginated, type Item } from '@/api/items'
 import {
   listPeripherals,
   listItemPeripherals,
@@ -27,11 +27,17 @@ import { Link2, Unlink, RefreshCw } from 'lucide-react'
 // por isso continua fixa aqui.
 const LINK_ALLOWED_TYPES = ['Desktop', 'Notebook', 'Switch', 'Impressora']
 
-// Sem paginação nesta tela (filtra os equipamentos linkáveis client-side a
-// partir da lista completa) — usamos o teto de página do backend para não
-// truncar em 50 itens (default de GET /api/items) como aconteceria chamando
-// listItemsPaginated() sem limit.
-const FETCH_ALL_LIMIT = 500
+// Esta tela só tem um bloco de dados, e é uma lista de SELEÇÃO — o operador
+// procura o equipamento a que vai vincular o periférico, não folheia página
+// por página (T3). Por isso liga a busca (com debounce) ao parâmetro
+// `search` do servidor, com `limit` pequeno, em vez de buscar os 500
+// primeiros e filtrar no cliente (o antigo limite fixo de 500, removido
+// nesta task). `GET /api/items` só aceita um `tipo` por chamada, e esta tela
+// precisa de quatro (LINK_ALLOWED_TYPES) — em vez de puxar um lote genérico e
+// filtrar no cliente (o que deixaria tipos menos comuns sub-representados
+// nos 20 primeiros resultados), dispara uma busca pequena por tipo em
+// paralelo (`useQueries`), cada uma já filtrada e limitada no servidor.
+const ITEM_SEARCH_LIMIT_PER_TYPE = 10
 
 function PeripheralCard({
   peripheral,
@@ -78,12 +84,38 @@ export default function LinkPeripheralPage() {
   const [replaceReason, setReplaceReason] = useState('')
   const [replaceAttachment, setReplaceAttachment] = useState<File | null>(null)
 
-  const { data } = useQuery({
-    queryKey: ['items'],
-    queryFn: () => listItemsPaginated({ limit: FETCH_ALL_LIMIT }),
+  // Busca do equipamento a vincular: `itemSearch` é o que o operador digita,
+  // `itemSearchAplicado` é o que vai para o servidor, com atraso, para não
+  // disparar uma requisição por tecla (mesmo padrão do debounce de busca já
+  // usado em HistoryPage/StockPage).
+  const [itemSearch, setItemSearch] = useState('')
+  const [itemSearchAplicado, setItemSearchAplicado] = useState('')
+  useEffect(() => {
+    const timer = setTimeout(() => setItemSearchAplicado(itemSearch.trim()), 400)
+    return () => clearTimeout(timer)
+  }, [itemSearch])
+
+  const linkableQueries = useQueries({
+    queries: LINK_ALLOWED_TYPES.map((tipo) => ({
+      queryKey: ['items', 'select', 'linkable', tipo, itemSearchAplicado],
+      queryFn: () =>
+        listItemsPaginated({ tipo, search: itemSearchAplicado || undefined, limit: ITEM_SEARCH_LIMIT_PER_TYPE }),
+      placeholderData: keepPreviousData,
+    })),
   })
-  const items = data?.items ?? []
-  const linkableItems = items.filter(i => LINK_ALLOWED_TYPES.includes(i.tipo ?? ''))
+  const linkableItems = linkableQueries.flatMap((q) => q.data?.items ?? [])
+
+  // Snapshot do equipamento selecionado: `linkableItems` é só o lote pequeno
+  // (≤20) da busca atual, então some da lista assim que o operador digita
+  // outra coisa. Guarda o item completo no momento da seleção para a linha
+  // "Status / Revenda" abaixo continuar mostrando os dados do equipamento
+  // escolhido, mesmo depois que a busca mudar.
+  const [selectedItemSnapshot, setSelectedItemSnapshot] = useState<Item | null>(null)
+  function handleSelectItem(val: string) {
+    setSelectedItemId(val)
+    const found = linkableItems.find(i => String(i.id) === val)
+    if (found) setSelectedItemSnapshot(found)
+  }
 
   const { data: linkedPeripherals = [], refetch: refetchLinked } = useQuery({
     queryKey: ['item-peripherals', selectedItemId],
@@ -147,7 +179,7 @@ export default function LinkPeripheralPage() {
     },
   })
 
-  const selectedItem = items.find(i => String(i.id) === selectedItemId)
+  const selectedItem = linkableItems.find(i => String(i.id) === selectedItemId) ?? selectedItemSnapshot
 
   return (
     <div className="page-container-reading space-y-6">
@@ -162,6 +194,10 @@ export default function LinkPeripheralPage() {
       <div className="surface-panel p-4 flex flex-col gap-2">
         <Label>Selecione o Equipamento</Label>
         <div className="max-w-md">
+          {/* Busca no servidor (debounce de 400ms) controlando o próprio campo
+              de busca do dropdown via `search`/`onSearchChange` — sem isso, o
+              usuário veria uma segunda caixa de busca (a interna do
+              SearchableSelect) além desta, filtrando só os 20 já carregados. */}
           <SearchableSelect
             options={linkableItems.map((i) => ({
               value: String(i.id),
@@ -169,9 +205,11 @@ export default function LinkPeripheralPage() {
               subtitle: [i.revenda, i.identificador].filter(Boolean).join(' • '),
             }))}
             value={selectedItemId}
-            onValueChange={setSelectedItemId}
-            placeholder="Selecione ou busque um equipamento..."
-            searchPlaceholder="Buscar por ID, tipo, marca, modelo, patrimônio..."
+            onValueChange={handleSelectItem}
+            placeholder="Selecione um equipamento..."
+            searchPlaceholder="Buscar por marca, modelo ou identificador (patrimônio)..."
+            search={itemSearch}
+            onSearchChange={setItemSearch}
           />
         </div>
         {selectedItem && (

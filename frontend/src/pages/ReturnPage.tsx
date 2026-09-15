@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { listItemsPaginated } from '@/api/items'
+import { useEffect, useState } from 'react'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
+import { getItem, listItemsPaginated } from '@/api/items'
 import { downloadReturnTerm, confirmReturn } from '@/api/loans'
 import { Button } from '@/components/ui/button'
 import { FileUpload } from '@/components/ui/FileUpload'
@@ -12,24 +12,75 @@ import type { Item } from '@/api/items'
 import { formatDate } from '@/lib/utils'
 import { FileDown, CheckCircle } from 'lucide-react'
 
-// Esta tela ainda não tem paginação própria (filtra client-side por status a
-// partir da lista completa) — usamos o teto de página do backend para não
-// truncar a lista em 50 itens (default de GET /api/items) como aconteceria
-// chamando listItemsPaginated() sem limit.
-const FETCH_ALL_LIMIT = 500
+// Os dois blocos desta tela são tabelas de NAVEGAÇÃO (browsing/procura, não
+// escolha via SearchableSelect) — paginação real no servidor, mesmo padrão do
+// DataTable já usado em HistoryPage/StockPage (T3).
+const PAGE_SIZE = 10
 
 export default function ReturnPage() {
   const queryClient = useQueryClient()
   const [pendingReturnId, setPendingReturnId] = useState<number | null>(null)
   const [signedPdf, setSignedPdf] = useState<File | null>(null)
 
-  const { data } = useQuery({
-    queryKey: ['items'],
-    queryFn: () => listItemsPaginated({ limit: FETCH_ALL_LIMIT }),
+  // Empréstimos ativos (aguardando geração do termo de devolução)
+  const [activePageIndex, setActivePageIndex] = useState(0)
+  const [activeSearch, setActiveSearch] = useState('')
+  const [activeSearchAplicado, setActiveSearchAplicado] = useState('')
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setActiveSearchAplicado(activeSearch.trim())
+      setActivePageIndex(0)
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [activeSearch])
+
+  const { data: activeData } = useQuery({
+    queryKey: ['items', 'devolucao-ativos', activePageIndex, activeSearchAplicado],
+    queryFn: () =>
+      listItemsPaginated({
+        status: 'Indisponível',
+        search: activeSearchAplicado || undefined,
+        limit: PAGE_SIZE,
+        offset: activePageIndex * PAGE_SIZE,
+      }),
+    placeholderData: keepPreviousData,
   })
-  const items = data?.items ?? []
-  const indisponivel = items.filter(i => i.status === 'Indisponível')
-  const pendenteDevolucao = items.filter(i => i.status === 'Pendente Devolução')
+  // T3 (defeito real): sem o `Boolean(assigned_to)`, itens marcados
+  // "Indisponível" mas órfãos (sem colaborador vinculado) apareciam aqui com
+  // "Usuário" vazio, e o botão "Gerar Termo" respondia 400 ao tentar iniciar
+  // a devolução para um item sem responsável. O backend não filtra por
+  // "assigned_to preenchido" (não há esse parâmetro em `GET /api/items`), daí
+  // o filtro ficar no cliente, sobre a página já pequena (10 itens) que vem
+  // do servidor — não é o mesmo padrão do bug antigo (que filtrava 500 linhas
+  // inteiras no cliente).
+  const indisponivel = (activeData?.items ?? []).filter((i) => Boolean(i.assigned_to))
+  const indisponivelTotal = activeData?.total ?? 0
+
+  // Devoluções pendentes de confirmação (termo já gerado, aguardando upload)
+  const [pendentesPageIndex, setPendentesPageIndex] = useState(0)
+  const [pendentesSearch, setPendentesSearch] = useState('')
+  const [pendentesSearchAplicado, setPendentesSearchAplicado] = useState('')
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setPendentesSearchAplicado(pendentesSearch.trim())
+      setPendentesPageIndex(0)
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [pendentesSearch])
+
+  const { data: pendentesData } = useQuery({
+    queryKey: ['items', 'devolucao-pendentes', pendentesPageIndex, pendentesSearchAplicado],
+    queryFn: () =>
+      listItemsPaginated({
+        status: 'Pendente Devolução',
+        search: pendentesSearchAplicado || undefined,
+        limit: PAGE_SIZE,
+        offset: pendentesPageIndex * PAGE_SIZE,
+      }),
+    placeholderData: keepPreviousData,
+  })
+  const pendenteDevolucao = pendentesData?.items ?? []
+  const pendenteDevolucaoTotal = pendentesData?.total ?? 0
 
   const initiateMutation = useMutation({
     // downloadReturnTerm encapsula initiate + download autenticado (T1): o
@@ -60,6 +111,18 @@ export default function ReturnPage() {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erro ao confirmar devolução.'
       toast(msg, 'error')
     },
+  })
+
+  // Busca dedicada do item em confirmação: `indisponivel`/`pendenteDevolucao`
+  // agora são só a página atual (10 itens), então o item que disparou a
+  // confirmação pode não estar mais nela (a invalidação de ['items'] muda o
+  // status dele e ele "muda de tabela"). Antes, com os 500 itens inteiros em
+  // memória, `items.find(...)` sempre achava — buscar por id direto no
+  // servidor reproduz o mesmo resultado sem depender do array completo.
+  const { data: pendingReturnItem } = useQuery({
+    queryKey: ['items', 'detail', pendingReturnId],
+    queryFn: () => getItem(pendingReturnId as number),
+    enabled: pendingReturnId !== null,
   })
 
   const activeColumns: ColumnDef<Item, unknown>[] = [
@@ -110,10 +173,22 @@ export default function ReturnPage() {
       {/* Empréstimos ativos */}
       <div className="space-y-3">
         <PanelHeader
-          title={<>Empréstimos Ativos (<span className="num">{indisponivel.length}</span>)</>}
+          title={<>Empréstimos Ativos (<span className="num">{indisponivelTotal}</span>)</>}
           description="Selecione um item para gerar o termo de devolução."
         />
-        <DataTable data={indisponivel} columns={activeColumns} searchPlaceholder="Buscar por usuário, item..." />
+        <DataTable
+          data={indisponivel}
+          columns={activeColumns}
+          searchPlaceholder="Buscar por usuário, marca, modelo..."
+          pagination={{
+            total: indisponivelTotal,
+            pageIndex: activePageIndex,
+            pageSize: PAGE_SIZE,
+            onPageChange: setActivePageIndex,
+            search: activeSearch,
+            onSearchChange: setActiveSearch,
+          }}
+        />
       </div>
 
       {/* Confirmação de devolução */}
@@ -123,6 +198,32 @@ export default function ReturnPage() {
           <h3 className="text-heading-sm text-foreground">
             Confirmar Devolução — Item #<span className="num">{pendingReturnId}</span>
           </h3>
+          {/* Mostra o equipamento e o colaborador antes de confirmar — sem isso o
+              operador confirmava a devolução às cegas, vendo apenas o #id. */}
+          {pendingReturnItem && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 border-t border-border pt-3">
+              <div>
+                <p className="text-caption text-muted-foreground">Tipo</p>
+                <p className="text-body-sm text-foreground">{pendingReturnItem.tipo || '-'}</p>
+              </div>
+              <div>
+                <p className="text-caption text-muted-foreground">Marca</p>
+                <p className="text-body-sm text-foreground">{pendingReturnItem.brand || '-'}</p>
+              </div>
+              <div>
+                <p className="text-caption text-muted-foreground">Modelo</p>
+                <p className="text-body-sm text-foreground">{pendingReturnItem.model || '-'}</p>
+              </div>
+              <div>
+                <p className="text-caption text-muted-foreground">Colaborador</p>
+                <p className="text-body-sm text-foreground">{pendingReturnItem.assigned_to || '-'}</p>
+              </div>
+              <div>
+                <p className="text-caption text-muted-foreground">Unidade</p>
+                <p className="text-body-sm text-foreground">{pendingReturnItem.revenda || '-'}</p>
+              </div>
+            </div>
+          )}
           <p className="text-body-sm text-muted-foreground">
             O termo de devolução foi gerado. Faça o upload do PDF assinado para confirmar.
           </p>
@@ -141,10 +242,22 @@ export default function ReturnPage() {
       )}
 
       {/* Devoluções pendentes de confirmação */}
-      {pendenteDevolucao.length > 0 && (
+      {pendenteDevolucaoTotal > 0 && (
         <div className="space-y-3">
-          <h3 className="text-body-lg font-semibold text-foreground">Pendente de Confirmação (<span className="num">{pendenteDevolucao.length}</span>)</h3>
-          <DataTable data={pendenteDevolucao} columns={pendingColumns} searchPlaceholder="Buscar..." />
+          <h3 className="text-body-lg font-semibold text-foreground">Pendente de Confirmação (<span className="num">{pendenteDevolucaoTotal}</span>)</h3>
+          <DataTable
+            data={pendenteDevolucao}
+            columns={pendingColumns}
+            searchPlaceholder="Buscar por usuário, marca, modelo..."
+            pagination={{
+              total: pendenteDevolucaoTotal,
+              pageIndex: pendentesPageIndex,
+              pageSize: PAGE_SIZE,
+              onPageChange: setPendentesPageIndex,
+              search: pendentesSearch,
+              onSearchChange: setPendentesSearch,
+            }}
+          />
         </div>
       )}
     </div>

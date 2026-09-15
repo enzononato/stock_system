@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { listItemsPaginated } from '@/api/items'
 import { initiateLoan } from '@/api/loans'
 import { Button } from '@/components/ui/button'
@@ -17,11 +17,16 @@ import { useConstants } from '@/hooks/useConstants'
 import { formatDate, maskCpfInput, isValidCpf } from '@/lib/utils'
 import { FileDown } from 'lucide-react'
 
-// Sem paginação nesta tela (filtra "Disponível"/"Pendente" client-side a
-// partir da lista completa) — usamos o teto de página do backend para não
-// truncar em 50 itens (default de GET /api/items) como aconteceria chamando
-// listItemsPaginated() sem limit.
-const FETCH_ALL_LIMIT = 500
+// Esta tela tem dois blocos de dados, cada um com o uso certo (T3):
+// - "Equipamento *" (abaixo) é uma lista de SELEÇÃO — o operador procura um
+//   item "Disponível" para emprestar, não folheia página por página. Por
+//   isso liga a busca (com debounce) ao parâmetro `search` do servidor, com
+//   `limit` pequeno, em vez de buscar os 500 primeiros e filtrar no cliente.
+// - "Empréstimos Pendentes de Confirmação" é uma tabela de NAVEGAÇÃO — lista
+//   para o operador percorrer/procurar. Usa paginação real no servidor, no
+//   mesmo padrão do DataTable que HistoryPage/StockPage já usam.
+const ITEM_SEARCH_LIMIT = 20
+const PENDENTES_PAGE_SIZE = 10
 
 export default function LoanPage() {
   const queryClient = useQueryClient()
@@ -43,14 +48,51 @@ export default function LoanPage() {
   })
   const [pendingItemId, setPendingItemId] = useState<number | null>(null)
 
-  const { data } = useQuery({
-    queryKey: ['items'],
-    queryFn: () => listItemsPaginated({ limit: FETCH_ALL_LIMIT }),
-  })
-  const items = data?.items ?? []
+  // Busca do equipamento disponível (lista de SELEÇÃO): `itemSearch` é o que
+  // o operador digita, `itemSearchAplicado` é o que vai para o servidor, com
+  // atraso, para não disparar uma requisição por tecla (mesmo padrão do
+  // debounce de busca já usado em HistoryPage/StockPage).
+  const [itemSearch, setItemSearch] = useState('')
+  const [itemSearchAplicado, setItemSearchAplicado] = useState('')
+  useEffect(() => {
+    const timer = setTimeout(() => setItemSearchAplicado(itemSearch.trim()), 400)
+    return () => clearTimeout(timer)
+  }, [itemSearch])
 
-  const disponivel = items.filter(i => i.status === 'Disponível')
-  const pendentes = items.filter(i => i.status === 'Pendente')
+  const { data: disponivelData } = useQuery({
+    queryKey: ['items', 'select', 'Disponível', itemSearchAplicado],
+    queryFn: () =>
+      listItemsPaginated({ status: 'Disponível', search: itemSearchAplicado || undefined, limit: ITEM_SEARCH_LIMIT }),
+    placeholderData: keepPreviousData,
+  })
+  const disponivel = disponivelData?.items ?? []
+
+  // Empréstimos pendentes de confirmação (tabela de NAVEGAÇÃO): paginação e
+  // busca resolvidas no servidor, mesmo padrão do DataTable usado abaixo.
+  const [pendentesPageIndex, setPendentesPageIndex] = useState(0)
+  const [pendentesSearch, setPendentesSearch] = useState('')
+  const [pendentesSearchAplicado, setPendentesSearchAplicado] = useState('')
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setPendentesSearchAplicado(pendentesSearch.trim())
+      setPendentesPageIndex(0)
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [pendentesSearch])
+
+  const { data: pendentesData } = useQuery({
+    queryKey: ['items', 'pendentes-confirmacao', pendentesPageIndex, pendentesSearchAplicado],
+    queryFn: () =>
+      listItemsPaginated({
+        status: 'Pendente',
+        search: pendentesSearchAplicado || undefined,
+        limit: PENDENTES_PAGE_SIZE,
+        offset: pendentesPageIndex * PENDENTES_PAGE_SIZE,
+      }),
+    placeholderData: keepPreviousData,
+  })
+  const pendentes = pendentesData?.items ?? []
+  const pendentesTotal = pendentesData?.total ?? 0
 
   const loanMutation = useMutation({
     mutationFn: initiateLoan,
@@ -114,6 +156,10 @@ export default function LoanPage() {
         />
         <div className="flex flex-col gap-1.5">
           <Label>Equipamento *</Label>
+          {/* Busca no servidor (debounce de 400ms) controlando o próprio campo
+              de busca do dropdown via `search`/`onSearchChange` — sem isso, o
+              usuário veria uma segunda caixa de busca (a interna do
+              SearchableSelect) além desta, filtrando só os 20 já carregados. */}
           <SearchableSelect
             options={disponivel.map((i) => ({
               value: String(i.id),
@@ -122,8 +168,10 @@ export default function LoanPage() {
             }))}
             value={selectedItemId}
             onValueChange={setSelectedItemId}
-            placeholder="Selecione ou busque um equipamento disponível..."
-            searchPlaceholder="Buscar por ID, tipo, marca, modelo, patrimônio..."
+            placeholder="Selecione um equipamento disponível..."
+            searchPlaceholder="Buscar por marca, modelo ou identificador (patrimônio)..."
+            search={itemSearch}
+            onSearchChange={setItemSearch}
           />
         </div>
 
@@ -196,14 +244,28 @@ export default function LoanPage() {
           }
           showGenerateButton
           onConfirmed={() => setPendingItemId(null)}
+          onCancel={() => setPendingItemId(null)}
         />
       )}
 
-      {/* Lista de empréstimos pendentes de confirmação */}
-      {pendentes.length > 0 && (
+      {/* Lista de empréstimos pendentes de confirmação (tabela de NAVEGAÇÃO,
+          paginada no servidor) */}
+      {pendentesTotal > 0 && (
         <div className="space-y-3">
           <h3 className="text-body-lg font-semibold text-foreground">Empréstimos Pendentes de Confirmação</h3>
-          <DataTable data={pendentes} columns={pendingColumns} searchPlaceholder="Buscar..." />
+          <DataTable
+            data={pendentes}
+            columns={pendingColumns}
+            searchPlaceholder="Buscar por marca, modelo, usuário..."
+            pagination={{
+              total: pendentesTotal,
+              pageIndex: pendentesPageIndex,
+              pageSize: PENDENTES_PAGE_SIZE,
+              onPageChange: setPendentesPageIndex,
+              search: pendentesSearch,
+              onSearchChange: setPendentesSearch,
+            }}
+          />
         </div>
       )}
     </div>
