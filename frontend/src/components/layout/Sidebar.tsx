@@ -1,11 +1,20 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, Link } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
+import { ShieldCheck } from 'lucide-react'
 import {
-  Package, PackagePlus, Cpu, Link2,
-  ArrowRightLeft, Undo2, Trash2, History, BarChart2, LineChart,
-  FileText, Users, Building2, Boxes, ShieldCheck
-} from 'lucide-react'
+  EstoqueIcon,
+  DashboardIcon,
+  PatrimoniosIcon,
+  PerifericosIcon,
+  MovimentacoesIcon,
+  EmprestimosIcon,
+  DevolucoesIcon,
+  RelatoriosIcon,
+  LixeiraIcon,
+  EmpresasIcon,
+  UsuariosIcon,
+} from '@/components/animated-icons/stock-system-animated-sidebar-icons'
 
 interface NavItem {
   to: string
@@ -23,34 +32,34 @@ const navGroups: NavGroup[] = [
   {
     title: 'Visão Geral',
     items: [
-      { to: '/', label: 'Estoque', icon: <Package size={18} /> },
-      { to: '/charts', label: 'Dashboard & Gráficos', icon: <LineChart size={18} /> },
+      { to: '/', label: 'Estoque', icon: <EstoqueIcon size={18} /> },
+      { to: '/charts', label: 'Dashboard & Gráficos', icon: <DashboardIcon size={18} /> },
     ],
   },
   {
     title: 'Gestão de Itens',
     items: [
-      { to: '/register', label: 'Cadastrar Equipamento', icon: <PackagePlus size={18} />, roles: ['Gestor', 'Técnico'] },
-      { to: '/peripherals', label: 'Periféricos', icon: <Cpu size={18} />, roles: ['Gestor', 'Técnico'] },
-      { to: '/link', label: 'Vincular Periférico', icon: <Link2 size={18} />, roles: ['Gestor', 'Técnico'] },
-      { to: '/loan', label: 'Emprestar', icon: <ArrowRightLeft size={18} />, roles: ['Gestor', 'Técnico'] },
-      { to: '/return', label: 'Devolver', icon: <Undo2 size={18} />, roles: ['Gestor', 'Técnico'] },
-      { to: '/terms', label: 'Termos de Resp.', icon: <FileText size={18} />, roles: ['Gestor', 'Técnico'] },
+      { to: '/register', label: 'Cadastrar Equipamento', icon: <PatrimoniosIcon size={18} />, roles: ['Gestor', 'Técnico'] },
+      { to: '/peripherals', label: 'Periféricos', icon: <PerifericosIcon size={18} />, roles: ['Gestor', 'Técnico'] },
+      { to: '/link', label: 'Vincular Periférico', icon: <MovimentacoesIcon size={18} />, roles: ['Gestor', 'Técnico'] },
+      { to: '/loan', label: 'Emprestar', icon: <EmprestimosIcon size={18} />, roles: ['Gestor', 'Técnico'] },
+      { to: '/return', label: 'Devolver', icon: <DevolucoesIcon size={18} />, roles: ['Gestor', 'Técnico'] },
+      { to: '/terms', label: 'Termos de Resp.', icon: <RelatoriosIcon size={18} />, roles: ['Gestor', 'Técnico'] },
     ],
   },
   {
     title: 'Relatórios & Auditoria',
     items: [
-      { to: '/history', label: 'Histórico de Ações', icon: <History size={18} />, roles: ['Gestor', 'Técnico'] },
-      { to: '/report', label: 'Relatórios BI', icon: <BarChart2 size={18} />, roles: ['Gestor', 'Técnico'] },
+      { to: '/history', label: 'Histórico de Ações', icon: <MovimentacoesIcon size={18} />, roles: ['Gestor', 'Técnico'] },
+      { to: '/report', label: 'Relatórios BI', icon: <RelatoriosIcon size={18} />, roles: ['Gestor', 'Técnico'] },
     ],
   },
   {
     title: 'Administração',
     items: [
-      { to: '/remove', label: 'Remover / Estorno', icon: <Trash2 size={18} />, roles: ['Gestor'] },
-      { to: '/unidades', label: 'Unidades de Revenda', icon: <Building2 size={18} />, roles: ['Gestor'] },
-      { to: '/users', label: 'Gestão de Usuários', icon: <Users size={18} />, roles: ['Gestor'] },
+      { to: '/remove', label: 'Remover / Estorno', icon: <LixeiraIcon size={18} />, roles: ['Gestor'] },
+      { to: '/unidades', label: 'Unidades de Revenda', icon: <EmpresasIcon size={18} />, roles: ['Gestor'] },
+      { to: '/users', label: 'Gestão de Usuários', icon: <UsuariosIcon size={18} />, roles: ['Gestor'] },
     ],
   },
 ]
@@ -61,15 +70,25 @@ export default function Sidebar() {
   return (
     <aside className="flex flex-col w-64 h-full bg-sidebar border-r border-sidebar-border select-none shrink-0">
       {/* Brand Header */}
-      <div className="flex items-center gap-2.5 h-14 px-3.5 border-b border-border shrink-0">
-        <div className="h-8 w-8 rounded-md bg-primary flex items-center justify-center text-primary-foreground shrink-0">
-          <Boxes size={16} />
+      <Link
+        to="/"
+        className="flex flex-col items-start justify-center py-5 px-4 border-b border-border shrink-0 gap-2.5 transition-colors hover:bg-surface-alt group"
+        title="Início - Revalle Controle de Patrimônio"
+      >
+        <div className="w-full flex items-center justify-start overflow-hidden">
+          <img
+            src="/logo-revalle.png"
+            alt="Revalle"
+            className="h-14 w-auto max-w-[205px] object-contain filter brightness-0 dark:brightness-100 drop-shadow-md transition-transform duration-200 group-hover:scale-[1.02]"
+          />
         </div>
-        <div className="min-w-0">
-          <p className="text-sm font-semibold tracking-tight truncate">Revalle</p>
-          <p className="text-[11px] text-muted-foreground truncate">Controle de Estoque TI</p>
+        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-alt border border-border">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="text-[10px] font-semibold text-foreground tracking-widest uppercase font-mono">
+            Controle de Patrimônio
+          </span>
         </div>
-      </div>
+      </Link>
 
       {/* Navigation Groups */}
       <nav className="flex-1 overflow-y-auto py-4 px-2.5 space-y-5">

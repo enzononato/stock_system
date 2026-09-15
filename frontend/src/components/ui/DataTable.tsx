@@ -29,6 +29,8 @@ interface DataTableProps<TData> {
   className?: string
   pagination?: DataTablePaginationProps
   onRowClick?: (row: TData) => void
+  /** Tamanho da página para paginação client-side (quando `pagination` não é passado). Padrão: 7. */
+  clientPageSize?: number
 }
 
 export function DataTable<TData>({
@@ -38,23 +40,37 @@ export function DataTable<TData>({
   className,
   pagination,
   onRowClick,
+  clientPageSize = 7,
 }: DataTableProps<TData>) {
   const [globalFilter, setGlobalFilter] = useState('')
   const [sorting, setSorting] = useState<SortingState>([])
+  // Página para paginação client-side (usada apenas quando `pagination` não é passado)
+  const [clientPage, setClientPage] = useState(0)
 
   const table = useReactTable({
     data,
     columns,
     state: { globalFilter, sorting },
-    onGlobalFilterChange: setGlobalFilter,
+    onGlobalFilterChange: (val) => {
+      setGlobalFilter(val)
+      setClientPage(0) // volta à primeira página ao buscar
+    },
     onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getSortedRowModel: getSortedRowModel(),
   })
 
-  const rows = table.getRowModel().rows
+  const allRows = table.getRowModel().rows
 
+  // Paginação client-side: fatia as linhas filtradas/ordenadas em páginas
+  const isClientPaginated = !pagination
+  const clientPageCount = isClientPaginated ? Math.max(1, Math.ceil(allRows.length / clientPageSize)) : 0
+  const rows = isClientPaginated
+    ? allRows.slice(clientPage * clientPageSize, (clientPage + 1) * clientPageSize)
+    : allRows
+
+  // Paginação server-side (comportamento original)
   const pageSize = pagination?.pageSize || 1
   const pageCount = pagination ? Math.max(1, Math.ceil(pagination.total / pageSize)) : 0
   const currentPage = (pagination?.pageIndex ?? 0) + 1
@@ -67,6 +83,7 @@ export function DataTable<TData>({
       pagination.onSearchChange(val)
     } else {
       setGlobalFilter(val)
+      setClientPage(0)
     }
   }
 
@@ -166,8 +183,9 @@ export function DataTable<TData>({
           </table>
         </div>
 
-        {/* Pagination Footer — dentro do painel da tabela, com padding próprio já que o painel não tem mais p-5. */}
+        {/* Rodapé de paginação */}
         {pagination ? (
+          // Paginação server-side (comportamento original)
           <div className="flex items-center justify-between gap-4 px-4 py-3 border-t border-border">
             <p className="text-caption text-muted-foreground whitespace-nowrap">
               {pagination.total === 0 ? (
@@ -206,15 +224,40 @@ export function DataTable<TData>({
             </div>
           </div>
         ) : (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-            <p className="text-caption text-muted-foreground">
-              <span className="num">{table.getFilteredRowModel().rows.length}</span> de{' '}
+          // Paginação client-side — rodapé sempre presente com contador; botões só aparecem quando há mais de uma página
+          <div className="flex items-center justify-between gap-4 px-4 py-3 border-t border-border">
+            <p className="text-caption text-muted-foreground whitespace-nowrap">
+              <span className="num">{allRows.length}</span> de{' '}
               <span className="num">{data.length}</span> registros
             </p>
+            {clientPageCount > 1 && (
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setClientPage((p) => Math.max(0, p - 1))}
+                  disabled={clientPage <= 0}
+                >
+                  <ChevronLeft size={14} />Anterior
+                </Button>
+                <span className="text-caption text-muted-foreground px-2 py-1 rounded-md bg-surface-alt whitespace-nowrap">
+                  Página <span className="num">{clientPage + 1}</span> de <span className="num">{clientPageCount}</span>
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setClientPage((p) => Math.min(clientPageCount - 1, p + 1))}
+                  disabled={clientPage + 1 >= clientPageCount}
+                >
+                  Próxima<ChevronRight size={14} />
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </div>
     </div>
   )
 }
-

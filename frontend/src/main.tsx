@@ -6,6 +6,7 @@ import { AuthProvider } from '@/contexts/AuthContext'
 import { ThemeProvider } from '@/lib/theme'
 import App from './App'
 import './index.css'
+import './components/animated-icons/stock-system-animated-sidebar-icons/animated-sidebar-icons.css'
 
 const queryClient = new QueryClient({
   defaultOptions: {

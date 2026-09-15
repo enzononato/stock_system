@@ -1,0 +1,47 @@
+/* Animated sidebar icons
+   Pure CSS: no animation runtime and no extra dependency.
+   Animation starts only on hover/focus for an enterprise-friendly interaction.
+*/
+.animated-sidebar-icon {
+  display: inline-block;
+  flex: 0 0 auto;
+  transform-origin: center;
+  transition: transform 220ms ease, opacity 180ms ease;
+  will-change: transform;
+}
+
+.animated-sidebar-icon path,
+.animated-sidebar-icon line,
+.animated-sidebar-icon polyline,
+.animated-sidebar-icon rect,
+.animated-sidebar-icon circle {
+  transition: transform 260ms ease, stroke-width 180ms ease, opacity 180ms ease;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.animated-sidebar-icon:hover,
+.animated-sidebar-icon:focus-visible {
+  transform: translateY(-1px);
+}
+
+.animated-packageicon:hover,
+.animated-packageopenicon:hover { transform: translateY(-2px) rotate(-2deg); }
+.animated-layoutdashboardicon:hover,
+.animated-chartbaricon:hover { transform: scale(1.05); }
+.animated-monitoricon:hover { transform: translateY(-2px); }
+.animated-mouseicon:hover { transform: translateX(1px) rotate(-4deg); }
+.animated-arrowleftrighticon:hover { transform: translateX(2px); }
+.animated-handicon:hover { transform: rotate(-5deg) translateY(-1px); }
+.animated-building2icon:hover { transform: translateY(-1px); }
+.animated-usersicon:hover { transform: scale(1.04); }
+.animated-settingsicon:hover { transform: rotate(28deg); }
+.animated-trash2icon:hover { transform: translateY(-1px) rotate(-4deg); }
+
+@media (prefers-reduced-motion: reduce) {
+  .animated-sidebar-icon,
+  .animated-sidebar-icon * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
