@@ -30,6 +30,7 @@ export default function ReturnPage() {
   const items = data?.items ?? []
   const indisponivel = items.filter(i => i.status === 'Indisponível')
   const pendenteDevolucao = items.filter(i => i.status === 'Pendente Devolução')
+  const pendingReturnItem = items.find(i => i.id === pendingReturnId)
 
   const initiateMutation = useMutation({
     // downloadReturnTerm encapsula initiate + download autenticado (T1): o
@@ -123,6 +124,32 @@ export default function ReturnPage() {
           <h3 className="text-heading-sm text-foreground">
             Confirmar Devolução — Item #<span className="num">{pendingReturnId}</span>
           </h3>
+          {/* Mostra o equipamento e o colaborador antes de confirmar — sem isso o
+              operador confirmava a devolução às cegas, vendo apenas o #id. */}
+          {pendingReturnItem && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 border-t border-border pt-3">
+              <div>
+                <p className="text-caption text-muted-foreground">Tipo</p>
+                <p className="text-body-sm text-foreground">{pendingReturnItem.tipo || '-'}</p>
+              </div>
+              <div>
+                <p className="text-caption text-muted-foreground">Marca</p>
+                <p className="text-body-sm text-foreground">{pendingReturnItem.brand || '-'}</p>
+              </div>
+              <div>
+                <p className="text-caption text-muted-foreground">Modelo</p>
+                <p className="text-body-sm text-foreground">{pendingReturnItem.model || '-'}</p>
+              </div>
+              <div>
+                <p className="text-caption text-muted-foreground">Colaborador</p>
+                <p className="text-body-sm text-foreground">{pendingReturnItem.assigned_to || '-'}</p>
+              </div>
+              <div>
+                <p className="text-caption text-muted-foreground">Unidade</p>
+                <p className="text-body-sm text-foreground">{pendingReturnItem.revenda || '-'}</p>
+              </div>
+            </div>
+          )}
           <p className="text-body-sm text-muted-foreground">
             O termo de devolução foi gerado. Faça o upload do PDF assinado para confirmar.
           </p>

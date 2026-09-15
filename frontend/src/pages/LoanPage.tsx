@@ -196,6 +196,7 @@ export default function LoanPage() {
           }
           showGenerateButton
           onConfirmed={() => setPendingItemId(null)}
+          onCancel={() => setPendingItemId(null)}
         />
       )}
 
