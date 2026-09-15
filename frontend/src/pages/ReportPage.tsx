@@ -174,17 +174,11 @@ export default function ReportPage() {
     { accessorKey: 'model', header: 'Modelo' },
     { accessorKey: 'identificador', header: 'Identificador', cell: ({ getValue }) => <span className="num">{(getValue() as string) || '-'}</span> },
     { accessorKey: 'nota_fiscal', header: 'Nota Fiscal', cell: ({ getValue }) => getValue() as string || '-' },
-    { accessorKey: 'fornecedor', header: 'Fornecedor', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'usuario', header: 'Usuário', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'cpf', header: 'CPF', cell: ({ getValue }) => <span className="num">{(getValue() as string) || '-'}</span> },
-    { accessorKey: 'cargo', header: 'Cargo', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'setor', header: 'Setor', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'revenda', header: 'Revenda', cell: ({ getValue }) => getValue() as string || '-' },
-    { accessorKey: 'center_cost', header: 'C. Custo', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'data_emprestimo', header: 'Data', cell: ({ getValue }) => <span className="num">{formatDateTime(getValue() as string)}</span> },
-    { accessorKey: 'data_confirmacao', header: 'Confirmação', cell: ({ getValue }) => <span className="num">{formatDateTime(getValue() as string)}</span> },
-    { accessorKey: 'data_devolucao', header: 'Devolução', cell: ({ getValue }) => <span className="num">{formatDateTime(getValue() as string)}</span> },
-    { accessorKey: 'details', header: 'Detalhes', cell: ({ getValue }) => getValue() as string || '-' },
   ]
 
   return (

@@ -6,7 +6,6 @@ import { listItemsPaginated, type Item } from '@/api/items'
 import { listUnidades } from '@/api/unidades'
 import { DataTable } from '@/components/ui/DataTable'
 import { StatusBadge } from '@/components/ui/badge'
-import { StatBlock } from '@/components/ui/StatBlock'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ItemDetailsModal } from '@/components/equipment/ItemDetailsModal'
@@ -77,44 +76,6 @@ export default function StockPage() {
   const items = data?.items ?? []
   const total = data?.total ?? 0
 
-  // Cartões de indicador: cada um lê só o `total` de uma consulta dedicada com
-  // `limit: 1` — nunca soma o array da página. Antes, três destes quatro
-  // cartões eram `array.filter(...).length` sobre a mesma página de até 500
-  // itens que a tabela usava, então além de truncar em silêncio eles também
-  // discordavam do "Total em Estoque" (que já vinha do `total` do servidor).
-  // São contagens globais de estoque (não seguem os filtros de tipo/status/
-  // unidade/busca da tabela abaixo) — do contrário, ao escolher um status no
-  // filtro os outros três cartões cairiam para zero, o que é mais confuso do
-  // que informativo.
-  const { data: totalGeralData } = useQuery({
-    queryKey: ['items', 'count', 'total'],
-    queryFn: () => listItemsPaginated({ limit: 1 }),
-  })
-  const { data: disponiveisData } = useQuery({
-    queryKey: ['items', 'count', 'Disponível'],
-    queryFn: () => listItemsPaginated({ status: 'Disponível', limit: 1 }),
-  })
-  const { data: indisponiveisData } = useQuery({
-    queryKey: ['items', 'count', 'Indisponível'],
-    queryFn: () => listItemsPaginated({ status: 'Indisponível', limit: 1 }),
-  })
-  // "Ações Pendentes" cobre dois status distintos ("Pendente" e "Pendente
-  // Devolução"); o endpoint só filtra por igualdade, então precisa de duas
-  // chamadas somadas — ainda assim, cada uma lê só o `total`.
-  const { data: pendenteData } = useQuery({
-    queryKey: ['items', 'count', 'Pendente'],
-    queryFn: () => listItemsPaginated({ status: 'Pendente', limit: 1 }),
-  })
-  const { data: pendenteDevolucaoData } = useQuery({
-    queryKey: ['items', 'count', 'Pendente Devolução'],
-    queryFn: () => listItemsPaginated({ status: 'Pendente Devolução', limit: 1 }),
-  })
-
-  const totalGeral = totalGeralData?.total ?? 0
-  const disponiveisCount = disponiveisData?.total ?? 0
-  const indisponiveisCount = indisponiveisData?.total ?? 0
-  const pendentesCount = (pendenteData?.total ?? 0) + (pendenteDevolucaoData?.total ?? 0)
-
   function handleTipoChange(value: string) {
     setFilterTipo(value)
     setPageIndex(0)
@@ -170,25 +131,8 @@ export default function StockPage() {
       header: 'Status',
       cell: ({ row }) => <StatusBadge status={row.original.status} />,
     },
-    {
-      accessorKey: 'peripheral_count',
-      header: 'Periféricos',
-      size: 90,
-      cell: ({ getValue }) => <span className="num">{getValue() as number}</span>,
-    },
     { accessorKey: 'assigned_to', header: 'Usuário Alocado', cell: ({ getValue }) => (getValue() as string) || '-' },
     { accessorKey: 'revenda', header: 'Unidade' },
-    {
-      accessorKey: 'identificador',
-      header: 'Identificador',
-      cell: ({ getValue }) => <span className="num">{(getValue() as string) || '-'}</span>,
-    },
-    { accessorKey: 'setor', header: 'Setor', cell: ({ getValue }) => (getValue() as string) || '-' },
-    {
-      accessorKey: 'ip',
-      header: 'IP',
-      cell: ({ getValue }) => <span className="num">{(getValue() as string) || '-'}</span>,
-    },
     {
       accessorKey: 'date_registered',
       header: 'Data Cadastro',
@@ -230,7 +174,17 @@ export default function StockPage() {
       <PageHeader
         eyebrow="Inventário"
         eyebrowDetail="Painel Operacional de Equipamentos"
-        title="Estoque de Equipamentos"
+        title={
+          <span className="inline-flex items-baseline gap-3">
+            Estoque de Equipamentos
+            {/* Substitui os antigos cartões de indicador (Total, Disponíveis, Em
+                Empréstimo, Ações Pendentes): a contagem já vem de graça do
+                `total` da resposta paginada, sem requisição extra — a
+                referência (origin/redesign-frontend) mostra o mesmo texto no
+                lugar dos cartões, que ela mantém só no Dashboard. */}
+            <span className="text-caption font-mono num text-muted-foreground">({total} ativos registrados)</span>
+          </span>
+        }
         description="Gerenciamento centralizado de hardware e insumos de TI"
         actions={
           <>
@@ -247,26 +201,6 @@ export default function StockPage() {
           </>
         }
       />
-
-      {/* KPI Metric Cards — indicadores globais de estoque, cada um lido do
-          `total` de uma consulta dedicada (ver comentário acima das queries). */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="surface-panel p-4">
-          <StatBlock label="Total em Estoque" value={totalGeral} symbol="#" />
-        </div>
-
-        <div className="surface-panel p-4">
-          <StatBlock label="Disponíveis" value={disponiveisCount} symbol="○" />
-        </div>
-
-        <div className="surface-panel p-4">
-          <StatBlock label="Em Empréstimo" value={indisponiveisCount} />
-        </div>
-
-        <div className="surface-panel p-4">
-          <StatBlock label="Ações Pendentes" value={pendentesCount} symbol="!" />
-        </div>
-      </div>
 
       {/* Filter Bar */}
       <div className="surface-panel p-3 space-y-3">

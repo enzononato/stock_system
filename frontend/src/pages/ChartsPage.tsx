@@ -11,7 +11,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
 } from 'recharts'
 import { Button } from '@/components/ui/button'
@@ -436,7 +435,6 @@ export default function ChartsPage() {
                   fontWeight: '600',
                 }}
               />
-              <Legend wrapperStyle={{ paddingTop: '10px', fontSize: '12px', fontWeight: '600' }} />
               <Area
                 type="monotone"
                 dataKey="Empréstimos"
@@ -457,6 +455,24 @@ export default function ChartsPage() {
               />
             </AreaChart>
           </ResponsiveContainer>
+        )}
+
+        {/* Legenda manual — só este primeiro gráfico tem legenda (igual à
+            referência, origin/redesign-frontend); os outros dois ficam sem.
+            As cores vêm de CORES_GRAFICO/corDoToken (mesmo mecanismo das
+            séries do gráfico acima) via style inline, nunca de classe
+            Tailwind fixa — senão não acompanharia a troca de tema. */}
+        {!isLoading && !loansError && !loansVazio && (
+          <div className="flex items-center gap-6 pt-3 border-t border-border text-caption">
+            <div className="flex items-center gap-1.5">
+              <div className="w-6 h-0.5" style={{ backgroundColor: CORES_GRAFICO.serie1() }} />
+              <span className="text-foreground font-medium">Empréstimos</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-6 h-0.5" style={{ backgroundColor: CORES_GRAFICO.serie2() }} />
+              <span className="text-muted-foreground">Devoluções</span>
+            </div>
+          </div>
         )}
       </div>
 
