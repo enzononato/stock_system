@@ -15,7 +15,19 @@
 - **O BACKEND NÃO PODE SER ALTERADO.** Nenhum arquivo em `backend/` é tocado. Se algo exigir endpoint ou parâmetro novo, não se faz — registra-se como impossível.
 - Não mesclar, cherry-pickar ou dar checkout de nada da `redesign-frontend`.
 - **Não adicionar dependência npm.** Em particular, o Ctrl+K NÃO usa `cmdk` — é implementado à mão.
-- Não remover funcionalidade nem coluna existente. Em vários pontos o build atual é MELHOR que a referência (ordenação e busca no `DataTable`, 18 colunas no histórico contra 6, 19 no relatório contra 11, links de `/remove`, `/terms` e `/link` na sidebar). Nada disso regride.
+- **Fidelidade à referência é o padrão, MAS nenhuma remoção é feita sem aprovação.** O dono
+  decidiu: "igual, mas me mostre cada remoção antes". Na prática, para quem executa:
+  - Tudo que a referência TEM e nós não temos: implementar.
+  - Tudo que NÓS temos e ela não tem: **NÃO REMOVER.** Em vez disso, anotar no relatório,
+    numa seção chamada "Remoções necessárias para ficar idêntico", dizendo qual
+    funcionalidade teria de sair, em qual arquivo, e o que o usuário perde com isso.
+    O controlador junta essas listas e leva ao dono numa decisão só.
+  - Pontos já conhecidos onde nós temos mais: ordenação por coluna e busca no `DataTable`
+    (as tabelas artesanais da referência não têm), 18 colunas no histórico contra 6, 19 no
+    relatório contra 11, e os links de `/remove`, `/terms` e `/link` na sidebar (o `nav.ts`
+    dela os esconde — lá só se chega por Ctrl+K).
+  - Nenhuma task para esperando essa decisão: implementa o que soma, anota o que subtrairia,
+    e segue.
 - Todo texto de interface e todo comentário em português do Brasil.
 - Monocromático, exceto cor de status (via `Badge`/`StatusBadge`, com o ponto colorido) e cor destrutiva.
 - **Nunca usar modificador de opacidade sobre token customizado** (`bg-primary/50`) — não gera CSS nenhum aqui; o teste-guarda em `src/lib/tokens.test.ts` reprova.
@@ -290,4 +302,10 @@ colunas de histórico e relatório, e os links de `/remove`, `/terms` e `/link` 
   não tem), arquivos mortos importados por ninguém, três arquivos que não compilam por ler
   `item.cargo` (campo que não existe), e erros engolidos sistematicamente. Onde ela estiver
   errada, fazer certo e registrar.
-- Onde o build atual for melhor, ele vence.
+- Onde a referência for MELHOR ou tiver algo a mais, ela vence e você implementa.
+- Onde ela for PIOR ou tiver menos, você NÃO apaga nada: anota na seção "Remoções
+  necessárias para ficar idêntico" do seu relatório e segue em frente. A decisão de remover
+  é do dono, e ele pediu para ver cada uma antes.
+- Onde ela estiver simplesmente QUEBRADA (código que não compila, consulta a valor que o
+  enum não tem, requisição em tempestade N+1 calculando valor descartado), você faz certo e
+  registra o motivo — fidelidade não inclui copiar defeito.
