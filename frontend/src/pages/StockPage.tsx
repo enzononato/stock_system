@@ -1,8 +1,9 @@
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import type { ColumnDef } from '@tanstack/react-table'
 import { listItemsPaginated, type Item } from '@/api/items'
+import { listUnidades } from '@/api/unidades'
 import { DataTable } from '@/components/ui/DataTable'
 import { StatusBadge } from '@/components/ui/badge'
 import { StatBlock } from '@/components/ui/StatBlock'
@@ -13,40 +14,136 @@ import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
 import { useAuth } from '@/contexts/AuthContext'
 import { useConstants } from '@/hooks/useConstants'
 import { formatDate } from '@/lib/utils'
-import { Plus, Pencil, RefreshCw, Eye, Loader2 } from 'lucide-react'
+import { Plus, Pencil, RefreshCw, Eye, Loader2, X } from 'lucide-react'
 
 const STATUS_OPTIONS = ['Disponível', 'Indisponível', 'Pendente', 'Pendente Devolução']
-const FETCH_ALL_LIMIT = 500
+const PAGE_SIZE = 10
 
 export default function StockPage() {
   const { hasRole } = useAuth()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { equipmentTypes, isLoading: constantsLoading } = useConstants()
   const [filterTipo, setFilterTipo] = useState('all')
   const [filterStatus, setFilterStatus] = useState('all')
+  const [filterRevenda, setFilterRevenda] = useState('all')
+  const [pageIndex, setPageIndex] = useState(0)
+  // `search` é o que o usuário digita; `searchAplicado` é o que vai para a
+  // query, com atraso, para não disparar uma requisição por tecla (mesmo
+  // padrão do HistoryPage).
+  const [search, setSearch] = useState('')
+  const [searchAplicado, setSearchAplicado] = useState('')
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [selectedItem, setSelectedItem] = useState<Item | null>(null)
 
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ['items', filterTipo, filterStatus],
+  const hasFilters =
+    filterTipo !== 'all' || filterStatus !== 'all' || filterRevenda !== 'all' || searchAplicado !== ''
+
+  // Espera o usuário parar de digitar antes de consultar o servidor, e volta
+  // para a primeira página (mesmo padrão do HistoryPage): o resultado da nova
+  // busca não tem relação com a página em que ele estava.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchAplicado(search.trim())
+      setPageIndex(0)
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  const { data: unidades = [] } = useQuery({
+    queryKey: ['unidades-filter'],
+    queryFn: () => listUnidades(),
+  })
+
+  // Lista paginada de verdade: 10 itens por página, filtros e busca resolvidos
+  // no SQL (backend/app/db/inventory_manager_db.py). Antes disto a tela
+  // buscava `limit: 500` (o teto do backend, settings.MAX_PAGE_SIZE) e
+  // renderizava tudo — acima de 500 itens ativos a tabela truncava em
+  // silêncio, sem aviso nenhum ao usuário.
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ['items', 'list', filterTipo, filterStatus, filterRevenda, pageIndex, searchAplicado],
     queryFn: () =>
       listItemsPaginated({
         tipo: filterTipo !== 'all' ? filterTipo : undefined,
         status: filterStatus !== 'all' ? filterStatus : undefined,
-        limit: FETCH_ALL_LIMIT,
+        revenda: filterRevenda !== 'all' ? filterRevenda : undefined,
+        search: searchAplicado || undefined,
+        limit: PAGE_SIZE,
+        offset: pageIndex * PAGE_SIZE,
       }),
+    placeholderData: keepPreviousData,
   })
 
   const items = data?.items ?? []
   const total = data?.total ?? 0
 
-  const disponiveisCount = items.filter((i) => i.status === 'Disponível').length
-  const indisponiveisCount = items.filter((i) => i.status === 'Indisponível').length
-  const pendentesCount = items.filter((i) => i.status?.startsWith('Pendente')).length
+  // Cartões de indicador: cada um lê só o `total` de uma consulta dedicada com
+  // `limit: 1` — nunca soma o array da página. Antes, três destes quatro
+  // cartões eram `array.filter(...).length` sobre a mesma página de até 500
+  // itens que a tabela usava, então além de truncar em silêncio eles também
+  // discordavam do "Total em Estoque" (que já vinha do `total` do servidor).
+  // São contagens globais de estoque (não seguem os filtros de tipo/status/
+  // unidade/busca da tabela abaixo) — do contrário, ao escolher um status no
+  // filtro os outros três cartões cairiam para zero, o que é mais confuso do
+  // que informativo.
+  const { data: totalGeralData } = useQuery({
+    queryKey: ['items', 'count', 'total'],
+    queryFn: () => listItemsPaginated({ limit: 1 }),
+  })
+  const { data: disponiveisData } = useQuery({
+    queryKey: ['items', 'count', 'Disponível'],
+    queryFn: () => listItemsPaginated({ status: 'Disponível', limit: 1 }),
+  })
+  const { data: indisponiveisData } = useQuery({
+    queryKey: ['items', 'count', 'Indisponível'],
+    queryFn: () => listItemsPaginated({ status: 'Indisponível', limit: 1 }),
+  })
+  // "Ações Pendentes" cobre dois status distintos ("Pendente" e "Pendente
+  // Devolução"); o endpoint só filtra por igualdade, então precisa de duas
+  // chamadas somadas — ainda assim, cada uma lê só o `total`.
+  const { data: pendenteData } = useQuery({
+    queryKey: ['items', 'count', 'Pendente'],
+    queryFn: () => listItemsPaginated({ status: 'Pendente', limit: 1 }),
+  })
+  const { data: pendenteDevolucaoData } = useQuery({
+    queryKey: ['items', 'count', 'Pendente Devolução'],
+    queryFn: () => listItemsPaginated({ status: 'Pendente Devolução', limit: 1 }),
+  })
+
+  const totalGeral = totalGeralData?.total ?? 0
+  const disponiveisCount = disponiveisData?.total ?? 0
+  const indisponiveisCount = indisponiveisData?.total ?? 0
+  const pendentesCount = (pendenteData?.total ?? 0) + (pendenteDevolucaoData?.total ?? 0)
+
+  function handleTipoChange(value: string) {
+    setFilterTipo(value)
+    setPageIndex(0)
+  }
+
+  function handleStatusChange(value: string) {
+    setFilterStatus(value)
+    setPageIndex(0)
+  }
+
+  function handleRevendaChange(value: string) {
+    setFilterRevenda(value)
+    setPageIndex(0)
+  }
+
+  function handleClearFilters() {
+    setFilterTipo('all')
+    setFilterStatus('all')
+    setFilterRevenda('all')
+    setSearch('')
+    setSearchAplicado('')
+    setPageIndex(0)
+  }
 
   const handleRefresh = async () => {
     setIsRefreshing(true)
-    await refetch()
+    // Invalida a lista paginada e todos os cartões de indicador de uma vez —
+    // todas as queries desta tela usam o prefixo 'items'.
+    await queryClient.invalidateQueries({ queryKey: ['items'] })
     setTimeout(() => setIsRefreshing(false), 500)
   }
 
@@ -138,7 +235,7 @@ export default function StockPage() {
         actions={
           <>
             <Button variant="outline" size="sm" onClick={handleRefresh}>
-              <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
+              <RefreshCw size={14} className={isRefreshing || isFetching ? 'animate-spin' : ''} />
               Atualizar
             </Button>
             {hasRole('Gestor', 'Técnico') && (
@@ -151,10 +248,11 @@ export default function StockPage() {
         }
       />
 
-      {/* KPI Metric Cards */}
+      {/* KPI Metric Cards — indicadores globais de estoque, cada um lido do
+          `total` de uma consulta dedicada (ver comentário acima das queries). */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="surface-panel p-4">
-          <StatBlock label="Total em Estoque" value={total} symbol="#" />
+          <StatBlock label="Total em Estoque" value={totalGeral} symbol="#" />
         </div>
 
         <div className="surface-panel p-4">
@@ -174,7 +272,7 @@ export default function StockPage() {
       <div className="surface-panel p-3 space-y-3">
         <PanelHeader title="Filtros de Consulta" />
         <div className="flex flex-wrap items-center gap-3">
-          <Select value={filterTipo} onValueChange={setFilterTipo} disabled={constantsLoading}>
+          <Select value={filterTipo} onValueChange={handleTipoChange} disabled={constantsLoading}>
             <SelectTrigger className="w-48">
               <SelectValue placeholder="Tipo de Equipamento" />
             </SelectTrigger>
@@ -188,7 +286,7 @@ export default function StockPage() {
             </SelectContent>
           </Select>
 
-          <Select value={filterStatus} onValueChange={setFilterStatus}>
+          <Select value={filterStatus} onValueChange={handleStatusChange}>
             <SelectTrigger className="w-56">
               <SelectValue placeholder="Status do Item" />
             </SelectTrigger>
@@ -202,16 +300,28 @@ export default function StockPage() {
             </SelectContent>
           </Select>
 
-          {(filterTipo !== 'all' || filterStatus !== 'all') && (
+          <Select value={filterRevenda} onValueChange={handleRevendaChange}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Unidade" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as unidades</SelectItem>
+              {unidades.map((u) => (
+                <SelectItem key={u.id} value={u.nome}>
+                  {u.nome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {hasFilters && (
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => {
-                setFilterTipo('all')
-                setFilterStatus('all')
-              }}
+              onClick={handleClearFilters}
               className="text-xs text-muted-foreground hover:text-foreground"
             >
+              <X size={14} />
               Limpar Filtros
             </Button>
           )}
@@ -225,12 +335,45 @@ export default function StockPage() {
           <p className="text-body-sm text-muted-foreground">Carregando estoque...</p>
         </div>
       ) : (
-        <DataTable
-          data={items}
-          columns={columns}
-          onRowClick={(item) => setSelectedItem(item)}
-          searchPlaceholder="Buscar por patrimônio, marca, modelo, usuário, setor, IP..."
-        />
+        <>
+          {/* Estado vazio distingue "não há item cadastrado" (frota realmente
+              vazia) de "nenhum resultado para este filtro" (há itens, mas os
+              filtros/busca atuais não encontram nenhum) — o segundo sugere
+              limpar os filtros. Renderizado além da DataTable (não no lugar
+              dela) para não tirar do usuário a busca/paginação já em uso. */}
+          {items.length === 0 && (
+            <div className="surface-panel p-6 flex flex-col items-center gap-2 text-center">
+              <p className="text-body-sm text-foreground font-medium">
+                {hasFilters ? 'Nenhum resultado para este filtro.' : 'Nenhum item cadastrado.'}
+              </p>
+              <p className="text-body-sm text-muted-foreground">
+                {hasFilters
+                  ? 'Ajuste os filtros ou a busca para encontrar o que procura.'
+                  : 'Cadastre um equipamento para começar a usar o estoque.'}
+              </p>
+              {hasFilters && (
+                <Button variant="outline" size="sm" onClick={handleClearFilters}>
+                  <X size={14} />
+                  Limpar Filtros
+                </Button>
+              )}
+            </div>
+          )}
+          <DataTable
+            data={items}
+            columns={columns}
+            onRowClick={(item) => setSelectedItem(item)}
+            searchPlaceholder="Buscar por patrimônio, marca, modelo, usuário, setor, IP..."
+            pagination={{
+              total,
+              pageIndex,
+              pageSize: PAGE_SIZE,
+              onPageChange: setPageIndex,
+              search,
+              onSearchChange: setSearch,
+            }}
+          />
+        </>
       )}
 
       {/* Modal de Detalhes do Equipamento */}
@@ -238,5 +381,3 @@ export default function StockPage() {
     </div>
   )
 }
-
-
