@@ -1,7 +1,8 @@
-import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { listItemsPaginated, removeItem } from '@/api/items'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
@@ -11,11 +12,12 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { useConstants } from '@/hooks/useConstants'
 import { Trash2 } from 'lucide-react'
 
-// Sem paginação nesta tela (filtra "Disponível" client-side a partir da
-// lista completa) — usamos o teto de página do backend para não truncar em
-// 50 itens (default de GET /api/items) como aconteceria chamando
-// listItemsPaginated() sem limit.
-const FETCH_ALL_LIMIT = 500
+// Esta tela só tem um bloco de dados, e é uma lista de SELEÇÃO — o operador
+// procura o equipamento "Disponível" a remover, não folheia página por
+// página. Por isso liga a busca (com debounce) ao parâmetro `search` do
+// servidor, com `limit` pequeno, em vez de buscar os 500 primeiros e filtrar
+// no cliente (T3).
+const ITEM_SEARCH_LIMIT = 20
 
 export default function RemovePage() {
   const queryClient = useQueryClient()
@@ -24,12 +26,24 @@ export default function RemovePage() {
   const [reason, setReason] = useState('')
   const [attachment, setAttachment] = useState<File | null>(null)
 
+  // Busca do equipamento disponível: `itemSearch` é o que o operador digita,
+  // `itemSearchAplicado` é o que vai para o servidor, com atraso, para não
+  // disparar uma requisição por tecla (mesmo padrão do debounce de busca já
+  // usado em HistoryPage/StockPage).
+  const [itemSearch, setItemSearch] = useState('')
+  const [itemSearchAplicado, setItemSearchAplicado] = useState('')
+  useEffect(() => {
+    const timer = setTimeout(() => setItemSearchAplicado(itemSearch.trim()), 400)
+    return () => clearTimeout(timer)
+  }, [itemSearch])
+
   const { data } = useQuery({
-    queryKey: ['items'],
-    queryFn: () => listItemsPaginated({ limit: FETCH_ALL_LIMIT }),
+    queryKey: ['items', 'select', 'Disponível', itemSearchAplicado],
+    queryFn: () =>
+      listItemsPaginated({ status: 'Disponível', search: itemSearchAplicado || undefined, limit: ITEM_SEARCH_LIMIT }),
+    placeholderData: keepPreviousData,
   })
-  const items = data?.items ?? []
-  const disponiveis = items.filter(i => i.status === 'Disponível')
+  const disponiveis = data?.items ?? []
 
   // T2: o mapa de quais motivos exigem comprovante vem de /api/constants
   // (removalReasonsAttachment), não mais de um objeto hardcoded local.
@@ -70,6 +84,13 @@ export default function RemovePage() {
       <form onSubmit={handleSubmit} className="figure-ground-panel space-y-4">
         <div className="flex flex-col gap-1.5">
           <Label>Equipamento *</Label>
+          {/* Busca no servidor (debounce de 400ms): digite para procurar entre
+              todos os equipamentos "Disponível", não só os 20 exibidos abaixo. */}
+          <Input
+            value={itemSearch}
+            onChange={(e) => setItemSearch(e.target.value)}
+            placeholder="Buscar por marca, modelo ou identificador (patrimônio)..."
+          />
           <SearchableSelect
             options={disponiveis.map((i) => ({
               value: String(i.id),
@@ -78,8 +99,8 @@ export default function RemovePage() {
             }))}
             value={selectedId}
             onValueChange={setSelectedId}
-            placeholder="Selecione ou busque um equipamento..."
-            searchPlaceholder="Buscar por ID, tipo, marca, modelo, patrimônio..."
+            placeholder="Selecione um equipamento disponível..."
+            searchPlaceholder="Filtrar nos resultados abaixo..."
           />
         </div>
 
