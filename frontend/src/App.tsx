@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import AppLayout from '@/components/layout/AppLayout'
+import { RestrictedAccess } from '@/components/layout/RestrictedAccess'
 import LoginPage from '@/pages/LoginPage'
 import DashboardPage from '@/pages/DashboardPage'
 import StockPage from '@/pages/StockPage'
@@ -18,10 +19,18 @@ import UsersPage from '@/pages/UsersPage'
 import UnidadesPage from '@/pages/UnidadesPage'
 import { ToastContainer } from '@/components/ui/toast'
 
-/** Guard que redireciona para /login se não tiver o role necessário */
+/**
+ * Guard de papel. Antes redirecionava silenciosamente para "/" quando o
+ * usuário não tinha o papel necessário — o usuário clicava em algo, caía no
+ * Dashboard e não entendia por quê. Agora mostra `RestrictedAccess`
+ * explicando o motivo e oferecendo um caminho de volta (Task 8, Step 4).
+ * Sem usuário logado ainda vale a pena mandar para /login — não há nada a
+ * explicar nesse caso, é só sessão ausente.
+ */
 function RequireRole({ roles, children }: { roles: string[]; children: React.ReactNode }) {
   const { user } = useAuth()
-  if (!user || !roles.includes(user.role)) return <Navigate to="/" replace />
+  if (!user) return <Navigate to="/login" replace />
+  if (!roles.includes(user.role)) return <RestrictedAccess roles={roles} currentRole={user.role} />
   return <>{children}</>
 }
 
