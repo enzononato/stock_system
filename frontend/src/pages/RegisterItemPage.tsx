@@ -75,7 +75,10 @@ export default function RegisterItemPage({ mode }: Props) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['items'] })
       toast(mode === 'create' ? 'Item cadastrado com sucesso!' : 'Item atualizado com sucesso!')
-      navigate('/')
+      // Antes da Task 7 deste plano, "/" era a lista de estoque; agora é o
+      // Dashboard. Quem cadastra ou edita um item quer voltar para a lista,
+      // não para o painel de indicadores — por isso o destino é "/stock".
+      navigate('/stock')
     },
     onError: (err: unknown) => {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erro ao salvar item.'

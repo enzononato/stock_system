@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
 import {
-  Package, PackagePlus, Cpu, Link2,
+  LayoutDashboard, Package, PackagePlus, Cpu, Link2,
   ArrowRightLeft, Undo2, Trash2, History, BarChart2, LineChart,
   FileText, Users, Building2, Boxes, ShieldCheck
 } from 'lucide-react'
@@ -23,8 +23,11 @@ const navGroups: NavGroup[] = [
   {
     title: 'Visão Geral',
     items: [
-      { to: '/', label: 'Estoque', icon: <Package size={18} /> },
-      { to: '/charts', label: 'Dashboard & Gráficos', icon: <LineChart size={18} /> },
+      // Task 7: Dashboard assume "/" (nova home); o estoque, que ficava
+      // aqui, passou para "/stock".
+      { to: '/', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
+      { to: '/stock', label: 'Estoque', icon: <Package size={18} /> },
+      { to: '/charts', label: 'Indicadores & Gráficos', icon: <LineChart size={18} /> },
     ],
   },
   {

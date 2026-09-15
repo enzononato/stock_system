@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import AppLayout from '@/components/layout/AppLayout'
 import LoginPage from '@/pages/LoginPage'
+import DashboardPage from '@/pages/DashboardPage'
 import StockPage from '@/pages/StockPage'
 import RegisterItemPage from '@/pages/RegisterItemPage'
 import PeripheralsPage from '@/pages/PeripheralsPage'
@@ -32,8 +33,10 @@ export default function App() {
 
         {/* Todas as rotas protegidas dentro do AppLayout */}
         <Route element={<AppLayout />}>
-          {/* Acessível por todos os roles */}
-          <Route index element={<StockPage />} />
+          {/* Acessível por todos os roles — Dashboard é a nova home (Task 7);
+              o estoque, que ocupava "/", mudou para "/stock". */}
+          <Route index element={<DashboardPage />} />
+          <Route path="stock" element={<StockPage />} />
           <Route path="charts" element={<ChartsPage />} />
 
           {/* Gestor + Técnico */}
