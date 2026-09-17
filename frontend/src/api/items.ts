@@ -35,6 +35,8 @@ export interface Item {
   date_registered?: string
   date_issued?: string
   peripheral_count?: number
+  cargo?: string
+  center_cost?: string
 }
 
 export interface ListItemsParams {

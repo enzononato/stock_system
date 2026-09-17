@@ -37,6 +37,7 @@
 .animated-usersicon:hover { transform: scale(1.04); }
 .animated-settingsicon:hover { transform: rotate(28deg); }
 .animated-trash2icon:hover { transform: translateY(-1px) rotate(-4deg); }
+.animated-termosicon:hover { transform: translateY(-2px); }
 
 @media (prefers-reduced-motion: reduce) {
   .animated-sidebar-icon,

@@ -8,5 +8,6 @@ export { DevolucoesIcon } from "./DevolucoesIcon";
 export { EmpresasIcon } from "./EmpresasIcon";
 export { UsuariosIcon } from "./UsuariosIcon";
 export { RelatoriosIcon } from "./RelatoriosIcon";
+export { TermosIcon } from "./TermosIcon";
 export { ConfiguracoesIcon } from "./ConfiguracoesIcon";
 export { LixeiraIcon } from "./LixeiraIcon";

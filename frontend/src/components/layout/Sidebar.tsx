@@ -1,7 +1,8 @@
+import { useState, useEffect } from 'react'
 import { NavLink, Link } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
-import { ShieldCheck } from 'lucide-react'
+import { ShieldCheck, ChevronRight } from 'lucide-react'
 import {
   EstoqueIcon,
   DashboardIcon,
@@ -11,6 +12,7 @@ import {
   EmprestimosIcon,
   DevolucoesIcon,
   RelatoriosIcon,
+  TermosIcon,
   LixeiraIcon,
   EmpresasIcon,
   UsuariosIcon,
@@ -30,42 +32,72 @@ interface NavGroup {
 
 const navGroups: NavGroup[] = [
   {
-    title: 'Visão Geral',
+    title: 'Principal',
     items: [
-      { to: '/', label: 'Estoque', icon: <EstoqueIcon size={18} /> },
-      { to: '/charts', label: 'Dashboard & Gráficos', icon: <DashboardIcon size={18} /> },
+      { to: '/', label: 'Dashboard', icon: <DashboardIcon size={18} /> },
     ],
   },
   {
-    title: 'Gestão de Itens',
+    title: 'Inventário',
     items: [
-      { to: '/register', label: 'Cadastrar Equipamento', icon: <PatrimoniosIcon size={18} />, roles: ['Gestor', 'Técnico'] },
+      { to: '/stock', label: 'Estoque', icon: <EstoqueIcon size={18} /> },
+      { to: '/register', label: 'Cadastro', icon: <PatrimoniosIcon size={18} />, roles: ['Gestor', 'Técnico'] },
+      { to: '/history', label: 'Histórico', icon: <MovimentacoesIcon size={18} />, roles: ['Gestor', 'Técnico'] },
+    ],
+  },
+  {
+    title: 'Operações',
+    items: [
+      { to: '/loan', label: 'Empréstimos', icon: <EmprestimosIcon size={18} />, roles: ['Gestor', 'Técnico'] },
+      { to: '/return', label: 'Devoluções', icon: <DevolucoesIcon size={18} />, roles: ['Gestor', 'Técnico'] },
       { to: '/peripherals', label: 'Periféricos', icon: <PerifericosIcon size={18} />, roles: ['Gestor', 'Técnico'] },
       { to: '/link', label: 'Vincular Periférico', icon: <MovimentacoesIcon size={18} />, roles: ['Gestor', 'Técnico'] },
-      { to: '/loan', label: 'Emprestar', icon: <EmprestimosIcon size={18} />, roles: ['Gestor', 'Técnico'] },
-      { to: '/return', label: 'Devolver', icon: <DevolucoesIcon size={18} />, roles: ['Gestor', 'Técnico'] },
-      { to: '/terms', label: 'Termos de Resp.', icon: <RelatoriosIcon size={18} />, roles: ['Gestor', 'Técnico'] },
     ],
   },
   {
-    title: 'Relatórios & Auditoria',
+    title: 'Gestão',
     items: [
-      { to: '/history', label: 'Histórico de Ações', icon: <MovimentacoesIcon size={18} />, roles: ['Gestor', 'Técnico'] },
-      { to: '/report', label: 'Relatórios BI', icon: <RelatoriosIcon size={18} />, roles: ['Gestor', 'Técnico'] },
-    ],
-  },
-  {
-    title: 'Administração',
-    items: [
-      { to: '/remove', label: 'Remover / Estorno', icon: <LixeiraIcon size={18} />, roles: ['Gestor'] },
-      { to: '/unidades', label: 'Unidades de Revenda', icon: <EmpresasIcon size={18} />, roles: ['Gestor'] },
-      { to: '/users', label: 'Gestão de Usuários', icon: <UsuariosIcon size={18} />, roles: ['Gestor'] },
+      { to: '/users', label: 'Usuários', icon: <UsuariosIcon size={18} />, roles: ['Gestor'] },
+      { to: '/unidades', label: 'Unidades', icon: <EmpresasIcon size={18} />, roles: ['Gestor'] },
+      { to: '/terms', label: 'Termos de Resp.', icon: <TermosIcon size={18} />, roles: ['Gestor', 'Técnico'] },
+      { to: '/report', label: 'Relatórios', icon: <RelatoriosIcon size={18} />, roles: ['Gestor', 'Técnico'] },
+      { to: '/charts', label: 'Indicadores', icon: <DashboardIcon size={18} /> },
+      { to: '/remove', label: 'Baixa de Ativos', icon: <LixeiraIcon size={18} />, roles: ['Gestor'] },
     ],
   },
 ]
 
+const STORAGE_KEY = 'revalle_sidebar_groups'
+
 export default function Sidebar() {
   const { user } = useAuth()
+
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY)
+      if (saved) return JSON.parse(saved)
+    } catch {
+      // Ignora erro de storage
+    }
+    return {
+      'Principal': true,
+      'Inventário': true,
+      'Operações': true,
+      'Gestão': true,
+    }
+  })
+
+  function toggleGroup(title: string) {
+    setOpenGroups((prev) => {
+      const updated = { ...prev, [title]: !prev[title] }
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
+      } catch {
+        // Ignora erro de storage
+      }
+      return updated
+    })
+  }
 
   return (
     <aside className="flex flex-col w-64 h-full bg-sidebar border-r border-sidebar-border select-none shrink-0">
@@ -91,38 +123,53 @@ export default function Sidebar() {
       </Link>
 
       {/* Navigation Groups */}
-      <nav className="flex-1 overflow-y-auto py-4 px-2.5 space-y-5">
+      <nav className="flex-1 overflow-y-auto py-4 px-2.5 space-y-4">
         {navGroups.map((group) => {
           const visibleItems = group.items.filter(
             (item) => !item.roles || (user && item.roles.includes(user.role))
           )
           if (visibleItems.length === 0) return null
+          const isOpen = openGroups[group.title] ?? true
 
           return (
-            <div key={group.title} className="space-y-0.5">
-              <h3 className="text-caption text-muted-foreground px-2 py-1">
-                {group.title}
-              </h3>
-              <div className="space-y-0.5">
-                {visibleItems.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.to === '/'}
-                    className={({ isActive }) =>
-                      cn(
-                        'flex items-center gap-2.5 px-2.5 py-1.5 rounded text-body-sm transition-colors duration-micro',
-                        isActive
-                          ? 'bg-surface-alt text-foreground font-semibold border-l-2 border-foreground'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-surface-alt'
-                      )
-                    }
-                  >
-                    {item.icon}
-                    <span className="truncate">{item.label}</span>
-                  </NavLink>
-                ))}
-              </div>
+            <div key={group.title} className="space-y-1">
+              <button
+                type="button"
+                onClick={() => toggleGroup(group.title)}
+                className="flex w-full items-center justify-between px-2.5 py-1 text-caption text-muted-foreground hover:text-foreground transition-colors cursor-pointer group/hdr"
+              >
+                <span className="font-semibold tracking-wider">{group.title}</span>
+                <ChevronRight
+                  className={cn(
+                    'size-3.5 text-muted-foreground transition-transform duration-micro group-hover/hdr:text-foreground',
+                    isOpen && 'rotate-90'
+                  )}
+                  aria-hidden="true"
+                />
+              </button>
+
+              {isOpen && (
+                <div className="space-y-0.5 animate-accordion-down">
+                  {visibleItems.map((item) => (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      end={item.to === '/'}
+                      className={({ isActive }) =>
+                        cn(
+                          'flex items-center gap-2.5 px-2.5 py-1.5 rounded text-body-sm transition-colors duration-micro',
+                          isActive
+                            ? 'bg-surface-alt text-foreground font-semibold border-l-2 border-foreground'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-surface-alt'
+                        )
+                      }
+                    >
+                      {item.icon}
+                      <span className="truncate">{item.label}</span>
+                    </NavLink>
+                  ))}
+                </div>
+              )}
             </div>
           )
         })}
