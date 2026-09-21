@@ -13,12 +13,13 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { StatBlock } from '@/components/ui/StatBlock'
-import { Calendar, Filter, Loader2, RefreshCw } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { LoadingState, EmptyState, ErrorState } from '@/components/ui/StateBlocks'
+import { Calendar, Filter } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { useTheme } from '@/lib/theme'
 import { useAuth } from '@/contexts/AuthContext'
@@ -72,54 +73,6 @@ interface PontoCadastro {
 interface PontoSemana {
   dia: string
   Empréstimos: number
-}
-
-/** Extrai a mensagem de erro de uma falha de requisição (axios), com uma leitura
- * específica para 403 — o único código que os endpoints usados aqui podem devolver
- * por causa de restrição de papel (ver filtro de unidade, mais abaixo). */
-function mensagemDeErro(err: unknown, fallback: string): string {
-  const resp = (err as { response?: { status?: number; data?: { detail?: string } } })?.response
-  if (resp?.status === 403) {
-    return 'Seu perfil de acesso não permite ver este relatório filtrado por unidade.'
-  }
-  return resp?.data?.detail ?? fallback
-}
-
-/** Estado vazio por gráfico: "Nenhuma movimentação neste período" em vez de eixos sem barras. */
-function EstadoVazioGrafico({ mensagem, altura }: { mensagem: string; altura: number }) {
-  return (
-    <div
-      className="flex items-center justify-center text-body-sm text-muted-foreground"
-      style={{ height: altura }}
-    >
-      {mensagem}
-    </div>
-  )
-}
-
-/** Estado de erro por gráfico, com botão de repetir — antes disso nenhuma página
- * lia `error` de `useQuery`, e uma falha de rede virava um "sem dados" silencioso. */
-function EstadoErroGrafico({
-  erro,
-  altura,
-  onTentarNovamente,
-}: {
-  erro: unknown
-  altura: number
-  onTentarNovamente: () => void
-}) {
-  return (
-    <div
-      className="flex flex-col items-center justify-center gap-3 text-body-sm text-muted-foreground"
-      style={{ height: altura }}
-    >
-      <p>{mensagemDeErro(erro, 'Não foi possível carregar este gráfico.')}</p>
-      <Button variant="outline" size="sm" onClick={onTentarNovamente}>
-        <RefreshCw size={14} />
-        Tentar novamente
-      </Button>
-    </div>
-  )
 }
 
 export default function ChartsPage() {
@@ -401,14 +354,16 @@ export default function ChartsPage() {
         </div>
 
         {isLoading ? (
-          <div className="h-72 flex items-center justify-center gap-2 text-body-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Carregando gráfico...
-          </div>
+          <LoadingState label="Carregando gráfico..." className="h-72" />
         ) : loansError ? (
-          <EstadoErroGrafico erro={loansError} altura={288} onTentarNovamente={repetirLoans} />
+          <ErrorState
+            error={loansError}
+            onRetry={repetirLoans}
+            title="Não foi possível carregar este gráfico"
+            className="h-72"
+          />
         ) : loansVazio ? (
-          <EstadoVazioGrafico mensagem="Nenhuma movimentação neste período." altura={288} />
+          <EmptyState title="Nenhuma movimentação neste período." className="h-72" />
         ) : (
           <ResponsiveContainer width="100%" height={320}>
             <AreaChart data={loansChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -490,14 +445,16 @@ export default function ChartsPage() {
           </div>
 
           {isLoading ? (
-            <div className="h-64 flex items-center justify-center gap-2 text-body-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Carregando gráfico...
-            </div>
+            <LoadingState label="Carregando gráfico..." className="h-64" />
           ) : regError ? (
-            <EstadoErroGrafico erro={regError} altura={256} onTentarNovamente={repetirReg} />
+            <ErrorState
+              error={regError}
+              onRetry={repetirReg}
+              title="Não foi possível carregar este gráfico"
+              className="h-64"
+            />
           ) : regVazio ? (
-            <EstadoVazioGrafico mensagem="Nenhuma movimentação neste período." altura={256} />
+            <EmptyState title="Nenhuma movimentação neste período." className="h-64" />
           ) : (
             <ResponsiveContainer width="100%" height={256}>
               <BarChart data={regChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -533,14 +490,16 @@ export default function ChartsPage() {
           </div>
 
           {isLoading ? (
-            <div className="h-64 flex items-center justify-center gap-2 text-body-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Carregando gráfico...
-            </div>
+            <LoadingState label="Carregando gráfico..." className="h-64" />
           ) : loansError ? (
-            <EstadoErroGrafico erro={loansError} altura={256} onTentarNovamente={repetirLoans} />
+            <ErrorState
+              error={loansError}
+              onRetry={repetirLoans}
+              title="Não foi possível carregar este gráfico"
+              className="h-64"
+            />
           ) : weekdayVazio ? (
-            <EstadoVazioGrafico mensagem="Nenhuma movimentação neste período." altura={256} />
+            <EmptyState title="Nenhuma movimentação neste período." className="h-64" />
           ) : (
             <ResponsiveContainer width="100%" height={256}>
               <BarChart data={weekdayChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>

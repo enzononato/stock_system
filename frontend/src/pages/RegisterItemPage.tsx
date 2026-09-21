@@ -138,77 +138,94 @@ export default function RegisterItemPage({ mode }: Props) {
         }
       />
 
-      <form onSubmit={handleSubmit} className="surface-panel p-6 space-y-4">
-        <PanelHeader title="Dados do Equipamento" description="Informações gerais do item a ser cadastrado." />
-        {/* Tipo */}
-        <div className="flex flex-col gap-1.5">
-          <Label>Tipo *</Label>
-          <Select value={tipo} onValueChange={setTipo} required disabled={constantsLoading}>
-            <SelectTrigger><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
-            <SelectContent>
-              {equipmentTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
+      <form onSubmit={handleSubmit} className="surface-panel p-6 space-y-6">
+        {/* Seção 1: Identificação Geral */}
+        <div className="space-y-4">
+          <PanelHeader
+            title="1. Identificação Geral"
+            description="Tipo de ativo, fabricante e modelo comercial."
+          />
           <div className="flex flex-col gap-1.5">
-            <Label>Marca *</Label>
-            <Input value={brand} onChange={e => setBrand(e.target.value)} required />
+            <Label>Tipo *</Label>
+            <Select value={tipo} onValueChange={setTipo} required disabled={constantsLoading}>
+              <SelectTrigger><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
+              <SelectContent>
+                {equipmentTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Modelo *</Label>
-            <Input value={model} onChange={e => setModel(e.target.value)} required />
-          </div>
-        </div>
 
-        <div className="flex flex-col gap-1.5">
-          <Label>Revenda *</Label>
-          <Select value={revenda} onValueChange={setRevenda} required disabled={constantsLoading}>
-            <SelectTrigger><SelectValue placeholder="Selecione a revenda" /></SelectTrigger>
-            <SelectContent>
-              {revendas.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="flex flex-col gap-1.5">
-            <Label>Nota Fiscal</Label>
-            <Input
-              value={notaFiscal}
-              onChange={e => setNotaFiscal(maskNotaFiscalInput(e.target.value))}
-              placeholder="9 dígitos"
-              inputMode="numeric"
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Fornecedor</Label>
-            <Input value={fornecedor} onChange={e => setFornecedor(e.target.value)} />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label>Marca *</Label>
+              <Input value={brand} onChange={e => setBrand(e.target.value)} required />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Modelo *</Label>
+              <Input value={model} onChange={e => setModel(e.target.value)} required />
+            </div>
           </div>
         </div>
 
-        {mode === 'create' && (
+        {/* Seção 2: Lotação e Dados de Origem */}
+        <div className="space-y-4 border-t border-border pt-4">
+          <PanelHeader
+            title="2. Lotação e Dados de Origem"
+            description="Revenda responsável, nota fiscal e fornecedor."
+          />
           <div className="flex flex-col gap-1.5">
-            <Label>Data de Cadastro *</Label>
-            <Input
-              value={dateRegistered}
-              onChange={e => setDateRegistered(e.target.value)}
-              placeholder="dd/mm/aaaa"
-              required
-            />
+            <Label>Revenda *</Label>
+            <Select value={revenda} onValueChange={setRevenda} required disabled={constantsLoading}>
+              <SelectTrigger><SelectValue placeholder="Selecione a revenda" /></SelectTrigger>
+              <SelectContent>
+                {revendas.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
-        )}
 
-        {/* Campos específicos do tipo */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label>Nota Fiscal</Label>
+              <Input
+                value={notaFiscal}
+                onChange={e => setNotaFiscal(maskNotaFiscalInput(e.target.value))}
+                placeholder="9 dígitos"
+                inputMode="numeric"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Fornecedor</Label>
+              <Input value={fornecedor} onChange={e => setFornecedor(e.target.value)} />
+            </div>
+          </div>
+
+          {mode === 'create' && (
+            <div className="flex flex-col gap-1.5">
+              <Label>Data de Cadastro *</Label>
+              <Input
+                value={dateRegistered}
+                onChange={e => setDateRegistered(e.target.value)}
+                placeholder="dd/mm/aaaa"
+                required
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Seção 3: Campos específicos do tipo */}
         {tipo && (
-          <div className="border-t border-border pt-4 space-y-4">
-            <p className="text-caption text-muted-foreground">Informações específicas — {tipo}</p>
-            <TypeSpecificFields
-              tipo={tipo}
-              values={specificFields}
-              onChange={(k, v) => setSpecificFields(prev => ({ ...prev, [k]: v }))}
+          <div className="space-y-4 border-t border-border pt-4">
+            <PanelHeader
+              title={`3. Campos específicos — ${tipo}`}
+              description={`Parâmetros técnicos aplicáveis a ativos do tipo ${tipo}.`}
             />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <TypeSpecificFields
+                tipo={tipo}
+                values={specificFields}
+                onChange={(k, v) => setSpecificFields(prev => ({ ...prev, [k]: v }))}
+              />
+            </div>
           </div>
         )}
 

@@ -13,6 +13,17 @@ import { Button } from './button'
 import { cn } from '@/lib/utils'
 import { ArrowUpDown, ChevronLeft, ChevronRight, Search, X } from 'lucide-react'
 
+// Permite que cada coluna declare classes extras para sua <th>/<td> — usado
+// pelas telas de alta densidade (ex.: StockPage) para esconder colunas por
+// breakpoint (`hidden md:table-cell` etc.) sem duplicar a tabela numa versão
+// escrita à mão.
+declare module '@tanstack/react-table' {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  interface ColumnMeta<TData, TValue> {
+    className?: string
+  }
+}
+
 export interface DataTablePaginationProps {
   total: number
   pageIndex: number
@@ -146,7 +157,10 @@ export function DataTable<TData>({
                   {headerGroup.headers.map((header) => (
                     <th
                       key={header.id}
-                      className="text-caption text-muted-foreground px-4 py-2.5 text-left whitespace-nowrap select-none"
+                      className={cn(
+                        'text-caption text-muted-foreground px-4 py-2.5 text-left whitespace-nowrap select-none',
+                        header.column.columnDef.meta?.className
+                      )}
                       onClick={header.column.getToggleSortingHandler()}
                       style={{ cursor: header.column.getCanSort() ? 'pointer' : 'default' }}
                     >
@@ -179,12 +193,21 @@ export function DataTable<TData>({
                       onRowClick?.(row.original)
                     }}
                     className={cn(
-                      'border-b border-border last:border-0 hover:bg-surface-alt transition-colors duration-micro',
+                      // `group`: permite que células desta linha (ex.: as ações
+                      // que só aparecem no hover) reajam ao hover da linha
+                      // inteira, não só do próprio elemento.
+                      'group border-b border-border last:border-0 hover:bg-surface-alt transition-colors duration-micro',
                       onRowClick && 'cursor-pointer'
                     )}
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="px-4 py-2.5 text-body-sm whitespace-nowrap">
+                      <td
+                        key={cell.id}
+                        className={cn(
+                          'px-4 py-2.5 text-body-sm whitespace-nowrap',
+                          cell.column.columnDef.meta?.className
+                        )}
+                      >
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </td>
                     ))}

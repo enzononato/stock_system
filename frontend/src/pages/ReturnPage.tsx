@@ -5,6 +5,7 @@ import { downloadReturnTerm, confirmReturn } from '@/api/loans'
 import { Button } from '@/components/ui/button'
 import { FileUpload } from '@/components/ui/FileUpload'
 import { DataTable } from '@/components/ui/DataTable'
+import { Checkbox } from '@/components/ui/checkbox'
 import { toast } from '@/components/ui/toast'
 import { getErrorMessage } from '@/lib/api-error'
 import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
@@ -22,6 +23,21 @@ export default function ReturnPage() {
   const queryClient = useQueryClient()
   const [pendingReturnId, setPendingReturnId] = useState<number | null>(null)
   const [signedPdf, setSignedPdf] = useState<File | null>(null)
+
+  // Checklist de inspeção física (T7): o operador confirma o estado do
+  // equipamento antes de reintegrá-lo ao estoque disponível — sem isso a
+  // devolução era só um upload de PDF, sem nenhum registro de que o item foi
+  // de fato conferido fisicamente.
+  const [checkChassi, setCheckChassi] = useState(false)
+  const [checkTelaTecladoFonte, setCheckTelaTecladoFonte] = useState(false)
+  const [checkPerifericos, setCheckPerifericos] = useState(false)
+  const checklistCompleto = checkChassi && checkTelaTecladoFonte && checkPerifericos
+
+  function resetChecklist() {
+    setCheckChassi(false)
+    setCheckTelaTecladoFonte(false)
+    setCheckPerifericos(false)
+  }
 
   // Empréstimos ativos (aguardando geração do termo de devolução)
   const [activePageIndex, setActivePageIndex] = useState(0)
@@ -92,6 +108,7 @@ export default function ReturnPage() {
     onSuccess: (_, itemId) => {
       queryClient.invalidateQueries({ queryKey: ['items'] })
       setPendingReturnId(itemId)
+      resetChecklist()
       toast('Termo de devolução gerado! Faça a assinatura e confirme.')
     },
     onError: (err: unknown) => {
@@ -105,6 +122,7 @@ export default function ReturnPage() {
       queryClient.invalidateQueries({ queryKey: ['items'] })
       setPendingReturnId(null)
       setSignedPdf(null)
+      resetChecklist()
       toast('Devolução confirmada com sucesso!')
     },
     onError: (err: unknown) => {
@@ -226,16 +244,46 @@ export default function ReturnPage() {
           <p className="text-body-sm text-muted-foreground">
             O termo de devolução foi gerado. Faça o upload do PDF assinado para confirmar.
           </p>
+
+          {/* Checklist de inspeção física — o operador só confirma a
+              devolução depois de vistoriar o equipamento; sem os três itens
+              marcados, o botão de confirmar continua desabilitado. */}
+          <div className="space-y-2.5 border-t border-border pt-3">
+            <p className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
+              Checklist de Inspeção Física
+            </p>
+            <label className="flex items-center gap-2.5 cursor-pointer select-none text-body-sm text-foreground">
+              <Checkbox checked={checkChassi} onCheckedChange={setCheckChassi} />
+              Chassi/gabinete íntegro, sem trincas ou danos estruturais
+            </label>
+            <label className="flex items-center gap-2.5 cursor-pointer select-none text-body-sm text-foreground">
+              <Checkbox checked={checkTelaTecladoFonte} onCheckedChange={setCheckTelaTecladoFonte} />
+              Tela, teclado e fonte testados e funcionando
+            </label>
+            <label className="flex items-center gap-2.5 cursor-pointer select-none text-body-sm text-foreground">
+              <Checkbox checked={checkPerifericos} onCheckedChange={setCheckPerifericos} />
+              Periféricos e cabos conferidos e entregues
+            </label>
+          </div>
+
           <FileUpload onFile={setSignedPdf} label="Upload do Termo de Devolução Assinado (PDF)" />
           <div className="flex gap-3">
             <Button
-              disabled={!signedPdf || confirmMutation.isPending}
+              disabled={!signedPdf || !checklistCompleto || confirmMutation.isPending}
               onClick={() => signedPdf && confirmMutation.mutate({ itemId: pendingReturnId, pdf: signedPdf })}
             >
               <CheckCircle size={14} />
               {confirmMutation.isPending ? 'Confirmando...' : 'Confirmar Devolução'}
             </Button>
-            <Button variant="ghost" onClick={() => setPendingReturnId(null)}>Cancelar</Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setPendingReturnId(null)
+                resetChecklist()
+              }}
+            >
+              Cancelar
+            </Button>
           </div>
         </div>
       )}

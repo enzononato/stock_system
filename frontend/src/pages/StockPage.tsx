@@ -131,18 +131,30 @@ export default function StockPage() {
       header: 'Status',
       cell: ({ row }) => <StatusBadge status={row.original.status} />,
     },
-    { accessorKey: 'assigned_to', header: 'Usuário Alocado', cell: ({ getValue }) => (getValue() as string) || '-' },
-    { accessorKey: 'revenda', header: 'Unidade' },
+    {
+      accessorKey: 'assigned_to',
+      header: 'Usuário Alocado',
+      cell: ({ getValue }) => (getValue() as string) || '-',
+      // Densidade (T7): em telas menores que `md` este dado cede espaço às
+      // colunas essenciais (ID, tipo, status) — some do <thead> e do <tbody>
+      // ao mesmo tempo via `meta.className`, lido pelo DataTable.
+      meta: { className: 'hidden md:table-cell' },
+    },
+    { accessorKey: 'revenda', header: 'Unidade', meta: { className: 'hidden lg:table-cell' } },
     {
       accessorKey: 'date_registered',
       header: 'Data Cadastro',
       cell: ({ getValue }) => <span className="num">{formatDate(getValue() as string)}</span>,
+      meta: { className: 'hidden xl:table-cell' },
     },
     {
       id: 'actions',
       header: '',
       cell: ({ row }: { row: { original: Item } }) => (
-        <div className="flex items-center gap-1">
+        // Ações só aparecem no hover da linha (o `group` vem do <tr> do
+        // DataTable) — mantém a tabela densa sem dois botões cravados em
+        // toda linha o tempo todo.
+        <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
           <Button
             variant="ghost"
             size="sm"
