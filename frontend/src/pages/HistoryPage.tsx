@@ -1,82 +1,71 @@
 import { useEffect, useState } from 'react'
-import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
+import {
+  Download,
+  Paperclip,
+  RotateCcw,
+  Search,
+  AlertTriangle,
+  ChevronDown,
+  ChevronsUpDown,
+} from 'lucide-react'
+
 import { listHistoryPaginated, reverseEntryWithPassword, type HistoryEntry } from '@/api/history'
 import { downloadAuthenticated } from '@/api/client'
-import { DataTable } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
-import { toast } from '@/components/ui/toast'
-import { getErrorMessage } from '@/lib/api-error'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
 import { useAuth } from '@/contexts/AuthContext'
-import type { ColumnDef } from '@tanstack/react-table'
-import { formatCpf, formatDateTime } from '@/lib/utils'
-import { RotateCcw, Paperclip, Loader2 } from 'lucide-react'
+import { getErrorMessage } from '@/lib/api-error'
+import { cn, formatDateTime, exportToCsv } from '@/lib/utils'
+import { toast } from '@/components/ui/toast'
 
-const REVERSIBLE_OPS = ['Cadastro','Empréstimo','Confirmação Empréstimo','Devolução','Confirmação Devolução']
+const REVERSIBLE_OPS = [
+  'Cadastro',
+  'Empréstimo',
+  'Confirmação Empréstimo',
+  'Devolução',
+  'Confirmação Devolução',
+]
+const PAGE_SIZE = 7
 
-const PAGE_SIZE = 20
+function operationSymbol(op?: string) {
+  if (!op) return '•'
+  if (op.includes('Empréstimo')) return '→'
+  if (op.includes('Devolução')) return '←'
+  if (op === 'Cadastro') return '+'
+  if (op === 'Exclusão') return '×'
+  if (op === 'Estorno') return '↺'
+  return '•'
+}
 
-function OperationBadge({ op }: { op?: string }) {
-  if (!op) return <Badge>-</Badge>
-  // Monocromático: só as operações destrutivas (Exclusão, Estorno) carregam
-  // cor de sinal (danger). Todas as demais são neutras (default).
-  if (op === 'Exclusão' || op === 'Estorno') return <Badge variant="danger">{op}</Badge>
-  return <Badge variant="default">{op}</Badge>
+function operationColor(op?: string) {
+  if (!op) return 'text-muted-foreground'
+  if (op.includes('Empréstimo')) return 'text-foreground'
+  if (op.includes('Devolução')) return 'text-foreground'
+  if (op === 'Exclusão') return 'text-destructive'
+  if (op === 'Estorno') return 'text-muted-foreground'
+  return 'text-muted-foreground'
 }
 
 /**
  * Deriva um nome de arquivo legível para download a partir da chave de storage
  * ("categoria/arquivo.ext" — ver `app/core/storage.py` no backend). O trecho
- * após a primeira barra já é o nome original enviado pelo usuário (prefixado
- * pelo backend com contexto, ex.: "remocao_12_nota.pdf"), então não há por que
- * desmontar o padrão — só extrair esse trecho.
+ * após a primeira barra já é o nome original enviado pelo usuário, então não
+ * há por que desmontar o padrão — só extrair esse trecho.
  */
 function attachmentFilename(key: string): string {
   const idx = key.indexOf('/')
   return idx >= 0 ? key.slice(idx + 1) : key
-}
-
-interface AttachmentDescriptor {
-  key: string
-  label: string
-}
-
-function AttachmentCell({
-  entry,
-  downloadingKey,
-  onDownload,
-}: {
-  entry: HistoryEntry
-  downloadingKey: string | null
-  onDownload: (key: string) => void
-}) {
-  const attachments: AttachmentDescriptor[] = []
-  if (entry.operacao_anexo) attachments.push({ key: entry.operacao_anexo, label: 'Comprovante' })
-  if (entry.termo_assinado_anexo) attachments.push({ key: entry.termo_assinado_anexo, label: 'Termo' })
-
-  if (attachments.length === 0) return <span className="text-muted-foreground">-</span>
-
-  return (
-    <div className="flex flex-col items-start gap-1">
-      {attachments.map(({ key, label }) => (
-        <Button
-          key={key}
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="h-7 px-2 text-muted-foreground hover:text-foreground"
-          disabled={downloadingKey === key}
-          onClick={() => onDownload(key)}
-        >
-          <Paperclip size={12} />
-          {downloadingKey === key ? 'Baixando...' : label}
-        </Button>
-      ))}
-    </div>
-  )
 }
 
 export default function HistoryPage() {
@@ -90,11 +79,14 @@ export default function HistoryPage() {
   const [searchAplicado, setSearchAplicado] = useState('')
   const [downloadingKey, setDownloadingKey] = useState<string | null>(null)
 
-  // Confirmação de estorno: entrada sendo estornada (null = painel fechado),
+  // Confirmação de estorno: entrada sendo estornada (null = diálogo fechado),
   // senha digitada e mensagem de erro da última tentativa (ex.: 403).
   const [reversingEntry, setReversingEntry] = useState<HistoryEntry | null>(null)
   const [password, setPassword] = useState('')
   const [reverseError, setReverseError] = useState<string | null>(null)
+
+  // Quais cartões da linha do tempo estão com os detalhes expandidos.
+  const [expandedIds, setExpandedIds] = useState<Record<number, boolean>>({})
 
   const { data, isLoading } = useQuery({
     queryKey: ['history', pageIndex, searchAplicado],
@@ -109,11 +101,30 @@ export default function HistoryPage() {
 
   const history = data?.items ?? []
   const total = data?.total ?? 0
+  const totalPages = Math.ceil(total / PAGE_SIZE)
+
+  const allExpanded = history.length > 0 && history.every((e) => expandedIds[e.id])
+
+  function toggleExpand(id: number) {
+    setExpandedIds((prev) => ({ ...prev, [id]: !prev[id] }))
+  }
+
+  function toggleAll() {
+    if (allExpanded) {
+      setExpandedIds({})
+    } else {
+      const next: Record<number, boolean> = {}
+      history.forEach((e) => {
+        next[e.id] = true
+      })
+      setExpandedIds(next)
+    }
+  }
 
   // Se um estorno (ou qualquer outra invalidação) reduzir o total de
   // registros a ponto da página atual deixar de existir (ex.: estornar o
   // único item da última página), volta para a última página válida em vez
-  // de deixar a tabela "presa" numa página vazia.
+  // de deixar a lista "presa" numa página vazia.
   useEffect(() => {
     if (!data || data.total <= 0) return
     const maxPageIndex = Math.max(0, Math.ceil(data.total / PAGE_SIZE) - 1)
@@ -144,20 +155,25 @@ export default function HistoryPage() {
   }
 
   const reverseMutation = useMutation({
-    mutationFn: ({ id, password }: { id: number; password: string }) => reverseEntryWithPassword(id, password),
+    mutationFn: ({ id, password }: { id: number; password: string }) =>
+      reverseEntryWithPassword(id, password),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['history'] })
-      queryClient.invalidateQueries({ queryKey: ['items'] })
-      toast('Operação estornada com sucesso!')
+      void queryClient.invalidateQueries({ queryKey: ['history'] })
+      void queryClient.invalidateQueries({ queryKey: ['items'] })
+      toast.success('Operação estornada com sucesso!')
       closeReverseConfirm()
     },
     onError: (err: unknown) => {
       const status = (err as { response?: { status?: number } })?.response?.status
-      // 403 é a resposta específica de senha incorreta (ver T4): mensagem fixa
-      // e clara, sem fechar o painel, para o usuário poder tentar de novo.
-      const msg = status === 403 ? 'Senha incorreta. Ação não autorizada.' : getErrorMessage(err, 'Erro ao estornar.')
+      // 403 é a resposta específica de senha incorreta: mensagem fixa e
+      // clara, sem fechar o painel, para o usuário poder tentar de novo.
+      // Qualquer outro erro usa a mensagem traduzida genérica.
+      const msg =
+        status === 403
+          ? 'Senha incorreta. Ação não autorizada.'
+          : getErrorMessage(err, 'Erro ao estornar.')
       setReverseError(msg)
-      toast(msg, 'error')
+      toast.error(msg)
     },
   })
 
@@ -171,126 +187,458 @@ export default function HistoryPage() {
     try {
       await downloadAuthenticated(`/api/documents/files/${key}`, attachmentFilename(key))
     } catch (err) {
-      toast(getErrorMessage(err, 'Erro ao baixar anexo.'), 'error')
+      toast.error(getErrorMessage(err, 'Erro ao baixar anexo.'))
     } finally {
       setDownloadingKey(null)
     }
   }
 
-  const columns: ColumnDef<HistoryEntry, unknown>[] = [
-    { accessorKey: 'id', header: 'ID', size: 60, cell: ({ getValue }) => <span className="num">{getValue() as number}</span> },
-    { accessorKey: 'item_id', header: 'Item', size: 60, cell: ({ getValue }) => getValue() as number ?? '-' },
-    { accessorKey: 'peripheral_id', header: 'Periférico', size: 80, cell: ({ getValue }) => getValue() as number ?? '-' },
-    { accessorKey: 'operador', header: 'Operador' },
-    { accessorKey: 'operation', header: 'Operação', cell: ({ row }) => <OperationBadge op={row.original.operation} /> },
-    { accessorKey: 'tipo', header: 'Tipo', cell: ({ getValue }) => getValue() as string || '-' },
-    { accessorKey: 'marca', header: 'Marca', cell: ({ getValue }) => getValue() as string || '-' },
-    { accessorKey: 'modelo', header: 'Modelo', cell: ({ getValue }) => getValue() as string || '-' },
-    { accessorKey: 'identificador', header: 'Identificador', cell: ({ getValue }) => <span className="num">{(getValue() as string) || '-'}</span> },
-    { accessorKey: 'nota_fiscal', header: 'Nota Fiscal', cell: ({ getValue }) => getValue() as string || '-' },
-    { accessorKey: 'usuario', header: 'Usuário', cell: ({ getValue }) => getValue() as string || '-' },
-    { accessorKey: 'cpf', header: 'CPF', cell: ({ getValue }) => <span className="num">{formatCpf(getValue() as string)}</span> },
-    { accessorKey: 'cargo', header: 'Cargo', cell: ({ getValue }) => getValue() as string || '-' },
-    { accessorKey: 'setor', header: 'Setor', cell: ({ getValue }) => getValue() as string || '-' },
-    { accessorKey: 'revenda', header: 'Revenda', cell: ({ getValue }) => getValue() as string || '-' },
-    { accessorKey: 'data_operacao', header: 'Data', cell: ({ getValue }) => <span className="num">{formatDateTime(getValue() as string)}</span> },
-    { accessorKey: 'details', header: 'Detalhes', cell: ({ getValue }) => getValue() as string || '-' },
-    {
-      id: 'anexo',
-      header: 'Anexo',
-      cell: ({ row }) => (
-        <AttachmentCell entry={row.original} downloadingKey={downloadingKey} onDownload={handleDownloadAttachment} />
-      ),
-    },
-    ...(hasRole('Gestor') ? [{
-      id: 'actions',
-      header: '',
-      cell: ({ row }: { row: { original: HistoryEntry } }) =>
-        REVERSIBLE_OPS.includes(row.original.operation ?? '') ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-muted-foreground hover:text-destructive"
-            onClick={() => openReverseConfirm(row.original)}
-          >
-            <RotateCcw size={14} />Estornar
-          </Button>
-        ) : null,
-    } as ColumnDef<HistoryEntry, unknown>] : []),
-  ]
-
   return (
-    <div className="space-y-4">
+    <div className="space-y-6 max-w-7xl mx-auto">
       <PageHeader
         eyebrow="Auditoria e Rastreabilidade"
         eyebrowDetail="Linha Temporal"
-        title="Histórico"
-        description="Registro completo de todas as operações."
+        title="Histórico de Operações"
+        description="Registro cronológico e imutável de todas as ações realizadas no sistema patrimonial."
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={history.length === 0}
+            onClick={() =>
+              exportToCsv('historico', history as unknown as Record<string, unknown>[], [
+                { key: 'id', label: 'ID' },
+                { key: 'operador', label: 'Operador' },
+                { key: 'operation', label: 'Operação' },
+                { key: 'tipo', label: 'Tipo' },
+                { key: 'marca', label: 'Marca' },
+                { key: 'modelo', label: 'Modelo' },
+                { key: 'identificador', label: 'Identificador' },
+                { key: 'usuario', label: 'Usuário' },
+                { key: 'setor', label: 'Setor' },
+                { key: 'revenda', label: 'Revenda' },
+                { key: 'data_operacao', label: 'Data' },
+              ])
+            }
+            className="text-xs h-8"
+          >
+            <Download className="mr-1.5 size-3.5" />
+            Exportar CSV
+          </Button>
+        }
       />
 
-      {/* Confirmação de estorno — exige a senha do operador logado (T4). Alto
-          contraste proposital: essa ação reescreve o histórico registrado. */}
-      {reversingEntry && (
-        <div className="figure-ground-panel space-y-4">
-          <PanelHeader title="Confirmação de Estorno" />
-          <h3 className="text-heading-sm text-foreground">Confirmar Estorno — Operação #<span className="num">{reversingEntry.id}</span></h3>
-          <p className="text-body-sm text-muted-foreground">
-            Isso desfará a operação <strong>&quot;{reversingEntry.operation ?? '-'}&quot;</strong>
-            {reversingEntry.item_id != null && ` do item #${reversingEntry.item_id}`}
-            {reversingEntry.peripheral_id != null && ` do periférico #${reversingEntry.peripheral_id}`}
-            {reversingEntry.operador && ` (operador: ${reversingEntry.operador})`}. Esta ação não pode ser desfeita.
-          </p>
-          <div className="flex flex-col gap-1.5 max-w-xs">
-            <Label htmlFor="senha-estorno">Confirme sua senha</Label>
-            <Input
-              id="senha-estorno"
-              type="password"
-              value={password}
-              onChange={(e) => { setPassword(e.target.value); setReverseError(null) }}
-              placeholder="Sua senha de acesso"
-              autoFocus
-            />
+      {/* Grid: 280px filtros / 1fr timeline */}
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6 items-start">
+        {/* Painel de Filtros */}
+        <div className="rounded border border-border bg-surface p-5 space-y-5">
+          <PanelHeader title="Filtros de Consulta" />
+
+          <div className="space-y-2">
+            <Label className="text-caption font-medium">Busca Geral</Label>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Operador, usuário, operação…"
+                className="pl-8 h-8 text-body-sm"
+              />
+            </div>
           </div>
-          {reverseError && <p className="text-body-sm text-destructive">{reverseError}</p>}
-          <div className="flex gap-3">
+
+          {/* Sumário de Página */}
+          <div className="space-y-2 pt-2 border-t border-border">
+            <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground block">
+              Sumário — Página Atual
+            </span>
+            <div className="space-y-2 text-caption">
+              {[
+                { label: 'Total de Registros', value: total, symbol: '#' },
+                {
+                  label: 'Empréstimos',
+                  value: history.filter((h) => h.operation?.includes('Empréstimo')).length,
+                  symbol: '→',
+                },
+                {
+                  label: 'Devoluções',
+                  value: history.filter((h) => h.operation?.includes('Devolução')).length,
+                  symbol: '←',
+                },
+                {
+                  label: 'Estornos',
+                  value: history.filter((h) => h.operation === 'Estorno').length,
+                  symbol: '↺',
+                },
+              ].map((stat) => (
+                <div
+                  key={stat.label}
+                  className="flex justify-between py-1 border-b border-border"
+                >
+                  <span className="text-muted-foreground">{stat.label}</span>
+                  <span className="font-mono font-semibold text-foreground">
+                    {stat.symbol} {stat.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Paginação */}
+          {totalPages > 1 && (
+            <div className="space-y-2 pt-2 border-t border-border">
+              <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground block">
+                Paginação
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={pageIndex === 0}
+                  onClick={() => setPageIndex((p) => p - 1)}
+                  className="text-xs h-7 px-2.5 flex-1"
+                >
+                  ← Anterior
+                </Button>
+                <span className="text-caption font-mono text-foreground whitespace-nowrap">
+                  {pageIndex + 1}/{totalPages}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={pageIndex >= totalPages - 1}
+                  onClick={() => setPageIndex((p) => p + 1)}
+                  className="text-xs h-7 px-2.5 flex-1"
+                >
+                  Próxima →
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Timeline Editorial */}
+        <div className="rounded border border-border bg-surface p-5 space-y-1">
+          <PanelHeader
+            title={`Linha Temporal — ${total} evento${total !== 1 ? 's' : ''} auditados`}
+            className="pb-3 mb-4"
+            actions={
+              history.length > 0 ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={toggleAll}
+                  className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                >
+                  <ChevronsUpDown className="mr-1 size-3" />
+                  {allExpanded ? 'Recolher todos' : 'Expandir todos'}
+                </Button>
+              ) : undefined
+            }
+          />
+
+          {isLoading ? (
+            <div className="py-12 text-center text-caption text-muted-foreground">
+              Carregando registros…
+            </div>
+          ) : history.length === 0 ? (
+            <div className="py-12 text-center text-caption text-muted-foreground">
+              Nenhum registro encontrado para os filtros aplicados.
+            </div>
+          ) : (
+            <div className="relative">
+              {/* Linha vertical da timeline */}
+              <div className="absolute left-[13.5px] top-2 bottom-2 w-px bg-border" />
+
+              <div className="space-y-0">
+                {history.map((entry) => {
+                  const symbol = operationSymbol(entry.operation)
+                  const colorClass = operationColor(entry.operation)
+                  const isReversible =
+                    REVERSIBLE_OPS.includes(entry.operation ?? '') && hasRole('Gestor')
+                  const hasAttachments =
+                    Boolean(entry.operacao_anexo) || Boolean(entry.termo_assinado_anexo)
+                  const isExpanded = Boolean(expandedIds[entry.id])
+
+                  return (
+                    <div key={entry.id} className="relative flex gap-3 pb-2.5 last:pb-0">
+                      {/* Nó da Timeline */}
+                      <div className="relative z-10 flex-shrink-0 mt-0.5">
+                        <div
+                          className={cn(
+                            'size-7 rounded border border-border bg-surface flex items-center justify-center font-mono text-xs font-bold shadow-sm',
+                            colorClass
+                          )}
+                        >
+                          {symbol}
+                        </div>
+                      </div>
+
+                      {/* Card Expansível da Entrada */}
+                      <div className="flex-1 rounded border border-border bg-surface-alt transition-colors overflow-hidden min-w-0">
+                        {/* Linha Resumo */}
+                        <div className="w-full px-3 py-2 flex items-center justify-between gap-2.5">
+                          <button
+                            type="button"
+                            onClick={() => toggleExpand(entry.id)}
+                            className="flex-1 flex items-center gap-2 flex-wrap min-w-0 text-left cursor-pointer hover:opacity-80 transition-opacity"
+                            aria-expanded={isExpanded}
+                          >
+                            <span className="font-semibold text-body-sm text-foreground">
+                              {entry.operation ?? '—'}
+                            </span>
+                            {(entry.item_id || entry.peripheral_id) && (
+                              <span className="font-mono text-caption text-muted-foreground">
+                                {entry.item_id ? `Item #${entry.item_id}` : ''}
+                                {entry.peripheral_id ? ` Periférico #${entry.peripheral_id}` : ''}
+                              </span>
+                            )}
+                            {!isExpanded && (entry.usuario || entry.tipo || entry.operador) && (
+                              <span className="text-caption text-muted-foreground truncate hidden sm:inline">
+                                •{' '}
+                                {[entry.usuario, entry.tipo, entry.operador]
+                                  .filter(Boolean)
+                                  .slice(0, 2)
+                                  .join(' • ')}
+                              </span>
+                            )}
+                          </button>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="font-mono text-caption text-muted-foreground whitespace-nowrap">
+                              {formatDateTime(entry.data_operacao)}
+                            </span>
+
+                            {isReversible && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-6 px-2 text-[11px] text-muted-foreground hover:text-destructive"
+                                onClick={() => openReverseConfirm(entry)}
+                              >
+                                <RotateCcw className="mr-1 size-2.5" />
+                                Estornar
+                              </Button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => toggleExpand(entry.id)}
+                              className="p-0.5 text-muted-foreground hover:text-foreground cursor-pointer"
+                              aria-label={isExpanded ? 'Recolher detalhes' : 'Expandir detalhes'}
+                            >
+                              <ChevronDown
+                                className={cn(
+                                  'size-3.5 transition-transform duration-200',
+                                  isExpanded && 'rotate-180 text-foreground'
+                                )}
+                              />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Detalhes Recolhíveis */}
+                        {isExpanded && (
+                          <div className="px-3 pb-3 pt-1 border-t border-border space-y-2 bg-surface">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-caption pt-1">
+                              <div className="p-2 rounded border border-border bg-surface">
+                                <span className="text-muted-foreground block text-[11px] uppercase tracking-wider">
+                                  Operador
+                                </span>
+                                <span className="font-medium text-foreground">
+                                  {entry.operador || '—'}
+                                </span>
+                              </div>
+                              {entry.usuario && (
+                                <div className="p-2 rounded border border-border bg-surface">
+                                  <span className="text-muted-foreground block text-[11px] uppercase tracking-wider">
+                                    Colaborador
+                                  </span>
+                                  <span className="font-medium text-foreground">
+                                    {entry.usuario}
+                                  </span>
+                                </div>
+                              )}
+                              {(entry.tipo || entry.marca) && (
+                                <div className="p-2 rounded border border-border bg-surface">
+                                  <span className="text-muted-foreground block text-[11px] uppercase tracking-wider">
+                                    Equipamento
+                                  </span>
+                                  <span className="font-medium text-foreground">
+                                    {entry.tipo} {entry.marca} {entry.modelo}
+                                  </span>
+                                </div>
+                              )}
+                              {entry.revenda && (
+                                <div className="p-2 rounded border border-border bg-surface">
+                                  <span className="text-muted-foreground block text-[11px] uppercase tracking-wider">
+                                    Revenda
+                                  </span>
+                                  <span className="text-foreground">{entry.revenda}</span>
+                                </div>
+                              )}
+                            </div>
+
+                            {entry.details && (
+                              <p className="text-caption text-muted-foreground border-t border-border pt-1.5">
+                                {entry.details}
+                              </p>
+                            )}
+
+                            {/* Ações da Entrada */}
+                            {(hasAttachments || isReversible) && (
+                              <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-border">
+                                {entry.operacao_anexo && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                                    disabled={downloadingKey === entry.operacao_anexo}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      void handleDownloadAttachment(entry.operacao_anexo!)
+                                    }}
+                                  >
+                                    <Paperclip className="mr-1 size-2.5" />
+                                    {downloadingKey === entry.operacao_anexo
+                                      ? 'Baixando…'
+                                      : 'Comprovante'}
+                                  </Button>
+                                )}
+                                {entry.termo_assinado_anexo && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                                    disabled={downloadingKey === entry.termo_assinado_anexo}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      void handleDownloadAttachment(entry.termo_assinado_anexo!)
+                                    }}
+                                  >
+                                    <Paperclip className="mr-1 size-2.5" />
+                                    {downloadingKey === entry.termo_assinado_anexo
+                                      ? 'Baixando…'
+                                      : 'Termo'}
+                                  </Button>
+                                )}
+                                {isReversible && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground ml-auto"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      openReverseConfirm(entry)
+                                    }}
+                                  >
+                                    <RotateCcw className="mr-1 size-2.5" />
+                                    Estornar
+                                  </Button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Dialog de Estorno — exige a senha do operador logado. Alto contraste
+          proposital: essa ação reescreve o histórico registrado. */}
+      <Dialog
+        open={reversingEntry !== null}
+        onOpenChange={(open) => !open && closeReverseConfirm()}
+      >
+        <DialogContent className="max-w-md border border-border bg-surface p-6">
+          <DialogHeader>
+            <div className="flex items-start gap-3 mb-2">
+              <div className="p-2 rounded bg-foreground text-background shrink-0">
+                <AlertTriangle className="size-4" />
+              </div>
+              <div>
+                <DialogTitle asChild>
+                  <h3 className="text-body-lg font-semibold text-foreground">
+                    Confirmar Estorno — Operação #<span className="num">{reversingEntry?.id}</span>
+                  </h3>
+                </DialogTitle>
+                <DialogDescription className="text-caption text-muted-foreground mt-0.5">
+                  Esta ação reverterá os efeitos de &quot;{reversingEntry?.operation}&quot; no estoque de forma imediata.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="rounded border border-border bg-surface-alt p-3 text-caption space-y-1">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Operação:</span>
+                <span className="font-semibold text-foreground">{reversingEntry?.operation}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Item envolvido:</span>
+                <span className="font-mono text-foreground">#{reversingEntry?.item_id || '—'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Operador original:</span>
+                <span className="text-foreground">{reversingEntry?.operador || '—'}</span>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="senha-estorno" className="text-caption font-medium text-foreground">
+                Confirme sua senha
+              </Label>
+              <Input
+                id="senha-estorno"
+                type="password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value)
+                  setReverseError(null)
+                }}
+                placeholder="Sua senha de acesso"
+                className="h-9"
+                autoFocus
+              />
+              {reverseError && (
+                <p className="text-caption text-destructive">{reverseError}</p>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter className="pt-3 border-t border-border flex justify-end gap-2">
             <Button
-              variant="destructive"
-              disabled={!password || reverseMutation.isPending}
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={closeReverseConfirm}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={reverseMutation.isPending || !password}
               onClick={handleConfirmReverse}
             >
+              <RotateCcw className="mr-1.5 size-3.5" />
               {reverseMutation.isPending ? 'Estornando...' : 'Confirmar'}
             </Button>
-            <Button variant="ghost" onClick={closeReverseConfirm}>Cancelar</Button>
-          </div>
-        </div>
-      )}
-
-      {isLoading ? (
-        <div className="py-8 flex items-center justify-center gap-2 text-body-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Carregando...
-        </div>
-      ) : (
-        <div className="space-y-3">
-          <PanelHeader
-            title="Consulta de Operações"
-            description="Busque por operador, usuário, tipo, marca ou identificador."
-          />
-          <DataTable
-            data={history}
-            columns={columns}
-            searchPlaceholder="Buscar por operador, usuário, tipo, marca, identificador..."
-            pagination={{
-              total,
-              pageIndex,
-              pageSize: PAGE_SIZE,
-              onPageChange: setPageIndex,
-              search,
-              onSearchChange: setSearch,
-            }}
-          />
-        </div>
-      )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
