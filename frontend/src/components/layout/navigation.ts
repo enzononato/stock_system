@@ -1,14 +1,41 @@
+import type { ComponentType } from 'react'
 import type { LucideIcon } from 'lucide-react'
+import { PackagePlus, Link2, LineChart } from 'lucide-react'
 import {
-  LayoutDashboard, Package, PackagePlus, Cpu, Link2,
-  ArrowRightLeft, Undo2, Trash2, History, BarChart2, LineChart,
-  FileText, Users, Building2,
-} from 'lucide-react'
+  DashboardIcon,
+  EstoqueIcon,
+  PerifericosIcon,
+  EmprestimosIcon,
+  DevolucoesIcon,
+  TermosIcon,
+  MovimentacoesIcon,
+  RelatoriosIcon,
+  LixeiraIcon,
+  EmpresasIcon,
+  UsuariosIcon,
+} from '@/components/animated-icons/stock-system-animated-sidebar-icons'
+
+/**
+ * Props mínimas que qualquer ícone de navegação precisa aceitar. Os ícones do
+ * lucide-react atendem este contrato de sobra (aceitam qualquer atributo SVG);
+ * os ícones animados da sidebar (API mais restrita: size/className/
+ * strokeWidth/title/aria-hidden) também o atendem. `NavIcon` é a união dos
+ * dois — não é um cast, é o tipo real de cada ícone usado em `navGroups`.
+ */
+export interface NavIconProps {
+  size?: number | string
+  className?: string
+  strokeWidth?: number
+  title?: string
+  'aria-hidden'?: boolean | 'true' | 'false'
+}
+
+export type NavIcon = LucideIcon | ComponentType<NavIconProps>
 
 export interface NavItem {
   to: string
   label: string
-  icon: LucideIcon
+  icon: NavIcon
   roles?: string[]
   /**
    * Esconde o item da sidebar (igual à referência `origin/redesign-frontend`),
@@ -42,8 +69,8 @@ export const navGroups: NavGroup[] = [
     items: [
       // Task 7: Dashboard assume "/" (nova home); o estoque, que ficava
       // aqui, passou para "/stock".
-      { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-      { to: '/stock', label: 'Estoque', icon: Package },
+      { to: '/', label: 'Dashboard', icon: DashboardIcon },
+      { to: '/stock', label: 'Estoque', icon: EstoqueIcon },
       { to: '/charts', label: 'Indicadores & Gráficos', icon: LineChart },
     ],
   },
@@ -51,26 +78,26 @@ export const navGroups: NavGroup[] = [
     title: 'Gestão de Itens',
     items: [
       { to: '/register', label: 'Cadastrar Equipamento', icon: PackagePlus, roles: ['Gestor', 'Técnico'] },
-      { to: '/peripherals', label: 'Periféricos', icon: Cpu, roles: ['Gestor', 'Técnico'] },
+      { to: '/peripherals', label: 'Periféricos', icon: PerifericosIcon, roles: ['Gestor', 'Técnico'] },
       { to: '/link', label: 'Vincular Periférico', icon: Link2, roles: ['Gestor', 'Técnico'], hiddenFromSidebar: true },
-      { to: '/loan', label: 'Emprestar', icon: ArrowRightLeft, roles: ['Gestor', 'Técnico'] },
-      { to: '/return', label: 'Devolver', icon: Undo2, roles: ['Gestor', 'Técnico'] },
-      { to: '/terms', label: 'Termos de Resp.', icon: FileText, roles: ['Gestor', 'Técnico'], hiddenFromSidebar: true },
+      { to: '/loan', label: 'Emprestar', icon: EmprestimosIcon, roles: ['Gestor', 'Técnico'] },
+      { to: '/return', label: 'Devolver', icon: DevolucoesIcon, roles: ['Gestor', 'Técnico'] },
+      { to: '/terms', label: 'Termos de Resp.', icon: TermosIcon, roles: ['Gestor', 'Técnico'], hiddenFromSidebar: true },
     ],
   },
   {
     title: 'Relatórios & Auditoria',
     items: [
-      { to: '/history', label: 'Histórico de Ações', icon: History, roles: ['Gestor', 'Técnico'] },
-      { to: '/report', label: 'Relatórios BI', icon: BarChart2, roles: ['Gestor', 'Técnico'] },
+      { to: '/history', label: 'Histórico de Ações', icon: MovimentacoesIcon, roles: ['Gestor', 'Técnico'] },
+      { to: '/report', label: 'Relatórios BI', icon: RelatoriosIcon, roles: ['Gestor', 'Técnico'] },
     ],
   },
   {
     title: 'Administração',
     items: [
-      { to: '/remove', label: 'Remover / Estorno', icon: Trash2, roles: ['Gestor'], hiddenFromSidebar: true },
-      { to: '/unidades', label: 'Unidades de Revenda', icon: Building2, roles: ['Gestor'] },
-      { to: '/users', label: 'Gestão de Usuários', icon: Users, roles: ['Gestor'] },
+      { to: '/remove', label: 'Remover / Estorno', icon: LixeiraIcon, roles: ['Gestor'], hiddenFromSidebar: true },
+      { to: '/unidades', label: 'Unidades de Revenda', icon: EmpresasIcon, roles: ['Gestor'] },
+      { to: '/users', label: 'Gestão de Usuários', icon: UsuariosIcon, roles: ['Gestor'] },
     ],
   },
 ]

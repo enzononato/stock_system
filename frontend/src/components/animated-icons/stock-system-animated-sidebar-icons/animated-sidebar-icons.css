@@ -1,0 +1,63 @@
+/* Ícones animados da sidebar
+   CSS puro: sem runtime de animação e sem dependência extra.
+   A animação dispara no hover/focus do ITEM de menu inteiro (classe `group`
+   no elemento pai, ver Sidebar.tsx), não no SVG isoladamente — assim passar
+   o mouse sobre o texto do item também anima o ícone.
+*/
+.animated-sidebar-icon {
+  display: inline-block;
+  flex: 0 0 auto;
+  transform-origin: center;
+  transition: transform 220ms ease, opacity 180ms ease;
+  will-change: transform;
+}
+
+.animated-sidebar-icon path,
+.animated-sidebar-icon line,
+.animated-sidebar-icon polyline,
+.animated-sidebar-icon rect,
+.animated-sidebar-icon circle {
+  transition: transform 260ms ease, stroke-width 180ms ease, opacity 180ms ease;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.group:hover .animated-sidebar-icon,
+.group:focus-visible .animated-sidebar-icon {
+  transform: translateY(-1px);
+}
+
+.group:hover .animated-estoqueicon,
+.group:focus-visible .animated-estoqueicon,
+.group:hover .animated-devolucoesicon,
+.group:focus-visible .animated-devolucoesicon { transform: translateY(-2px) rotate(-2deg); }
+.group:hover .animated-dashboardicon,
+.group:focus-visible .animated-dashboardicon,
+.group:hover .animated-relatoriosicon,
+.group:focus-visible .animated-relatoriosicon { transform: scale(1.05); }
+.group:hover .animated-patrimoniosicon,
+.group:focus-visible .animated-patrimoniosicon { transform: translateY(-2px); }
+.group:hover .animated-perifericosicon,
+.group:focus-visible .animated-perifericosicon { transform: translateX(1px) rotate(-4deg); }
+.group:hover .animated-movimentacoesicon,
+.group:focus-visible .animated-movimentacoesicon { transform: translateX(2px); }
+.group:hover .animated-emprestimosicon,
+.group:focus-visible .animated-emprestimosicon { transform: rotate(-5deg) translateY(-1px); }
+.group:hover .animated-empresasicon,
+.group:focus-visible .animated-empresasicon { transform: translateY(-1px); }
+.group:hover .animated-usuariosicon,
+.group:focus-visible .animated-usuariosicon { transform: scale(1.04); }
+.group:hover .animated-configuracoesicon,
+.group:focus-visible .animated-configuracoesicon { transform: rotate(28deg); }
+.group:hover .animated-lixeiraicon,
+.group:focus-visible .animated-lixeiraicon { transform: translateY(-1px) rotate(-4deg); }
+.group:hover .animated-termosicon,
+.group:focus-visible .animated-termosicon { transform: translateY(-2px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .animated-sidebar-icon,
+  .animated-sidebar-icon * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

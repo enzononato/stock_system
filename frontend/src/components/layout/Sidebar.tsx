@@ -43,7 +43,10 @@ export default function Sidebar({ className, onNavigate }: SidebarProps) {
                   onClick={onNavigate}
                   className={({ isActive }) =>
                     cn(
-                      'flex items-center gap-2.5 px-2.5 py-1.5 rounded text-body-sm transition-colors duration-micro',
+                      // `group`: permite que os ícones animados (ver
+                      // animated-sidebar-icons.css) disparem a animação a
+                      // partir do hover/focus do item inteiro, não só do SVG.
+                      'group flex items-center gap-2.5 px-2.5 py-1.5 rounded text-body-sm transition-colors duration-micro',
                       isActive
                         ? 'bg-surface-alt text-foreground font-semibold border-l-2 border-foreground'
                         : 'text-muted-foreground hover:text-foreground hover:bg-surface-alt'
