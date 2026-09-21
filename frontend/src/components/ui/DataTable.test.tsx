@@ -20,6 +20,11 @@ const pessoas: Pessoa[] = [
   { id: 3, nome: 'Carla' },
 ]
 
+/** Gera N pessoas nomeadas "Pessoa 1", "Pessoa 2"... para testar paginação client-side. */
+function gerarPessoas(quantidade: number): Pessoa[] {
+  return Array.from({ length: quantidade }, (_, i) => ({ id: i + 1, nome: `Pessoa ${i + 1}` }))
+}
+
 describe('DataTable — sem a prop pagination (retrocompatibilidade)', () => {
   it('mantém busca e contagem no cliente com base em data.length', () => {
     render(<DataTable data={pessoas} columns={columns} />)
@@ -170,5 +175,89 @@ describe('DataTable — com a prop pagination (server-side)', () => {
       screen.getByText((_, el) => el instanceof HTMLParagraphElement && el.textContent === '0 registros')
     ).toBeInTheDocument()
     expect(within(screen.getByRole('table')).getByText('Nenhum resultado encontrado.')).toBeInTheDocument()
+  })
+})
+
+describe('DataTable — paginação client-side (sem a prop pagination)', () => {
+  it('não mostra rodapé de navegação quando os dados cabem em uma única página', () => {
+    render(<DataTable data={pessoas} columns={columns} />)
+
+    expect(screen.queryByText(/Página \d+ de \d+/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Anterior/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Próxima/i })).not.toBeInTheDocument()
+  })
+
+  it('mostra o rodapé de navegação quando há mais de uma página (padrão de 10 por página)', () => {
+    render(<DataTable data={gerarPessoas(15)} columns={columns} />)
+
+    expect(
+      screen.getByText((_, el) => el instanceof HTMLSpanElement && el.textContent === 'Página 1 de 2')
+    ).toBeInTheDocument()
+    // Só as 10 primeiras linhas da página 1 aparecem.
+    expect(screen.getByText('Pessoa 1')).toBeInTheDocument()
+    expect(screen.getByText('Pessoa 10')).toBeInTheDocument()
+    expect(screen.queryByText('Pessoa 11')).not.toBeInTheDocument()
+  })
+
+  it('navegar para a próxima página troca as linhas exibidas', async () => {
+    const user = userEvent.setup()
+    render(<DataTable data={gerarPessoas(15)} columns={columns} />)
+
+    await user.click(screen.getByRole('button', { name: /Próxima/i }))
+
+    expect(screen.queryByText('Pessoa 1')).not.toBeInTheDocument()
+    expect(screen.getByText('Pessoa 11')).toBeInTheDocument()
+    expect(screen.getByText('Pessoa 15')).toBeInTheDocument()
+    expect(
+      screen.getByText((_, el) => el instanceof HTMLSpanElement && el.textContent === 'Página 2 de 2')
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Próxima/i })).toBeDisabled()
+  })
+
+  it('buscar reseta a paginação para a primeira página', async () => {
+    const user = userEvent.setup()
+    render(<DataTable data={gerarPessoas(15)} columns={columns} />)
+
+    await user.click(screen.getByRole('button', { name: /Próxima/i }))
+    expect(
+      screen.getByText((_, el) => el instanceof HTMLSpanElement && el.textContent === 'Página 2 de 2')
+    ).toBeInTheDocument()
+    expect(screen.getByText('Pessoa 11')).toBeInTheDocument()
+
+    // Busca por um termo que continua batendo em todos os 15 registros (2
+    // páginas) — o que importa aqui é que a digitação volta para a página 1,
+    // não o resultado do filtro em si.
+    const busca = screen.getByPlaceholderText('Buscar...')
+    await user.type(busca, 'Pessoa')
+
+    expect(
+      screen.getByText((_, el) => el instanceof HTMLSpanElement && el.textContent === 'Página 1 de 2')
+    ).toBeInTheDocument()
+    expect(screen.getByText('Pessoa 1')).toBeInTheDocument()
+    expect(screen.queryByText('Pessoa 11')).not.toBeInTheDocument()
+  })
+
+  it('não deixa a tabela vazia quando os dados encolhem e a página atual deixa de existir', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(<DataTable data={gerarPessoas(25)} columns={columns} />)
+
+    // 25 registros / 10 por página = 3 páginas. Navega até a última página,
+    // simulando o usuário parado nela antes dos dados encolherem.
+    await user.click(screen.getByRole('button', { name: /Próxima/i }))
+    await user.click(screen.getByRole('button', { name: /Próxima/i }))
+    expect(
+      screen.getByText((_, el) => el instanceof HTMLSpanElement && el.textContent === 'Página 3 de 3')
+    ).toBeInTheDocument()
+
+    // Os dados encolhem por fora (ex.: filtro externo, recarregamento) para
+    // caber em só 2 páginas — a página 3 deixou de existir.
+    rerender(<DataTable data={gerarPessoas(12)} columns={columns} />)
+
+    // A tabela não pode ficar vazia: volta para a página 1 automaticamente.
+    expect(
+      screen.getByText((_, el) => el instanceof HTMLSpanElement && el.textContent === 'Página 1 de 2')
+    ).toBeInTheDocument()
+    expect(screen.getByText('Pessoa 1')).toBeInTheDocument()
+    expect(screen.queryByText('Nenhum resultado encontrado.')).not.toBeInTheDocument()
   })
 })
