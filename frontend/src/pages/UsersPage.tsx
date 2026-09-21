@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'
 import { DataTable } from '@/components/ui/DataTable'
 import { toast } from '@/components/ui/toast'
+import { getErrorMessage } from '@/lib/api-error'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,10 +25,6 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { Trash2, Key } from 'lucide-react'
 
 const ROLES = ['Gestor','Técnico','Jovem Aprendiz']
-
-function errorDetail(err: unknown, fallback: string): string {
-  return (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? fallback
-}
 
 export default function UsersPage() {
   const queryClient = useQueryClient()
@@ -46,7 +43,7 @@ export default function UsersPage() {
       setUsername(''); setPassword(''); setRole('')
       toast('Usuário criado com sucesso!')
     },
-    onError: (err: unknown) => toast(errorDetail(err, 'Erro ao criar usuário.'), 'error'),
+    onError: (err: unknown) => toast(getErrorMessage(err, 'Erro ao criar usuário.'), 'error'),
   })
 
   // O backend agora recusa com 400 a auto-remoção e a remoção do último
@@ -59,7 +56,7 @@ export default function UsersPage() {
       queryClient.invalidateQueries({ queryKey: ['users'] })
       toast('Usuário removido.')
     },
-    onError: (err: unknown) => toast(errorDetail(err, 'Erro ao remover usuário.'), 'error'),
+    onError: (err: unknown) => toast(getErrorMessage(err, 'Erro ao remover usuário.'), 'error'),
   })
 
   const passwordMutation = useMutation({
@@ -68,7 +65,7 @@ export default function UsersPage() {
       setChangingPasswordId(null); setNewPassword('')
       toast('Senha alterada com sucesso!')
     },
-    onError: (err: unknown) => toast(errorDetail(err, 'Erro ao alterar senha.'), 'error'),
+    onError: (err: unknown) => toast(getErrorMessage(err, 'Erro ao alterar senha.'), 'error'),
   })
 
   const columns: ColumnDef<User, unknown>[] = [

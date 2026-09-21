@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from '@/components/ui/toast'
+import { getErrorMessage } from '@/lib/api-error'
 import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
 import { useConstants } from '@/hooks/useConstants'
 import { isValidNotaFiscal, maskNotaFiscalInput } from '@/lib/utils'
@@ -81,8 +82,7 @@ export default function RegisterItemPage({ mode }: Props) {
       navigate('/stock')
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erro ao salvar item.'
-      toast(msg, 'error')
+      toast(getErrorMessage(err, 'Erro ao salvar item.'), 'error')
     },
   })
 

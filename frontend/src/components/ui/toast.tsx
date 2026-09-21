@@ -15,6 +15,8 @@ export function toast(message: string, type: 'success' | 'error' = 'success') {
   const t: Toast = { id: nextId++, message, type }
   listeners.forEach((l) => l(t))
 }
+toast.success = (message: string) => toast(message, 'success')
+toast.error = (message: string) => toast(message, 'error')
 
 export function ToastContainer() {
   const [toasts, setToasts] = useState<Toast[]>([])

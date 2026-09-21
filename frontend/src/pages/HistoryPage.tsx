@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { toast } from '@/components/ui/toast'
+import { getErrorMessage } from '@/lib/api-error'
 import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
 import { useAuth } from '@/contexts/AuthContext'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -152,10 +153,9 @@ export default function HistoryPage() {
     },
     onError: (err: unknown) => {
       const status = (err as { response?: { status?: number } })?.response?.status
-      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       // 403 é a resposta específica de senha incorreta (ver T4): mensagem fixa
       // e clara, sem fechar o painel, para o usuário poder tentar de novo.
-      const msg = status === 403 ? 'Senha incorreta. Ação não autorizada.' : (detail ?? 'Erro ao estornar.')
+      const msg = status === 403 ? 'Senha incorreta. Ação não autorizada.' : getErrorMessage(err, 'Erro ao estornar.')
       setReverseError(msg)
       toast(msg, 'error')
     },
@@ -171,8 +171,7 @@ export default function HistoryPage() {
     try {
       await downloadAuthenticated(`/api/documents/files/${key}`, attachmentFilename(key))
     } catch (err) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erro ao baixar anexo.'
-      toast(msg, 'error')
+      toast(getErrorMessage(err, 'Erro ao baixar anexo.'), 'error')
     } finally {
       setDownloadingKey(null)
     }

@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { StatBlock } from '@/components/ui/StatBlock'
 import { toast } from '@/components/ui/toast'
+import { getErrorMessage } from '@/lib/api-error'
 import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
 import { formatDateTime } from '@/lib/utils'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -59,8 +60,7 @@ export default function ReportPage() {
     try {
       await exportMonthlyReportCsv(queryParams.year, queryParams.month)
     } catch (err) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erro ao exportar relatório.'
-      toast(msg, 'error')
+      toast(getErrorMessage(err, 'Erro ao exportar relatório.'), 'error')
     } finally {
       setIsExporting(false)
     }

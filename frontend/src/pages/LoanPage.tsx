@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import { toast } from '@/components/ui/toast'
+import { getErrorMessage } from '@/lib/api-error'
 import { DataTable } from '@/components/ui/DataTable'
 import { ConfirmacaoTermo, generateAndDownloadLoanTerm } from '@/components/equipment/ConfirmacaoTermo'
 import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
@@ -102,8 +103,7 @@ export default function LoanPage() {
       toast('Empréstimo iniciado! Agora gere e assine o termo.')
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erro ao iniciar empréstimo.'
-      toast(msg, 'error')
+      toast(getErrorMessage(err, 'Erro ao iniciar empréstimo.'), 'error')
     },
   })
 

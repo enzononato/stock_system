@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { FileUpload } from '@/components/ui/FileUpload'
 import { DataTable } from '@/components/ui/DataTable'
 import { toast } from '@/components/ui/toast'
+import { getErrorMessage } from '@/lib/api-error'
 import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { Item } from '@/api/items'
@@ -94,8 +95,7 @@ export default function ReturnPage() {
       toast('Termo de devolução gerado! Faça a assinatura e confirme.')
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erro ao gerar termo.'
-      toast(msg, 'error')
+      toast(getErrorMessage(err, 'Erro ao gerar termo.'), 'error')
     },
   })
 
@@ -108,8 +108,7 @@ export default function ReturnPage() {
       toast('Devolução confirmada com sucesso!')
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erro ao confirmar devolução.'
-      toast(msg, 'error')
+      toast(getErrorMessage(err, 'Erro ao confirmar devolução.'), 'error')
     },
   })
 

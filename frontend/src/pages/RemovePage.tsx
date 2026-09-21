@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import { FileUpload } from '@/components/ui/FileUpload'
 import { toast } from '@/components/ui/toast'
+import { getErrorMessage } from '@/lib/api-error'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { useConstants } from '@/hooks/useConstants'
 import { Trash2 } from 'lucide-react'
@@ -58,8 +59,7 @@ export default function RemovePage() {
       toast('Item removido do estoque.')
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erro ao remover item.'
-      toast(msg, 'error')
+      toast(getErrorMessage(err, 'Erro ao remover item.'), 'error')
     },
   })
 

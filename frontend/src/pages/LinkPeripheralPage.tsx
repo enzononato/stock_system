@@ -17,6 +17,7 @@ import { FileUpload } from '@/components/ui/FileUpload'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import { toast } from '@/components/ui/toast'
+import { getErrorMessage } from '@/lib/api-error'
 import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
 import { Link2, Unlink, RefreshCw } from 'lucide-react'
 
@@ -136,8 +137,7 @@ export default function LinkPeripheralPage() {
       toast('Periférico vinculado!')
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erro ao vincular.'
-      toast(msg, 'error')
+      toast(getErrorMessage(err, 'Erro ao vincular.'), 'error')
     },
   })
 
@@ -149,8 +149,7 @@ export default function LinkPeripheralPage() {
       toast('Periférico desvinculado.')
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erro ao desvincular.'
-      toast(msg, 'error')
+      toast(getErrorMessage(err, 'Erro ao desvincular.'), 'error')
     },
   })
 
@@ -174,8 +173,7 @@ export default function LinkPeripheralPage() {
       toast('Periférico substituído com sucesso!')
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erro ao substituir.'
-      toast(msg, 'error')
+      toast(getErrorMessage(err, 'Erro ao substituir.'), 'error')
     },
   })
 

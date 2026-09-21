@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge'
 import { StatBlock } from '@/components/ui/StatBlock'
 import { DataTable } from '@/components/ui/DataTable'
 import { toast } from '@/components/ui/toast'
+import { getErrorMessage } from '@/lib/api-error'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -166,10 +167,6 @@ function IndicadoresPanel({ dados }: { dados: IndicadoresUnidade }) {
 
 // --- Página ---------------------------------------------------------------------
 
-function errorDetail(err: unknown, fallback: string): string {
-  return (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? fallback
-}
-
 const emptyForm = { nome: '', razaoSocial: '', cnpj: '', endereco: '', cep: '', cidade: '', uf: '' }
 
 export default function UnidadesPage() {
@@ -223,7 +220,7 @@ export default function UnidadesPage() {
       resetForm()
       toast('Unidade criada com sucesso!')
     },
-    onError: (err: unknown) => toast(errorDetail(err, 'Erro ao criar unidade.'), 'error'),
+    onError: (err: unknown) => toast(getErrorMessage(err, 'Erro ao criar unidade.'), 'error'),
   })
 
   const updateMutation = useMutation({
@@ -233,7 +230,7 @@ export default function UnidadesPage() {
       resetForm()
       toast('Unidade atualizada com sucesso!')
     },
-    onError: (err: unknown) => toast(errorDetail(err, 'Erro ao atualizar unidade.'), 'error'),
+    onError: (err: unknown) => toast(getErrorMessage(err, 'Erro ao atualizar unidade.'), 'error'),
   })
 
   // O backend recusa inativar unidade com itens ativos (400) — exibimos o
@@ -245,7 +242,7 @@ export default function UnidadesPage() {
       invalidateAfterWrite()
       toast('Unidade inativada.')
     },
-    onError: (err: unknown) => toast(errorDetail(err, 'Erro ao inativar unidade.'), 'error'),
+    onError: (err: unknown) => toast(getErrorMessage(err, 'Erro ao inativar unidade.'), 'error'),
   })
 
   // Reverte a inativação (POST /api/unidades/{id}/reativar) — sem isso não
@@ -258,7 +255,7 @@ export default function UnidadesPage() {
       invalidateAfterWrite()
       toast('Unidade reativada.')
     },
-    onError: (err: unknown) => toast(errorDetail(err, 'Erro ao reativar unidade.'), 'error'),
+    onError: (err: unknown) => toast(getErrorMessage(err, 'Erro ao reativar unidade.'), 'error'),
   })
 
   function startEdit(u: Unidade) {

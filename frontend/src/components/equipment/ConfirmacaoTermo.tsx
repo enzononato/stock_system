@@ -4,6 +4,7 @@ import { confirmLoan, generateLoanTerm } from '@/api/loans'
 import { Button } from '@/components/ui/button'
 import { FileUpload } from '@/components/ui/FileUpload'
 import { toast } from '@/components/ui/toast'
+import { getErrorMessage } from '@/lib/api-error'
 import { cn } from '@/lib/utils'
 import { FileDown, CheckCircle } from 'lucide-react'
 
@@ -25,20 +26,24 @@ export async function generateAndDownloadLoanTerm(itemId: number): Promise<void>
     a.download = `termo_emprestimo_${itemId}.docx`
     a.click()
     URL.revokeObjectURL(url)
-  } catch (err: any) {
-    let msg = 'Erro ao gerar termo.'
-    if (err.response?.data instanceof Blob) {
+  } catch (err) {
+    // A resposta de erro chega como Blob (não como JSON) porque a requisição
+    // usa responseType 'blob' para o caminho de sucesso (o .docx). Precisa
+    // ser desembrulhada manualmente antes de extrair o `detail` — é o único
+    // caso que getErrorMessage não cobre, então o resultado dela só entra
+    // como mensagem padrão quando esse desembrulho não encontra nada.
+    let msg: string | undefined
+    const data = (err as { response?: { data?: unknown } })?.response?.data
+    if (data instanceof Blob) {
       try {
-        const text = await err.response.data.text()
+        const text = await data.text()
         const json = JSON.parse(text)
         if (json.detail) msg = json.detail
       } catch {
         // fallback para mensagem padrão
       }
-    } else if (err.response?.data?.detail) {
-      msg = err.response.data.detail
     }
-    toast(msg, 'error')
+    toast(msg ?? getErrorMessage(err, 'Erro ao gerar termo.'), 'error')
   }
 }
 
@@ -110,8 +115,7 @@ export function ConfirmacaoTermo({
       onConfirmed()
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? errorMessage
-      toast(msg, 'error')
+      toast(getErrorMessage(err, errorMessage), 'error')
     },
   })
 
