@@ -114,8 +114,10 @@ class TestRelatorioMensal:
         assert resp.headers["content-type"].startswith("text/csv")
         assert f"relatorio_{agora.year}_{agora.month:02d}.csv" in resp.headers["content-disposition"]
         primeira_linha = resp.text.splitlines()[0]
-        assert "operation_type" in primeira_linha
-        assert "history_id" in primeira_linha
+        # Cabeçalhos em português de propósito (Excel pt-BR) — não "corrigir" de volta
+        # para os nomes internos em inglês (ver HEADERS_PT em reports.py).
+        assert "Operação" in primeira_linha
+        assert "ID Histórico" in primeira_linha
 
 
 class TestGraficos:
