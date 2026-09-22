@@ -39,19 +39,49 @@ def export_monthly_report(
     month = month or now.month
     rows = inv.generate_monthly_report(year, month)
 
+    # Mapeamento de chaves internas -> cabeçalhos em português
+    HEADERS_PT = {
+        "history_id": "ID Histórico",
+        "item_id": "ID Item",
+        "peripheral_id": "ID Periférico",
+        "operador": "Operador",
+        "usuario": "Usuário",
+        "cpf": "CPF",
+        "cargo": "Cargo",
+        "center_cost": "Centro de Custo",
+        "setor": "Setor",
+        "fornecedor": "Fornecedor",
+        "revenda": "Revenda",
+        "details": "Detalhes",
+        "data_emprestimo": "Data Empréstimo",
+        "data_confirmacao": "Data Confirmação",
+        "data_devolucao": "Data Devolução",
+        "operation_type": "Operação",
+        "tipo": "Tipo",
+        "brand": "Marca",
+        "model": "Modelo",
+        "identificador": "Identificador",
+        "nota_fiscal": "Nota Fiscal",
+    }
+
     output = io.StringIO()
+    # BOM UTF-8: garante que o Excel abre sem problema de encoding
+    output.write('﻿')
+
     if rows:
-        writer = csv.DictWriter(output, fieldnames=rows[0].keys())
-        writer.writeheader()
+        raw_keys = list(rows[0].keys())
+        pt_headers = [HEADERS_PT.get(k, k) for k in raw_keys]
+        # Ponto-e-vírgula como delimitador (padrão Excel Brasil/Portugal)
+        writer = csv.writer(output, delimiter=';', quoting=csv.QUOTE_ALL)
+        writer.writerow(pt_headers)
         for row in rows:
-            # Converte datetime para string para serialização CSV
-            writer.writerow({k: str(v) if v is not None else "" for k, v in row.items()})
+            writer.writerow([str(v) if v is not None else "" for v in row.values()])
 
     output.seek(0)
     filename = f"relatorio_{year}_{month:02d}.csv"
     return StreamingResponse(
         iter([output.getvalue()]),
-        media_type="text/csv",
+        media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 

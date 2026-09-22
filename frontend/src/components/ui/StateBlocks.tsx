@@ -43,11 +43,16 @@ export function EmptyState({
 
 export function ErrorState({
   error,
+  message,
   onRetry,
   title = 'Não foi possível carregar os dados',
   className,
 }: {
   error?: unknown
+  /** Sobrepõe a mensagem traduzida de `getErrorMessage(error)` — usado quando a
+   * página que chama já sabe de um caso de negócio mais específico (ex.: um 403
+   * concreto) do que o genérico desta mensagem. */
+  message?: string
   onRetry?: () => void
   title?: string
   className?: string
@@ -68,7 +73,7 @@ export function ErrorState({
       </div>
       <div className="space-y-1">
         <p className="text-sm font-semibold text-foreground">{title}</p>
-        <p className="max-w-sm text-sm text-muted-foreground">{getErrorMessage(error)}</p>
+        <p className="max-w-sm text-sm text-muted-foreground">{message ?? getErrorMessage(error)}</p>
       </div>
       {onRetry && (
         <Button variant="outline" size="sm" onClick={onRetry}>

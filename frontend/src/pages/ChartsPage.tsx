@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { isAxiosError } from 'axios'
 import { useQuery } from '@tanstack/react-query'
 import { getLoansChart, getRegistrationsChart, getMonthlyReport, type ReportRow } from '@/api/reports'
 import { listUnidades } from '@/api/unidades'
@@ -40,6 +41,23 @@ const MONTHS = [
 ]
 
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+
+/**
+ * Mensagem de negócio para o 403 concreto desta tela: o filtro de unidade usa
+ * GET /reports/monthly, que exige Gestor/Técnico no backend (ver reports.py),
+ * enquanto os endpoints de gráfico não têm essa guarda de papel. A defesa
+ * principal é esconder o seletor de unidade para quem não pode usá-lo (Jovem
+ * Aprendiz, ver `podeFiltrarPorUnidade` abaixo); esta é a defesa secundária,
+ * caso mesmo assim a requisição filtrada volte com 403 — mesmo padrão do 403
+ * de senha errada em HistoryPage: mensagem de negócio no caso conhecido,
+ * `getErrorMessage` (via ErrorState) em qualquer outro erro.
+ */
+function mensagem403Unidade(error: unknown): string | undefined {
+  if (isAxiosError(error) && error.response?.status === 403) {
+    return 'Seu perfil de acesso não permite ver este relatório filtrado por unidade.'
+  }
+  return undefined
+}
 
 /*
  * Paleta dos gráficos em escala de cinza, lida dos tokens CSS para acompanhar
@@ -358,6 +376,7 @@ export default function ChartsPage() {
         ) : loansError ? (
           <ErrorState
             error={loansError}
+            message={mensagem403Unidade(loansError)}
             onRetry={repetirLoans}
             title="Não foi possível carregar este gráfico"
             className="h-72"
@@ -449,6 +468,7 @@ export default function ChartsPage() {
           ) : regError ? (
             <ErrorState
               error={regError}
+              message={mensagem403Unidade(regError)}
               onRetry={repetirReg}
               title="Não foi possível carregar este gráfico"
               className="h-64"
@@ -494,6 +514,7 @@ export default function ChartsPage() {
           ) : loansError ? (
             <ErrorState
               error={loansError}
+              message={mensagem403Unidade(loansError)}
               onRetry={repetirLoans}
               title="Não foi possível carregar este gráfico"
               className="h-64"
