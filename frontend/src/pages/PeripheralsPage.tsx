@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { toast } from '@/components/ui/toast'
+import { getErrorMessage } from '@/lib/api-error'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -249,8 +250,7 @@ export default function PeripheralsPage() {
       toast('Periférico cadastrado com sucesso!')
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erro ao cadastrar.'
-      toast(msg, 'error')
+      toast(getErrorMessage(err, 'Erro ao cadastrar.'), 'error')
     },
   })
 
@@ -265,8 +265,7 @@ export default function PeripheralsPage() {
       toast('Periférico inativado com sucesso.')
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erro ao inativar periférico.'
-      toast(msg, 'error')
+      toast(getErrorMessage(err, 'Erro ao inativar periférico.'), 'error')
     },
   })
 

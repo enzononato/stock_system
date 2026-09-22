@@ -1,0 +1,13 @@
+export { DashboardIcon } from "./DashboardIcon";
+export { EstoqueIcon } from "./EstoqueIcon";
+export { PatrimoniosIcon } from "./PatrimoniosIcon";
+export { PerifericosIcon } from "./PerifericosIcon";
+export { MovimentacoesIcon } from "./MovimentacoesIcon";
+export { EmprestimosIcon } from "./EmprestimosIcon";
+export { DevolucoesIcon } from "./DevolucoesIcon";
+export { EmpresasIcon } from "./EmpresasIcon";
+export { UsuariosIcon } from "./UsuariosIcon";
+export { RelatoriosIcon } from "./RelatoriosIcon";
+export { TermosIcon } from "./TermosIcon";
+export { ConfiguracoesIcon } from "./ConfiguracoesIcon";
+export { LixeiraIcon } from "./LixeiraIcon";

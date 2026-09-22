@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   useReactTable,
   getCoreRowModel,
@@ -12,6 +12,17 @@ import { Input } from './input'
 import { Button } from './button'
 import { cn } from '@/lib/utils'
 import { ArrowUpDown, ChevronLeft, ChevronRight, Search, X } from 'lucide-react'
+
+// Permite que cada coluna declare classes extras para sua <th>/<td> — usado
+// pelas telas de alta densidade (ex.: StockPage) para esconder colunas por
+// breakpoint (`hidden md:table-cell` etc.) sem duplicar a tabela numa versão
+// escrita à mão.
+declare module '@tanstack/react-table' {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  interface ColumnMeta<TData, TValue> {
+    className?: string
+  }
+}
 
 export interface DataTablePaginationProps {
   total: number
@@ -29,6 +40,8 @@ interface DataTableProps<TData> {
   className?: string
   pagination?: DataTablePaginationProps
   onRowClick?: (row: TData) => void
+  /** Tamanho de página da paginação client-side (só entra em ação quando `pagination` não é passada). Padrão: 10. */
+  clientPageSize?: number
 }
 
 export function DataTable<TData>({
@@ -38,9 +51,25 @@ export function DataTable<TData>({
   className,
   pagination,
   onRowClick,
+  clientPageSize = 10,
 }: DataTableProps<TData>) {
   const [globalFilter, setGlobalFilter] = useState('')
   const [sorting, setSorting] = useState<SortingState>([])
+  // Página atual da paginação client-side (só usada quando `pagination` não é passada).
+  const [clientPage, setClientPage] = useState(0)
+
+  // Se `data` mudar de tamanho por fora (item criado/removido, recarregado
+  // etc.), a página em que o usuário está pode deixar de existir — por
+  // exemplo, a lista encolhe de 5 para 2 páginas enquanto ele está na página
+  // 5, e a tabela renderizaria vazia sem nenhuma pista do motivo. Volta à
+  // primeira página sempre que o tamanho do array mudar.
+  const previousDataLength = useRef(data.length)
+  useEffect(() => {
+    if (previousDataLength.current !== data.length) {
+      previousDataLength.current = data.length
+      setClientPage(0)
+    }
+  }, [data.length])
 
   const table = useReactTable({
     data,
@@ -53,7 +82,17 @@ export function DataTable<TData>({
     getSortedRowModel: getSortedRowModel(),
   })
 
-  const rows = table.getRowModel().rows
+  const allRows = table.getRowModel().rows
+
+  // Paginação client-side: fatia as linhas já filtradas/ordenadas em páginas.
+  // Só entra em ação quando ninguém passou a prop `pagination` (caminho
+  // server-side, usado por HistoryPage/StockPage/ReportPage etc., que
+  // continua intocado abaixo).
+  const isClientPaginated = !pagination
+  const clientPageCount = isClientPaginated ? Math.max(1, Math.ceil(allRows.length / clientPageSize)) : 0
+  const rows = isClientPaginated
+    ? allRows.slice(clientPage * clientPageSize, (clientPage + 1) * clientPageSize)
+    : allRows
 
   const pageSize = pagination?.pageSize || 1
   const pageCount = pagination ? Math.max(1, Math.ceil(pagination.total / pageSize)) : 0
@@ -67,6 +106,7 @@ export function DataTable<TData>({
       pagination.onSearchChange(val)
     } else {
       setGlobalFilter(val)
+      setClientPage(0) // nova busca sempre volta para a primeira página
     }
   }
 
@@ -117,7 +157,10 @@ export function DataTable<TData>({
                   {headerGroup.headers.map((header) => (
                     <th
                       key={header.id}
-                      className="text-caption text-muted-foreground px-4 py-2.5 text-left whitespace-nowrap select-none"
+                      className={cn(
+                        'text-caption text-muted-foreground px-4 py-2.5 text-left whitespace-nowrap select-none',
+                        header.column.columnDef.meta?.className
+                      )}
                       onClick={header.column.getToggleSortingHandler()}
                       style={{ cursor: header.column.getCanSort() ? 'pointer' : 'default' }}
                     >
@@ -150,12 +193,21 @@ export function DataTable<TData>({
                       onRowClick?.(row.original)
                     }}
                     className={cn(
-                      'border-b border-border last:border-0 hover:bg-surface-alt transition-colors duration-micro',
+                      // `group`: permite que células desta linha (ex.: as ações
+                      // que só aparecem no hover) reajam ao hover da linha
+                      // inteira, não só do próprio elemento.
+                      'group border-b border-border last:border-0 hover:bg-surface-alt transition-colors duration-micro',
                       onRowClick && 'cursor-pointer'
                     )}
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="px-4 py-2.5 text-body-sm whitespace-nowrap">
+                      <td
+                        key={cell.id}
+                        className={cn(
+                          'px-4 py-2.5 text-body-sm whitespace-nowrap',
+                          cell.column.columnDef.meta?.className
+                        )}
+                      >
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </td>
                     ))}
@@ -206,11 +258,39 @@ export function DataTable<TData>({
             </div>
           </div>
         ) : (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-            <p className="text-caption text-muted-foreground">
-              <span className="num">{table.getFilteredRowModel().rows.length}</span> de{' '}
+          // Paginação client-side — o contador aparece sempre; os botões de
+          // navegação só quando há mais de uma página, para não poluir listas
+          // curtas que já cabem inteiras na tela.
+          <div className="flex items-center justify-between gap-4 px-4 py-3 border-t border-border">
+            <p className="text-caption text-muted-foreground whitespace-nowrap">
+              <span className="num">{allRows.length}</span> de{' '}
               <span className="num">{data.length}</span> registros
             </p>
+            {clientPageCount > 1 && (
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setClientPage((p) => Math.max(0, p - 1))}
+                  disabled={clientPage <= 0}
+                >
+                  <ChevronLeft size={14} />Anterior
+                </Button>
+                <span className="text-caption text-muted-foreground px-2 py-1 rounded-md bg-surface-alt whitespace-nowrap">
+                  Página <span className="num">{clientPage + 1}</span> de <span className="num">{clientPageCount}</span>
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setClientPage((p) => Math.min(clientPageCount - 1, p + 1))}
+                  disabled={clientPage + 1 >= clientPageCount}
+                >
+                  Próxima<ChevronRight size={14} />
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </div>
