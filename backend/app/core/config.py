@@ -126,6 +126,9 @@ SETORES_OPTIONS = [
     "Auditório",
     "Caixa",
     "Diretoria",
+    "Frota",
+    "Logística",
+    "Controle",
 ]
 
 EQUIPMENT_TYPES = [
