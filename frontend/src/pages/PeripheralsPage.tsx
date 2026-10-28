@@ -26,8 +26,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useConstants } from '@/hooks/useConstants'
 import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
 import type { ColumnDef } from '@tanstack/react-table'
-import { formatDate } from '@/lib/utils'
-import { Trash2, Loader2, Plus, X, Link2, ArrowRight } from 'lucide-react'
+import { cn, exportToCsv, formatDate } from '@/lib/utils'
+import { Trash2, Loader2, Plus, X, Link2, ArrowRight, Download, ChevronRight } from 'lucide-react'
 
 const PAGE_SIZE = 10
 const STATUS_OPTIONS = ['Disponível', 'Em Uso', 'Substituido']
@@ -95,9 +95,19 @@ function PeripheralDetailModal({
               <p className="text-caption text-muted-foreground">Cadastro</p>
               <p className="text-body-sm num text-foreground">{formatDate(peripheral.date_registered)}</p>
             </div>
-            <div className="col-span-2">
+            <div>
               <p className="text-caption text-muted-foreground">Status</p>
               <div className="mt-0.5"><PeripheralStatusBadge status={peripheral.status} /></div>
+            </div>
+            <div>
+              <p className="text-caption text-muted-foreground">Vinculado</p>
+              <p className="text-body-sm text-foreground">
+                {peripheral.link_id ? (
+                  <>Sim (link #<span className="num">{peripheral.link_id}</span>)</>
+                ) : (
+                  'Livre'
+                )}
+              </p>
             </div>
           </div>
 
@@ -269,6 +279,24 @@ export default function PeripheralsPage() {
     },
   })
 
+  // Exporta os periféricos já carregados (filtros de tipo/status do servidor)
+  // e filtrados pela busca em tela — sem nova requisição.
+  function handleExportCsv() {
+    exportToCsv(
+      'perifericos',
+      filteredPeripherals as unknown as Record<string, unknown>[],
+      [
+        { key: 'id', label: 'ID' },
+        { key: 'tipo', label: 'Tipo' },
+        { key: 'brand', label: 'Marca' },
+        { key: 'model', label: 'Modelo' },
+        { key: 'identificador', label: 'S/N' },
+        { key: 'status', label: 'Status' },
+        { key: 'date_registered', label: 'Cadastro' },
+      ]
+    )
+  }
+
   const columns: ColumnDef<Peripheral, unknown>[] = [
     { accessorKey: 'id', header: 'ID', size: 60, cell: ({ getValue }) => <span className="num">{getValue() as number}</span> },
     { accessorKey: 'tipo', header: 'Tipo' },
@@ -277,6 +305,21 @@ export default function PeripheralsPage() {
     { accessorKey: 'identificador', header: 'Identificador (S/N)', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'status', header: 'Status', cell: ({ row }) => <PeripheralStatusBadge status={row.original.status} /> },
     { accessorKey: 'date_registered', header: 'Cadastro', cell: ({ getValue }) => formatDate(getValue() as string) },
+    // Seta indicadora de detalhe: gira 90° na linha cuja ficha está aberta.
+    {
+      id: 'detail',
+      header: '',
+      size: 40,
+      cell: ({ row }) => (
+        <ChevronRight
+          size={16}
+          className={cn(
+            'transition-transform',
+            selectedPeripheral?.id === row.original.id ? 'rotate-90 text-foreground' : 'text-muted-foreground'
+          )}
+        />
+      ),
+    },
     // Ação de inativar só aparece para quem o backend de fato autoriza
     // (Gestor e Técnico), mesmo padrão de gating usado em StockPage.
     ...(canManage ? [{
@@ -312,17 +355,28 @@ export default function PeripheralsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Ativos de Suporte"
-        eyebrowDetail="Periféricos"
+        eyebrow="Inventário Relacional"
+        eyebrowDetail="Master / Detail"
         title="Periféricos"
-        description="Cadastre e gerencie periféricos como mouse, teclado, monitor etc."
+        description="Gestão de periféricos (mouse, teclado, monitor, headset) com rastreabilidade relacional ao ativo principal."
         actions={
-          canManage && (
-            <Button variant="gradient" size="sm" onClick={() => setShowCreateForm((v) => !v)}>
-              <Plus size={16} />
-              Novo Periférico
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={filteredPeripherals.length === 0}
+              onClick={handleExportCsv}
+            >
+              <Download size={16} />
+              Exportar CSV
             </Button>
-          )
+            {canManage && (
+              <Button variant="gradient" size="sm" onClick={() => setShowCreateForm((v) => !v)}>
+                <Plus size={16} />
+                Novo Periférico
+              </Button>
+            )}
+          </>
         }
       />
 

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getMonthlyReport, exportMonthlyReportCsv, type ReportRow } from '@/api/reports'
+import { listUnidades } from '@/api/unidades'
+import { useConstants } from '@/hooks/useConstants'
 import { DataTable } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,7 +14,7 @@ import { getErrorMessage } from '@/lib/api-error'
 import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
 import { formatDateTime } from '@/lib/utils'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Download, Loader2 } from 'lucide-react'
+import { Download, Loader2, RefreshCw } from 'lucide-react'
 
 const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 
@@ -37,6 +39,15 @@ export default function ReportPage() {
   const [filterOperationType, setFilterOperationType] = useState(ALL)
   const [search, setSearch] = useState('')
   const [pageIndex, setPageIndex] = useState(0)
+
+  // Revendas oficiais (constantes) e unidades cadastradas enriquecem as opções
+  // do filtro de unidade, para que unidades sem movimentação no mês também
+  // apareçam na lista.
+  const { revendas = [] } = useConstants()
+  const { data: unidades = [] } = useQuery({
+    queryKey: ['unidades-report'],
+    queryFn: () => listUnidades(),
+  })
 
   const { data: report = [], isLoading, refetch } = useQuery({
     queryKey: ['report', queryParams.year, queryParams.month],
@@ -66,14 +77,17 @@ export default function ReportPage() {
     }
   }
 
-  // Opções dos filtros derivadas dos próprios dados do mês (não de uma lista
-  // fixa) — sempre a partir de `report` (não do já-filtrado), para trocar de
-  // unidade ou tipo sem que as demais opções desapareçam da lista.
+  // Opções de unidade: união das revendas das constantes, das unidades
+  // cadastradas e das presentes nos dados do mês — sempre a partir de `report`
+  // (não do já-filtrado), para trocar de unidade sem que as demais opções
+  // desapareçam da lista. O tipo de operação abaixo vem só dos dados do mês.
   const unidadeOptions = useMemo(() => {
     const set = new Set<string>()
+    revendas.forEach((r) => { if (r) set.add(r) })
+    unidades.forEach((u) => { if (u.nome) set.add(u.nome) })
     report.forEach((r) => { if (r.revenda) set.add(r.revenda) })
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'))
-  }, [report])
+  }, [revendas, unidades, report])
 
   const operationTypeOptions = useMemo(() => {
     const set = new Set<string>()
@@ -170,15 +184,25 @@ export default function ReportPage() {
     { accessorKey: 'operador', header: 'Operador' },
     { accessorKey: 'operation_type', header: 'Operação' },
     { accessorKey: 'tipo', header: 'Tipo' },
-    { accessorKey: 'brand', header: 'Marca' },
-    { accessorKey: 'model', header: 'Modelo' },
+    {
+      id: 'marca_modelo',
+      header: 'Marca / Modelo',
+      accessorFn: (r) => [r.brand, r.model].filter(Boolean).join(' '),
+      cell: ({ getValue }) => (getValue() as string) || '-',
+    },
     { accessorKey: 'identificador', header: 'Identificador', cell: ({ getValue }) => <span className="num">{(getValue() as string) || '-'}</span> },
     { accessorKey: 'nota_fiscal', header: 'Nota Fiscal', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'usuario', header: 'Usuário', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'cpf', header: 'CPF', cell: ({ getValue }) => <span className="num">{(getValue() as string) || '-'}</span> },
     { accessorKey: 'setor', header: 'Setor', cell: ({ getValue }) => getValue() as string || '-' },
     { accessorKey: 'revenda', header: 'Revenda', cell: ({ getValue }) => getValue() as string || '-' },
-    { accessorKey: 'data_emprestimo', header: 'Data', cell: ({ getValue }) => <span className="num">{formatDateTime(getValue() as string)}</span> },
+    {
+      // Cai para confirmação/devolução quando a linha não tem data de empréstimo.
+      id: 'data_emprestimo',
+      header: 'Data',
+      accessorFn: (r) => r.data_emprestimo || r.data_confirmacao || r.data_devolucao,
+      cell: ({ getValue }) => <span className="num">{formatDateTime(getValue() as string | undefined)}</span>,
+    },
   ]
 
   return (
@@ -190,33 +214,57 @@ export default function ReportPage() {
         description="Visualize todas as operações de um determinado mês."
       />
 
-      <div className="surface-panel p-4 space-y-3">
-        <PanelHeader title="Filtros de Período" />
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="flex flex-col gap-1.5">
-            <Label>Ano</Label>
-            <Input value={year} onChange={e => setYear(e.target.value)} className="w-24" />
+      <div className="surface-panel p-3 space-y-2">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1">
+            <Label className="text-caption font-medium">Ano</Label>
+            <Input value={year} onChange={e => setYear(e.target.value)} className="h-8 w-20 num text-body-sm" maxLength={4} />
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Mês</Label>
+          <div className="flex flex-col gap-1">
+            <Label className="text-caption font-medium">Mês</Label>
             <Select value={month} onValueChange={setMonth}>
-              <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-8 w-36 text-body-sm"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {MONTHS.map((m, i) => <SelectItem key={i+1} value={String(i+1)}>{m}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
-          <Button onClick={handleGenerate}>Gerar Relatório</Button>
           <div className="flex flex-col gap-1">
-            <Button variant="outline" onClick={handleExport} disabled={isExporting}>
-              <Download size={14} />
-              {isExporting ? 'Exportando...' : 'Exportar CSV'}
-            </Button>
+            <Label className="text-caption font-medium">Unidade</Label>
+            <Select value={filterUnidade} onValueChange={setFilterUnidade} disabled={report.length === 0}>
+              <SelectTrigger className="h-8 w-44 text-body-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>Todas as unidades</SelectItem>
+                {unidadeOptions.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
+          <div className="flex flex-col gap-1">
+            <Label className="text-caption font-medium">Operação</Label>
+            <Select value={filterOperationType} onValueChange={setFilterOperationType} disabled={report.length === 0}>
+              <SelectTrigger className="h-8 w-40 text-body-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>Todos os tipos</SelectItem>
+                {operationTypeOptions.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button size="sm" className="h-8" onClick={handleGenerate}>
+            <RefreshCw size={14} />
+            Gerar
+          </Button>
+          {/* CSV desabilitado enquanto não há nada a exportar. */}
+          <Button size="sm" variant="outline" className="h-8" onClick={handleExport} disabled={isExporting || report.length === 0}>
+            <Download size={14} />
+            {isExporting ? 'Exportando...' : 'CSV'}
+          </Button>
+          {hasActiveFilters && (
+            <Button size="sm" variant="ghost" className="h-8" onClick={handleClearFilters}>Limpar filtros</Button>
+          )}
         </div>
         {/*
          * Aviso 4(a): handleExport chama /reports/monthly/export só com
-         * ano/mês — os filtros de unidade e tipo abaixo, por serem
+         * ano/mês — os filtros de unidade e tipo, por serem
          * client-side, nunca chegam ao servidor. Em vez de desabilitar a
          * exportação enquanto houver filtro ativo (o que impediria exportar
          * o mês inteiro justamente quando o usuário está com a tela filtrada
@@ -227,9 +275,26 @@ export default function ReportPage() {
         <p className="text-caption text-muted-foreground">
           {`O CSV exportado sempre traz ${MONTHS[queryParams.month - 1]}/${queryParams.year} inteiro`}
           {hasActiveFilters
-            ? ' — os filtros de unidade e tipo de operação abaixo não são aplicados ao arquivo.'
-            : ', sem os filtros de unidade e tipo de operação abaixo.'}
+            ? ' — os filtros de unidade e tipo de operação não são aplicados ao arquivo.'
+            : ', sem os filtros de unidade e tipo de operação.'}
         </p>
+        {/*
+         * Aviso 4(b): o ramo de periféricos do UNION do relatório
+         * (backend/app/db/inventory_manager_db.py ~L980) seleciona NULL na
+         * coluna de revenda — só os ramos de Empréstimo, Cadastro e
+         * Exclusão carregam revenda de verdade. Filtrar por unidade
+         * descarta, portanto, toda operação de periférico (Cadastro
+         * Periférico, Vínculo, Desvínculo, Substituição), mesmo quando ela
+         * de fato ocorreu na unidade selecionada. Não dá para corrigir sem
+         * alterar o backend — só sinalizar.
+         */}
+        {filterUnidade !== ALL && (
+          <p className="border border-border-strong bg-surface-alt p-3 rounded text-body-sm">
+            Operações de periférico (Cadastro Periférico, Vínculo, Desvínculo, Substituição Periférico) não têm
+            unidade registrada nesta consulta e por isso somem da lista ao filtrar por unidade — isso não significa
+            que não houve movimentação de periféricos no mês.
+          </p>
+        )}
       </div>
 
       {!isLoading && report.length > 0 && (
@@ -246,57 +311,6 @@ export default function ReportPage() {
             />
             <StatBlock label="Colaboradores Únicos" value={totalColaboradores} symbol="◯" />
           </div>
-        </div>
-      )}
-
-      {!isLoading && report.length > 0 && (
-        <div className="surface-panel p-4 space-y-3">
-          <PanelHeader
-            title="Filtros de Resultado"
-            actions={hasActiveFilters ? (
-              <Button variant="ghost" size="sm" onClick={handleClearFilters}>Limpar filtros</Button>
-            ) : undefined}
-          />
-          <div className="flex flex-wrap items-end gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label>Unidade</Label>
-              <Select value={filterUnidade} onValueChange={setFilterUnidade}>
-                <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL}>Todas as unidades</SelectItem>
-                  {unidadeOptions.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>Tipo de Operação</Label>
-              <Select value={filterOperationType} onValueChange={setFilterOperationType}>
-                <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL}>Todos os tipos</SelectItem>
-                  {operationTypeOptions.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/*
-           * Aviso 4(b): o ramo de periféricos do UNION do relatório
-           * (backend/app/db/inventory_manager_db.py ~L980) seleciona NULL na
-           * coluna de revenda — só os ramos de Empréstimo, Cadastro e
-           * Exclusão carregam revenda de verdade. Filtrar por unidade
-           * descarta, portanto, toda operação de periférico (Cadastro
-           * Periférico, Vínculo, Desvínculo, Substituição), mesmo quando ela
-           * de fato ocorreu na unidade selecionada. Não dá para corrigir sem
-           * alterar o backend — só sinalizar.
-           */}
-          {filterUnidade !== ALL && (
-            <p className="border border-border-strong bg-surface-alt p-3 rounded text-body-sm">
-              Operações de periférico (Cadastro Periférico, Vínculo, Desvínculo, Substituição Periférico) não têm
-              unidade registrada nesta consulta e por isso somem da lista ao filtrar por unidade — isso não significa
-              que não houve movimentação de periféricos no mês.
-            </p>
-          )}
         </div>
       )}
 
@@ -321,19 +335,27 @@ export default function ReportPage() {
           <Button variant="outline" size="sm" onClick={handleClearFilters}>Limpar filtros</Button>
         </div>
       ) : (
-        <DataTable
-          data={pageRows}
-          columns={columns}
-          searchPlaceholder="Buscar no relatório..."
-          pagination={{
-            total: searchedReport.length,
-            pageIndex,
-            pageSize: PAGE_SIZE,
-            onPageChange: setPageIndex,
-            search,
-            onSearchChange: setSearch,
-          }}
-        />
+        <div className="space-y-2">
+          {/* Subtítulo do preview: período, total após filtros/busca e filtros ativos. */}
+          <p className="text-body-sm font-medium text-foreground">
+            {`${MONTHS[queryParams.month - 1]} ${queryParams.year} — ${searchedReport.length} registro${searchedReport.length !== 1 ? 's' : ''}`}
+            {filterUnidade !== ALL && ` • ${filterUnidade}`}
+            {filterOperationType !== ALL && ` • ${filterOperationType}`}
+          </p>
+          <DataTable
+            data={pageRows}
+            columns={columns}
+            searchPlaceholder="Buscar no relatório..."
+            pagination={{
+              total: searchedReport.length,
+              pageIndex,
+              pageSize: PAGE_SIZE,
+              onPageChange: setPageIndex,
+              search,
+              onSearchChange: setSearch,
+            }}
+          />
+        </div>
       )}
     </div>
   )

@@ -11,13 +11,16 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import {
+  AlertCircle,
   ArrowRight,
   Boxes,
+  Clock,
   ExternalLink,
   FileSignature,
   Loader2,
   PackageCheck,
   RefreshCw,
+  TrendingUp,
   Undo2,
 } from 'lucide-react'
 
@@ -183,15 +186,22 @@ export default function DashboardPage() {
     const dias = loansChartQuery.data?.days ?? []
     const valores = loansChartQuery.data?.values ?? []
     const valores2 = loansChartQuery.data?.values2 ?? []
+    // Sem dados no mês: em vez de uma mensagem vazia, o gráfico mostra 15 dias
+    // zerados (eixo e grade continuam visíveis).
+    if (dias.length === 0) {
+      return Array.from({ length: 15 }, (_, i) => ({
+        dia: `D${i + 1}`,
+        Empréstimos: 0,
+        Devoluções: 0,
+      }))
+    }
     const completo: PontoDia[] = dias.map((dia, i) => ({
-      dia: `Dia ${dia}`,
+      dia: `D${dia}`,
       Empréstimos: valores[i] ?? 0,
       Devoluções: valores2[i] ?? 0,
     }))
     return completo.slice(-15)
   }, [loansChartQuery.data])
-
-  const graficoVazio = chartData.length > 0 && chartData.every((d) => !d.Empréstimos && !d.Devoluções)
 
   const recentEvents = historyQuery.data?.items ?? []
 
@@ -211,7 +221,7 @@ export default function DashboardPage() {
             </span>
             <span>·</span>
             <span className="flex items-center gap-1.5">
-              <span className="size-1.5 rounded-full bg-foreground" />
+              <span className="size-1.5 rounded-full bg-[var(--status-available)] animate-pulse" />
               Sincronizado
             </span>
           </div>
@@ -238,7 +248,7 @@ export default function DashboardPage() {
         <StatBlock
           label="Pendências Operacionais"
           value={totaisCarregando ? '—' : totalAtencao}
-          hint={totalAtencao > 0 ? '! Atenção requerida' : 'Nenhuma pendência'}
+          hint={totalAtencao > 0 ? '! Atenção requerida' : '✓ Nenhuma pendência'}
         />
       </div>
 
@@ -246,7 +256,12 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         <div className={podeVerOperacoes ? 'lg:col-span-7 surface-panel p-5 space-y-4' : 'lg:col-span-12 surface-panel p-5 space-y-4'}>
           <PanelHeader
-            title="Movimentação Operacional Diária"
+            title={
+              <span className="inline-flex items-center gap-2">
+                <TrendingUp className="size-4 text-muted-foreground" aria-hidden />
+                Movimentação Operacional Diária
+              </span>
+            }
             description="Fluxo de empréstimos e devoluções nos últimos 15 dias"
             actions={
               <div className="flex items-center gap-3 text-xs font-mono num">
@@ -274,13 +289,21 @@ export default function DashboardPage() {
                   Tentar novamente
                 </Button>
               </div>
-            ) : graficoVazio ? (
-              <div className="h-full flex items-center justify-center text-body-sm text-muted-foreground">
-                Nenhuma movimentação nos últimos 15 dias.
-              </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+                  {/* Degradê vertical sob cada linha; as cores vêm de corDoToken
+                      para acompanhar a troca de tema (ver useTheme acima). */}
+                  <defs>
+                    <linearGradient id="colorEmp" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={CORES_GRAFICO.serie1()} stopOpacity={0.25} />
+                      <stop offset="95%" stopColor={CORES_GRAFICO.serie1()} stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="colorDev" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={CORES_GRAFICO.serie2()} stopOpacity={0.2} />
+                      <stop offset="95%" stopColor={CORES_GRAFICO.serie2()} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="2 2" stroke={CORES_GRAFICO.grade()} vertical={false} />
                   <XAxis dataKey="dia" tick={{ fontSize: 11, fill: CORES_GRAFICO.eixo() }} axisLine={false} tickLine={false} />
                   <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: CORES_GRAFICO.eixo() }} axisLine={false} tickLine={false} />
@@ -290,7 +313,9 @@ export default function DashboardPage() {
                       borderColor: corDoToken('--border-strong', '#B9B9B2'),
                       borderRadius: 4,
                       fontSize: 12,
+                      fontWeight: 600,
                       color: corDoToken('--text-primary', '#111111'),
+                      boxShadow: corDoToken('--shadow-overlay', '0 2px 12px rgba(0, 0, 0, 0.08)'),
                     }}
                   />
                   <Area
@@ -298,8 +323,7 @@ export default function DashboardPage() {
                     dataKey="Empréstimos"
                     stroke={CORES_GRAFICO.serie1()}
                     strokeWidth={2}
-                    fill={CORES_GRAFICO.serie1()}
-                    fillOpacity={0.12}
+                    fill="url(#colorEmp)"
                   />
                   <Area
                     type="monotone"
@@ -307,7 +331,7 @@ export default function DashboardPage() {
                     stroke={CORES_GRAFICO.serie2()}
                     strokeWidth={1.5}
                     strokeDasharray="3 3"
-                    fill="transparent"
+                    fill="url(#colorDev)"
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -326,7 +350,12 @@ export default function DashboardPage() {
         {podeVerOperacoes && (
           <div className="lg:col-span-5 surface-panel p-5 space-y-4">
             <PanelHeader
-              title="Atenção Operacional"
+              title={
+                <span className="inline-flex items-center gap-2">
+                  <AlertCircle className="size-4 text-foreground" aria-hidden />
+                  Atenção Operacional
+                </span>
+              }
               description="Ações imediatas e termos aguardando validação"
               actions={
                 <span className="text-caption font-mono num px-2 py-0.5 rounded-sm border border-border-strong text-foreground font-bold">
@@ -403,7 +432,12 @@ export default function DashboardPage() {
         {podeVerOperacoes && (
           <div className="lg:col-span-8 surface-panel p-5 space-y-4">
             <PanelHeader
-              title="Últimas Movimentações no Sistema"
+              title={
+                <span className="inline-flex items-center gap-2">
+                  <Clock className="size-4 text-muted-foreground" aria-hidden />
+                  Últimas Movimentações no Sistema
+                </span>
+              }
               description="Auditoria cronológica das ações mais recentes"
               actions={
                 <Link to="/history" className="text-xs text-foreground hover:underline flex items-center gap-1 font-medium">

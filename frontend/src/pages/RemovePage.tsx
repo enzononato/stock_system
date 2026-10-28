@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import { FileUpload } from '@/components/ui/FileUpload'
 import { Checkbox } from '@/components/ui/checkbox'
-import { StatusBadge } from '@/components/ui/badge'
+import { Badge, StatusBadge } from '@/components/ui/badge'
 import { toast } from '@/components/ui/toast'
 import { getErrorMessage } from '@/lib/api-error'
 import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
@@ -142,7 +142,10 @@ export default function RemovePage() {
             vendo só o texto curto da opção escolhida no dropdown. */}
         {selectedItem && (
           <div className="rounded border border-border bg-surface-alt p-4 space-y-3">
-            <PanelHeader title="Ficha do Ativo Selecionado" />
+            <PanelHeader
+              title="Ficha do Ativo Selecionado"
+              actions={<span className="num text-caption font-semibold text-foreground">ID #{selectedItem.id}</span>}
+            />
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">
               <div>
                 <p className="text-caption text-muted-foreground">Tipo / Modelo</p>
@@ -175,9 +178,9 @@ export default function RemovePage() {
         )}
 
         <div className="flex flex-col gap-1.5">
-          <Label>Motivo da Remoção *</Label>
+          <Label>Motivo Formal da Remoção *</Label>
           <Select value={reason} onValueChange={setReason} required disabled={constantsLoading}>
-            <SelectTrigger><SelectValue placeholder="Selecione o motivo" /></SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Selecione a justificativa da baixa" /></SelectTrigger>
             <SelectContent>
               {removalReasons.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
             </SelectContent>
@@ -185,14 +188,17 @@ export default function RemovePage() {
         </div>
 
         {reason && (
-          <div className="flex flex-col gap-1.5">
-            <Label>
-              Comprovante {needsAttachment ? '(obrigatório)' : '(opcional)'}
-            </Label>
+          <div className="flex flex-col gap-1.5 border-t border-border pt-4">
+            <div className="flex items-center justify-between gap-3">
+              <Label>
+                Comprovante / Laudo Técnico {needsAttachment ? '(obrigatório)' : '(opcional)'}
+              </Label>
+              {needsAttachment && <Badge variant="danger" showDot>Documento obrigatório</Badge>}
+            </div>
             <FileUpload
               accept={{ 'application/pdf': ['.pdf'], 'image/*': ['.jpg', '.jpeg', '.png'] }}
               onFile={setAttachment}
-              label="Arraste ou clique para anexar comprovante"
+              label="Arraste ou clique para anexar laudo, B.O. ou comprovante de baixa (PDF / Imagem)"
             />
           </div>
         )}

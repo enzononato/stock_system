@@ -55,14 +55,19 @@ function PeripheralCard({
 }) {
   return (
     <div className="flex items-center justify-between border border-border rounded p-3 surface-interactive">
-      <div className="flex flex-col gap-0.5">
-        <span className="text-body-sm font-medium text-foreground">
+      <div className="flex flex-col gap-0.5 min-w-0">
+        <span className="text-body-sm font-medium text-foreground truncate">
           {peripheral.tipo} — {peripheral.brand || '-'} {peripheral.model || ''}
         </span>
-        <span className="text-[11px] text-muted-foreground">S/N: <span className="num">{peripheral.identificador || '-'}</span></span>
+        <span className="text-[11px] text-muted-foreground font-mono">
+          S/N: {peripheral.identificador || '-'}
+        </span>
       </div>
-      <div className="flex items-center gap-3">
-        <Badge variant={peripheral.status === 'Disponível' ? 'success' : peripheral.status === 'Em Uso' ? 'warning' : 'danger'}>
+      <div className="flex items-center gap-3 shrink-0">
+        <Badge
+          variant={peripheral.status === 'Disponível' ? 'success' : peripheral.status === 'Em Uso' ? 'warning' : 'danger'}
+          showDot
+        >
           {peripheral.status}
         </Badge>
         <Button size="sm" variant={variant === 'destructive' ? 'destructive' : 'outline'} onClick={action}>
@@ -211,20 +216,35 @@ export default function LinkPeripheralPage() {
           />
         </div>
         {selectedItem && (
-          <p className="text-body-sm text-muted-foreground">
-            Status: <strong>{selectedItem.status}</strong> · Revenda: <strong>{selectedItem.revenda}</strong>
-          </p>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-body-sm text-muted-foreground">
+            <span>
+              Status: <strong className="text-foreground">{selectedItem.status || '-'}</strong>
+            </span>
+            <span aria-hidden="true">•</span>
+            <span>
+              Unidade: <strong className="text-foreground">{selectedItem.revenda || '-'}</strong>
+            </span>
+            {selectedItem.assigned_to && (
+              <>
+                <span aria-hidden="true">•</span>
+                <span>
+                  Alocado: <strong className="text-foreground">{selectedItem.assigned_to}</strong>
+                </span>
+              </>
+            )}
+          </div>
         )}
       </div>
 
       {selectedItemId && (
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Periféricos vinculados */}
           <div className="surface-panel p-4 space-y-3">
             <PanelHeader
               title={<>Periféricos Vinculados (<span className="num">{linkedPeripherals.length}</span>)</>}
+              description="Componentes conectados a este equipamento."
               actions={
-                <Button size="sm" variant="ghost" onClick={() => refetchLinked()}>
+                <Button size="sm" variant="ghost" onClick={() => refetchLinked()} className="size-8 p-0" aria-label="Atualizar lista">
                   <RefreshCw size={13} />
                 </Button>
               }
@@ -256,7 +276,10 @@ export default function LinkPeripheralPage() {
 
           {/* Periféricos disponíveis */}
           <div className="surface-panel p-4 space-y-3">
-            <PanelHeader title={<>Periféricos Disponíveis (<span className="num">{availablePeripherals.length}</span>)</>} />
+            <PanelHeader
+              title={<>Periféricos Disponíveis (<span className="num">{availablePeripherals.length}</span>)</>}
+              description="Itens em estoque livres para vinculação."
+            />
             {availablePeripherals.length === 0 ? (
               <p className="text-body-sm text-muted-foreground py-10 text-center">Nenhum periférico disponível.</p>
             ) : (
@@ -279,11 +302,13 @@ export default function LinkPeripheralPage() {
       {/* Painel de substituição */}
       {replacingLinkId && replacingOldId && (
         <div className="figure-ground-panel space-y-4">
-          <PanelHeader title="Substituição de Periférico" />
-          <h3 className="text-heading-sm text-foreground">Substituir Periférico #<span className="num">{replacingOldId}</span></h3>
-          <div className="grid grid-cols-2 gap-4">
+          <PanelHeader
+            title={<>Substituição de Periférico #<span className="num">{replacingOldId}</span></>}
+            description="Selecione o novo periférico que assumirá o vínculo e informe a justificativa."
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
-              <Label>Novo Periférico (ID)</Label>
+              <Label>Novo Periférico Substituto *</Label>
               <Select value={replaceNewId} onValueChange={setReplaceNewId}>
                 <SelectTrigger><SelectValue placeholder="Selecione o substituto" /></SelectTrigger>
                 <SelectContent>
@@ -303,17 +328,17 @@ export default function LinkPeripheralPage() {
           <FileUpload
             accept={{ 'application/pdf': ['.pdf'], 'image/*': ['.jpg', '.jpeg', '.png'] }}
             onFile={setReplaceAttachment}
-            label="Comprovante (opcional)"
+            label="Comprovante / laudo (opcional)"
           />
-          <div className="flex gap-3">
+          <div className="flex justify-end gap-3 pt-4 border-t border-border">
+            <Button variant="outline" onClick={() => { setReplacingLinkId(null); setReplacingOldId(null) }}>
+              Cancelar
+            </Button>
             <Button
               disabled={!replaceNewId || !replaceReason || replaceMutation.isPending}
               onClick={() => replaceMutation.mutate()}
             >
               {replaceMutation.isPending ? 'Substituindo...' : 'Confirmar Substituição'}
-            </Button>
-            <Button variant="ghost" onClick={() => { setReplacingLinkId(null); setReplacingOldId(null) }}>
-              Cancelar
             </Button>
           </div>
         </div>

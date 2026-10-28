@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { FileUpload } from '@/components/ui/FileUpload'
 import { DataTable } from '@/components/ui/DataTable'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Badge } from '@/components/ui/badge'
 import { toast } from '@/components/ui/toast'
 import { getErrorMessage } from '@/lib/api-error'
 import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
@@ -218,7 +219,7 @@ export default function ReturnPage() {
           {/* Mostra o equipamento e o colaborador antes de confirmar — sem isso o
               operador confirmava a devolução às cegas, vendo apenas o #id. */}
           {pendingReturnItem && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 border-t border-border pt-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 rounded border border-border bg-surface-alt p-4">
               <div>
                 <p className="text-caption text-muted-foreground">Tipo</p>
                 <p className="text-body-sm text-foreground">{pendingReturnItem.tipo || '-'}</p>
@@ -266,15 +267,13 @@ export default function ReturnPage() {
             </label>
           </div>
 
-          <FileUpload onFile={setSignedPdf} label="Upload do Termo de Devolução Assinado (PDF)" />
-          <div className="flex gap-3">
-            <Button
-              disabled={!signedPdf || !checklistCompleto || confirmMutation.isPending}
-              onClick={() => signedPdf && confirmMutation.mutate({ itemId: pendingReturnId, pdf: signedPdf })}
-            >
-              <CheckCircle size={14} />
-              {confirmMutation.isPending ? 'Confirmando...' : 'Confirmar Devolução'}
-            </Button>
+          <div className="space-y-2 border-t border-border pt-3">
+            <p className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
+              Termo de Devolução Assinado (PDF) *
+            </p>
+            <FileUpload onFile={setSignedPdf} label="Arraste ou clique para anexar o termo assinado (PDF)" />
+          </div>
+          <div className="flex justify-end gap-3 border-t border-border pt-3">
             <Button
               variant="ghost"
               onClick={() => {
@@ -284,6 +283,13 @@ export default function ReturnPage() {
             >
               Cancelar
             </Button>
+            <Button
+              disabled={!signedPdf || !checklistCompleto || confirmMutation.isPending}
+              onClick={() => signedPdf && confirmMutation.mutate({ itemId: pendingReturnId, pdf: signedPdf })}
+            >
+              <CheckCircle size={14} />
+              {confirmMutation.isPending ? 'Confirmando...' : 'Confirmar Devolução'}
+            </Button>
           </div>
         </div>
       )}
@@ -291,7 +297,11 @@ export default function ReturnPage() {
       {/* Devoluções pendentes de confirmação */}
       {pendenteDevolucaoTotal > 0 && (
         <div className="space-y-3">
-          <h3 className="text-body-lg font-semibold text-foreground">Pendente de Confirmação (<span className="num">{pendenteDevolucaoTotal}</span>)</h3>
+          <PanelHeader
+            title={<>Pendente de Confirmação (<span className="num">{pendenteDevolucaoTotal}</span>)</>}
+            description="Equipamentos cujo termo de devolução já foi gerado e aguardam o upload da via assinada."
+            actions={<Badge variant="warning" showDot>Recolhimento</Badge>}
+          />
           <DataTable
             data={pendenteDevolucao}
             columns={pendingColumns}

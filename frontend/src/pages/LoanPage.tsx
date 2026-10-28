@@ -234,9 +234,14 @@ export default function LoanPage() {
           <div className="rounded border border-border bg-surface-alt p-5 space-y-5">
             {currentStep === 0 && (
               <div className="space-y-4">
-                <h3 className="text-body-lg font-semibold text-foreground">1. Equipamento</h3>
-                <div className="flex flex-col gap-1.5">
-                  <Label>Equipamento *</Label>
+                <div>
+                  <h3 className="text-body-lg font-semibold text-foreground">1. Equipamento</h3>
+                  <p className="text-caption text-muted-foreground mt-0.5">
+                    Escolha o ativo patrimonial disponível para alocação.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-1.5 pt-3 border-t border-border">
+                  <Label>Equipamento em Estoque *</Label>
                   {/* Busca no servidor (debounce de 400ms) controlando o próprio
                       campo de busca do dropdown via `search`/`onSearchChange`
                       — sem isso, o usuário veria uma segunda caixa de busca (a
@@ -256,20 +261,46 @@ export default function LoanPage() {
                     onSearchChange={setItemSearch}
                   />
                 </div>
+
+                {/* Ficha rápida do ativo escolhido, para o operador conferir
+                    antes de avançar. */}
+                {selectedItem && (
+                  <div className="rounded border border-border bg-surface p-4 space-y-2 text-body-sm">
+                    <div className="flex justify-between border-b border-border pb-1.5">
+                      <span className="text-muted-foreground">Tipo / Modelo</span>
+                      <span className="font-semibold text-foreground">
+                        {selectedItem.tipo} {selectedItem.brand} {selectedItem.model}
+                      </span>
+                    </div>
+                    <div className="flex justify-between border-b border-border pb-1.5">
+                      <span className="text-muted-foreground">Serial / Identificador</span>
+                      <span className="num text-foreground">{selectedItem.identificador || '—'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Unidade de Origem</span>
+                      <span className="text-foreground">{selectedItem.revenda || '—'}</span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
             {currentStep === 1 && (
               <div className="space-y-4">
-                <h3 className="text-body-lg font-semibold text-foreground">2. Colaborador</h3>
-                <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <h3 className="text-body-lg font-semibold text-foreground">2. Colaborador</h3>
+                  <p className="text-caption text-muted-foreground mt-0.5">
+                    Informe quem receberá a custódia do equipamento.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-border">
                   <div className="flex flex-col gap-1.5">
-                    <Label>Funcionário *</Label>
-                    <Input value={usuario} onChange={e => setUsuario(e.target.value)} required />
+                    <Label>Nome Completo do Colaborador *</Label>
+                    <Input value={usuario} onChange={e => setUsuario(e.target.value)} placeholder="Ex: João da Silva" required />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label>CPF *</Label>
-                    <Input value={cpf} onChange={e => setCpf(maskCpfInput(e.target.value))} placeholder="000.000.000-00" maxLength={14} required />
+                    <Label>CPF do Colaborador *</Label>
+                    <Input value={cpf} onChange={e => setCpf(maskCpfInput(e.target.value))} placeholder="000.000.000-00" maxLength={14} className="num" required />
                     <label className="flex items-center gap-2 text-body-sm text-foreground cursor-pointer select-none mt-1">
                       <input
                         type="checkbox"
@@ -286,38 +317,43 @@ export default function LoanPage() {
 
             {currentStep === 2 && (
               <div className="space-y-4">
-                <h3 className="text-body-lg font-semibold text-foreground">3. Condições</h3>
-                <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <h3 className="text-body-lg font-semibold text-foreground">3. Condições</h3>
+                  <p className="text-caption text-muted-foreground mt-0.5">
+                    Unidade de lotação, setor, centro de custo e cargo do colaborador.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-border">
                   <div className="flex flex-col gap-1.5">
-                    <Label>Cargo *</Label>
-                    <Input value={cargo} onChange={e => setCargo(e.target.value)} required />
+                    <Label>Cargo / Função *</Label>
+                    <Input value={cargo} onChange={e => setCargo(e.target.value)} placeholder="Ex: Analista Comercial" required />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label>Centro de Custo *</Label>
                     <Select value={centerCost} onValueChange={setCenterCost} required disabled={constantsLoading}>
-                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder="Selecione o centro de custo" /></SelectTrigger>
                       <SelectContent>{centerCosts.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label>Setor *</Label>
                     <Select value={setor} onValueChange={setSetor} required disabled={constantsLoading}>
-                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder="Selecione o setor" /></SelectTrigger>
                       <SelectContent>{setores.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label>Revenda *</Label>
+                    <Label>Revenda / Filial *</Label>
                     {/* Pré-preenchida a partir do item ao sair da etapa 1 (T6)
                         — o operador ainda pode trocar aqui se necessário. */}
                     <Select value={revenda} onValueChange={setRevenda} required disabled={constantsLoading}>
-                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder="Selecione a revenda" /></SelectTrigger>
                       <SelectContent>{revendas.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label>Data do Empréstimo *</Label>
-                    <Input value={dateIssue} onChange={e => setDateIssue(e.target.value)} placeholder="dd/mm/aaaa" required />
+                    <Input value={dateIssue} onChange={e => setDateIssue(e.target.value)} placeholder="DD/MM/AAAA" className="num" required />
                   </div>
                 </div>
               </div>
@@ -325,10 +361,12 @@ export default function LoanPage() {
 
             {currentStep === 3 && (
               <div className="space-y-4">
-                <h3 className="text-body-lg font-semibold text-foreground">4. Confirmação</h3>
-                <p className="text-body-sm text-muted-foreground">
-                  Revise os dados abaixo antes de iniciar o empréstimo.
-                </p>
+                <div>
+                  <h3 className="text-body-lg font-semibold text-foreground">4. Confirmação</h3>
+                  <p className="text-caption text-muted-foreground mt-0.5">
+                    Revise os dados abaixo antes de iniciar o empréstimo e formalizar a entrega patrimonial.
+                  </p>
+                </div>
                 <div className="rounded border border-border bg-surface p-4 space-y-2.5 text-body-sm">
                   <div className="flex justify-between border-b border-border pb-1.5">
                     <span className="text-muted-foreground">Equipamento</span>
@@ -411,6 +449,17 @@ export default function LoanPage() {
                 <p className="text-caption text-muted-foreground">{cargo || '—'} • {dateIssue}</p>
               </div>
             )}
+
+            <div className="pt-3 border-t border-border">
+              <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground block mb-2">
+                Regras do Fluxo
+              </span>
+              <ul className="space-y-1.5 text-caption text-muted-foreground leading-relaxed">
+                <li>• O status passa para <strong className="text-foreground">Pendente</strong> até que o termo assinado seja anexado.</li>
+                <li>• O CPF é validado pelos dígitos verificadores oficiais.</li>
+                <li>• O termo de responsabilidade pode ser gerado e baixado logo após a confirmação.</li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>
@@ -436,7 +485,14 @@ export default function LoanPage() {
           paginada no servidor) */}
       {pendentesTotal > 0 && (
         <div className="space-y-3">
-          <h3 className="text-body-lg font-semibold text-foreground">Empréstimos Pendentes de Confirmação</h3>
+          <div>
+            <h3 className="text-body-lg font-semibold text-foreground">
+              Empréstimos Pendentes de Confirmação (<span className="num">{pendentesTotal}</span>)
+            </h3>
+            <p className="text-caption text-muted-foreground mt-0.5">
+              Equipamentos entregues que ainda aguardam a anexação do termo assinado.
+            </p>
+          </div>
           <DataTable
             data={pendentes}
             columns={pendingColumns}

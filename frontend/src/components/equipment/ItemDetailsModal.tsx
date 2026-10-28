@@ -256,13 +256,13 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/50 animate-fade-in select-none">
       <div className="relative w-full max-w-3xl max-h-[90vh] flex flex-col surface-panel shadow-overlay overflow-hidden">
         {/* Header Bar */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-md bg-surface-alt border border-border text-muted-foreground flex items-center justify-center">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="h-10 w-10 rounded-md bg-surface-alt border border-border text-muted-foreground flex items-center justify-center shrink-0">
               <Monitor size={20} />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-caption num text-muted-foreground rounded-sm border border-border bg-surface-alt px-1.5 py-0.5">
                   #{item.id}
                 </span>
@@ -274,9 +274,15 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
                   </span>
                 )}
               </div>
-              <h2 className="text-heading-sm text-foreground mt-0.5">
+              <h2 className="text-heading-sm text-foreground mt-0.5 truncate">
                 {editing ? `${brand || item.brand} ${model || item.model}` : `${item.brand} ${item.model}`}
               </h2>
+              {/* Subtítulo de contexto (visual trazido da FT_STC): diz ao usuário o que fazer em cada modo. */}
+              <p className="text-body-sm text-muted-foreground">
+                {editing
+                  ? 'Edite os campos e clique em Salvar para confirmar.'
+                  : 'Detalhes do equipamento e periféricos vinculados.'}
+              </p>
             </div>
           </div>
 
@@ -284,7 +290,7 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
             variant="ghost"
             size="icon"
             onClick={onClose}
-            className="text-muted-foreground hover:text-foreground"
+            className="text-muted-foreground hover:text-foreground shrink-0 ml-2"
           >
             <X size={18} />
           </Button>
@@ -528,7 +534,7 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
         </div>
 
         {/* Modal Footer Actions */}
-        <div className="flex items-center justify-between px-6 py-3.5 border-t border-border">
+        <div className="flex items-center justify-between gap-2 px-6 py-3.5 border-t border-border shrink-0 bg-surface-alt">
           {editing ? (
             <>
               <Button

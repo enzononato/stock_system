@@ -264,7 +264,11 @@ export default function ChartsPage() {
   const totalDevolucoes = loansChartData.reduce((acc, d) => acc + d.Devoluções, 0)
   const totalCadastros = regChartData.reduce((acc, d) => acc + d.Cadastros, 0)
 
-  const loansVazio = loansChartData.every((d) => !d.Empréstimos && !d.Devoluções)
+  const periodoLegenda = `${MONTHS[params.month - 1] ?? 'Mês'} / ${params.year}${
+    filtrado ? ` · ${params.unidade}` : ''
+  }`
+
+  const loansVazio =loansChartData.every((d) => !d.Empréstimos && !d.Devoluções)
   const regVazio = regChartData.every((d) => !d.Cadastros)
   const weekdayVazio = weekdayChartData.every((d) => !d.Empréstimos)
 
@@ -344,16 +348,21 @@ export default function ChartsPage() {
 
       {/* Summary KPI Cards for Selected Month */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Legenda do período abaixo de cada total (como na FT_STC): deixa claro
+            a qual mês e unidade o número se refere depois de aplicar o filtro. */}
         <div className="surface-panel p-4">
           <StatBlock label="Empréstimos no Mês" value={totalEmprestimos} symbol="↑" />
+          <p className="text-caption text-muted-foreground mt-1">{periodoLegenda}</p>
         </div>
 
         <div className="surface-panel p-4">
           <StatBlock label="Devoluções no Mês" value={totalDevolucoes} symbol="↓" />
+          <p className="text-caption text-muted-foreground mt-1">{periodoLegenda}</p>
         </div>
 
         <div className="surface-panel p-4">
           <StatBlock label="Cadastros no Mês" value={totalCadastros} symbol="#" />
+          <p className="text-caption text-muted-foreground mt-1">{periodoLegenda}</p>
         </div>
       </div>
 

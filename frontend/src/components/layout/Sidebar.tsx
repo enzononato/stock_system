@@ -63,7 +63,7 @@ export default function Sidebar({ className, onNavigate }: SidebarProps) {
           className="h-8 w-auto max-w-[160px] object-contain rounded"
         />
         <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-alt border border-border">
-          <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-available)]" />
+          <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-available)] motion-safe:animate-pulse" />
           <span className="text-[10px] font-semibold text-foreground tracking-widest uppercase font-mono">
             Controle de Estoque TI
           </span>

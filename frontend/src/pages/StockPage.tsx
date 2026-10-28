@@ -116,10 +116,17 @@ export default function StockPage() {
       cell: ({ row }) => (
         <button
           onClick={() => setSelectedItem(row.original)}
-          className="num font-semibold text-foreground hover:underline text-body-sm"
+          className="flex items-center gap-1 whitespace-nowrap text-left hover:underline text-body-sm"
           title="Clique para ver detalhes do item"
         >
-          #{row.original.id}
+          <span className="num font-semibold text-foreground">#{row.original.id}</span>
+          {/* Serial (identificador) ao lado do número, como na FT_STC — ajuda a
+              localizar o equipamento sem abrir a ficha. */}
+          {row.original.identificador && (
+            <span className="max-w-[120px] truncate text-caption font-normal text-muted-foreground">
+              ({row.original.identificador})
+            </span>
+          )}
         </button>
       ),
     },
@@ -133,7 +140,7 @@ export default function StockPage() {
     },
     {
       accessorKey: 'assigned_to',
-      header: 'Usuário Alocado',
+      header: 'Alocado Para',
       cell: ({ getValue }) => (getValue() as string) || '-',
       // Densidade (T7): em telas menores que `md` este dado cede espaço às
       // colunas essenciais (ID, tipo, status) — some do <thead> e do <tbody>
@@ -143,7 +150,7 @@ export default function StockPage() {
     { accessorKey: 'revenda', header: 'Unidade', meta: { className: 'hidden lg:table-cell' } },
     {
       accessorKey: 'date_registered',
-      header: 'Data Cadastro',
+      header: 'Cadastro',
       cell: ({ getValue }) => <span className="num">{formatDate(getValue() as string)}</span>,
       meta: { className: 'hidden xl:table-cell' },
     },

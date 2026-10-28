@@ -33,6 +33,22 @@ const ROLE_ICONS: Record<string, typeof ShieldCheck> = {
   'Jovem Aprendiz': GraduationCap,
 }
 
+/** Texto de ajuda por papel (nível e alcance), mostrado como legenda no cadastro. */
+const ROLE_AJUDA: Record<string, { nivel: string; descricao: string }> = {
+  Gestor: {
+    nivel: 'Nível administrador',
+    descricao: 'Acesso total: cadastros, relatórios, estornos e configurações do sistema.',
+  },
+  'Técnico': {
+    nivel: 'Nível operador',
+    descricao: 'Operações de estoque: empréstimos, devoluções e cadastro de periféricos.',
+  },
+  'Jovem Aprendiz': {
+    nivel: 'Nível assistente',
+    descricao: 'Consulta e operações limitadas, sob supervisão de Gestor ou Técnico.',
+  },
+}
+
 export default function UsersPage() {
   const queryClient = useQueryClient()
   const [username, setUsername] = useState('')
@@ -187,6 +203,23 @@ export default function UsersPage() {
             </Select>
           </div>
         </div>
+        {/* Legenda dos níveis de acesso — ajuda a escolher a função certa. */}
+        <dl className="grid grid-cols-1 lg:grid-cols-3 gap-3 border-t border-border pt-4">
+          {ROLES.map((r) => {
+            const Icon = ROLE_ICONS[r]
+            const ajuda = ROLE_AJUDA[r]
+            return (
+              <div key={r} className="space-y-0.5">
+                <dt className="flex items-center gap-1.5 text-body-sm font-medium text-foreground">
+                  {Icon && <Icon size={13} className="text-muted-foreground shrink-0" aria-hidden />}
+                  {r}
+                  <span className="text-caption font-normal text-muted-foreground">· {ajuda?.nivel}</span>
+                </dt>
+                <dd className="text-caption text-muted-foreground leading-snug">{ajuda?.descricao}</dd>
+              </div>
+            )
+          })}
+        </dl>
         <div className="flex justify-end">
           <Button type="submit" disabled={createMutation.isPending || !username || !password || !role}>
             {createMutation.isPending ? 'Criando...' : 'Criar Usuário'}

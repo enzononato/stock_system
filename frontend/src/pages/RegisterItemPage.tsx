@@ -12,7 +12,7 @@ import { getErrorMessage } from '@/lib/api-error'
 import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
 import { useConstants } from '@/hooks/useConstants'
 import { isValidNotaFiscal, maskNotaFiscalInput } from '@/lib/utils'
-import { ArrowLeft, Save, Loader2 } from 'lucide-react'
+import { ArrowLeft, Save, Loader2, PackagePlus } from 'lucide-react'
 
 interface Props { mode: 'create' | 'edit' }
 
@@ -114,19 +114,15 @@ export default function RegisterItemPage({ mode }: Props) {
 
   if (mode === 'edit' && loadingItem) {
     return (
-      <div className="py-12 flex items-center justify-center gap-2 text-body-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        Carregando...
+      <div className="py-20 flex items-center justify-center gap-2 text-body-sm text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" />
+        Carregando dados do equipamento...
       </div>
     )
   }
 
   return (
     <div className="page-container-reading space-y-6">
-      <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
-        <ArrowLeft size={16} />
-      </Button>
-
       <PageHeader
         eyebrow="Inventário"
         eyebrowDetail={mode === 'create' ? 'Novo Cadastro' : 'Edição de Item'}
@@ -135,6 +131,12 @@ export default function RegisterItemPage({ mode }: Props) {
           mode === 'create'
             ? 'Cadastre um novo equipamento no estoque.'
             : 'Atualize os dados do equipamento selecionado.'
+        }
+        actions={
+          <Button variant="outline" size="sm" onClick={() => navigate('/stock')}>
+            <ArrowLeft size={14} />
+            Voltar ao Estoque
+          </Button>
         }
       />
 
@@ -145,24 +147,23 @@ export default function RegisterItemPage({ mode }: Props) {
             title="1. Identificação Geral"
             description="Tipo de ativo, fabricante e modelo comercial."
           />
-          <div className="flex flex-col gap-1.5">
-            <Label>Tipo *</Label>
-            <Select value={tipo} onValueChange={setTipo} required disabled={constantsLoading}>
-              <SelectTrigger><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
-              <SelectContent>
-                {equipmentTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="flex flex-col gap-1.5">
+              <Label>Tipo *</Label>
+              <Select value={tipo} onValueChange={setTipo} required disabled={constantsLoading}>
+                <SelectTrigger><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
+                <SelectContent>
+                  {equipmentTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex flex-col gap-1.5">
               <Label>Marca *</Label>
-              <Input value={brand} onChange={e => setBrand(e.target.value)} required />
+              <Input value={brand} onChange={e => setBrand(e.target.value)} placeholder="Ex: Dell, Lenovo, HP" required />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Modelo *</Label>
-              <Input value={model} onChange={e => setModel(e.target.value)} required />
+              <Input value={model} onChange={e => setModel(e.target.value)} placeholder="Ex: Latitude 3420" required />
             </div>
           </div>
         </div>
@@ -173,41 +174,44 @@ export default function RegisterItemPage({ mode }: Props) {
             title="2. Lotação e Dados de Origem"
             description="Revenda responsável, nota fiscal e fornecedor."
           />
-          <div className="flex flex-col gap-1.5">
-            <Label>Revenda *</Label>
-            <Select value={revenda} onValueChange={setRevenda} required disabled={constantsLoading}>
-              <SelectTrigger><SelectValue placeholder="Selecione a revenda" /></SelectTrigger>
-              <SelectContent>
-                {revendas.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="flex flex-col gap-1.5">
+              <Label>Revenda de Origem *</Label>
+              <Select value={revenda} onValueChange={setRevenda} required disabled={constantsLoading}>
+                <SelectTrigger><SelectValue placeholder="Selecione a revenda" /></SelectTrigger>
+                <SelectContent>
+                  {revendas.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex flex-col gap-1.5">
               <Label>Nota Fiscal</Label>
               <Input
                 value={notaFiscal}
                 onChange={e => setNotaFiscal(maskNotaFiscalInput(e.target.value))}
-                placeholder="9 dígitos"
+                placeholder="000000000 (9 dígitos)"
                 inputMode="numeric"
+                className="num"
               />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Fornecedor</Label>
-              <Input value={fornecedor} onChange={e => setFornecedor(e.target.value)} />
+              <Input value={fornecedor} onChange={e => setFornecedor(e.target.value)} placeholder="Nome do fornecedor" />
             </div>
           </div>
 
           {mode === 'create' && (
-            <div className="flex flex-col gap-1.5">
-              <Label>Data de Cadastro *</Label>
-              <Input
-                value={dateRegistered}
-                onChange={e => setDateRegistered(e.target.value)}
-                placeholder="dd/mm/aaaa"
-                required
-              />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="flex flex-col gap-1.5">
+                <Label>Data de Cadastro *</Label>
+                <Input
+                  value={dateRegistered}
+                  onChange={e => setDateRegistered(e.target.value)}
+                  placeholder="DD/MM/AAAA"
+                  className="num"
+                  required
+                />
+              </div>
             </div>
           )}
         </div>
@@ -219,7 +223,7 @@ export default function RegisterItemPage({ mode }: Props) {
               title={`3. Campos específicos — ${tipo}`}
               description={`Parâmetros técnicos aplicáveis a ativos do tipo ${tipo}.`}
             />
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <TypeSpecificFields
                 tipo={tipo}
                 values={specificFields}
@@ -229,9 +233,12 @@ export default function RegisterItemPage({ mode }: Props) {
           </div>
         )}
 
-        <div className="flex justify-end pt-2">
+        <div className="flex items-center justify-between border-t border-border pt-4">
+          <Button type="button" variant="outline" onClick={() => navigate('/stock')}>
+            Cancelar
+          </Button>
           <Button type="submit" disabled={mutation.isPending}>
-            <Save size={14} />
+            {mode === 'create' ? <PackagePlus size={14} /> : <Save size={14} />}
             {mutation.isPending ? 'Salvando...' : (mode === 'create' ? 'Cadastrar' : 'Salvar Alterações')}
           </Button>
         </div>
