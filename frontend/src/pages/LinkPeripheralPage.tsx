@@ -18,26 +18,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import { toast } from '@/components/ui/toast'
 import { getErrorMessage } from '@/lib/api-error'
-import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
 import { Link2, Unlink, RefreshCw } from 'lucide-react'
 
 // Tipos de equipamento que aceitam periféricos. Regra própria desta tela
-// (subconjunto curado, não um cadastro de domínio) — não é uma das listas
-// duplicadas com o backend que a T2 pede para eliminar (revendas, setores,
-// centros de custo, tipos de equipamento/periférico, motivos de remoção),
-// por isso continua fixa aqui.
+// (subconjunto curado, não um cadastro de domínio), por isso continua fixa aqui.
 const LINK_ALLOWED_TYPES = ['Desktop', 'Notebook', 'Switch', 'Impressora']
 
-// Esta tela só tem um bloco de dados, e é uma lista de SELEÇÃO — o operador
-// procura o equipamento a que vai vincular o periférico, não folheia página
-// por página (T3). Por isso liga a busca (com debounce) ao parâmetro
-// `search` do servidor, com `limit` pequeno, em vez de buscar os 500
-// primeiros e filtrar no cliente (o antigo limite fixo de 500, removido
-// nesta task). `GET /api/items` só aceita um `tipo` por chamada, e esta tela
-// precisa de quatro (LINK_ALLOWED_TYPES) — em vez de puxar um lote genérico e
-// filtrar no cliente (o que deixaria tipos menos comuns sub-representados
-// nos 20 primeiros resultados), dispara uma busca pequena por tipo em
-// paralelo (`useQueries`), cada uma já filtrada e limitada no servidor.
+// A lista de equipamentos é de SELEÇÃO — o operador procura o equipamento a
+// que vai vincular o periférico. Por isso liga a busca (com debounce) ao
+// parâmetro `search` do servidor, com `limit` pequeno, em vez de buscar
+// centenas de itens e filtrar no cliente. `GET /api/items` só aceita um `tipo`
+// por chamada, e esta tela precisa de quatro (LINK_ALLOWED_TYPES): dispara uma
+// busca pequena por tipo em paralelo, cada uma já filtrada e limitada no servidor.
 const ITEM_SEARCH_LIMIT_PER_TYPE = 10
 
 function PeripheralCard({
@@ -54,20 +46,31 @@ function PeripheralCard({
   variant?: 'default' | 'destructive'
 }) {
   return (
-    <div className="flex items-center justify-between border border-border rounded p-3 surface-interactive">
-      <div className="flex flex-col gap-0.5">
-        <span className="text-body-sm font-medium text-foreground">
-          {peripheral.tipo} — {peripheral.brand || '-'} {peripheral.model || ''}
+    <div className="flex items-center justify-between border border-border rounded p-3 bg-surface hover:bg-surface-alt transition-colors">
+      <div className="flex flex-col gap-0.5 min-w-0">
+        <span className="text-body-sm font-medium text-foreground truncate">
+          {peripheral.tipo} — {peripheral.brand || '—'} {peripheral.model || ''}
         </span>
-        <span className="text-[11px] text-muted-foreground">S/N: <span className="num">{peripheral.identificador || '-'}</span></span>
+        <span className="text-[11px] text-muted-foreground font-mono">
+          S/N: {peripheral.identificador || '—'}
+        </span>
       </div>
-      <div className="flex items-center gap-3">
-        <Badge variant={peripheral.status === 'Disponível' ? 'success' : peripheral.status === 'Em Uso' ? 'warning' : 'danger'}>
+      <div className="flex items-center gap-3 shrink-0">
+        <Badge
+          variant={peripheral.status === 'Disponível' ? 'success' : peripheral.status === 'Em Uso' ? 'warning' : 'danger'}
+          showDot
+          className="text-[10px]"
+        >
           {peripheral.status}
         </Badge>
-        <Button size="sm" variant={variant === 'destructive' ? 'destructive' : 'outline'} onClick={action}>
+        <Button
+          size="sm"
+          variant={variant === 'destructive' ? 'outline' : 'default'}
+          onClick={action}
+          className={variant === 'destructive' ? 'text-destructive border-border hover:bg-surface-alt text-xs h-7' : 'text-xs h-7'}
+        >
           {actionIcon}
-          <span>{actionLabel}</span>
+          <span className="ml-1">{actionLabel}</span>
         </Button>
       </div>
     </div>
@@ -87,8 +90,7 @@ export default function LinkPeripheralPage() {
 
   // Busca do equipamento a vincular: `itemSearch` é o que o operador digita,
   // `itemSearchAplicado` é o que vai para o servidor, com atraso, para não
-  // disparar uma requisição por tecla (mesmo padrão do debounce de busca já
-  // usado em HistoryPage/StockPage).
+  // disparar uma requisição por tecla.
   const [itemSearch, setItemSearch] = useState('')
   const [itemSearchAplicado, setItemSearchAplicado] = useState('')
   useEffect(() => {
@@ -107,16 +109,23 @@ export default function LinkPeripheralPage() {
   const linkableItems = linkableQueries.flatMap((q) => q.data?.items ?? [])
 
   // Snapshot do equipamento selecionado: `linkableItems` é só o lote pequeno
-  // (≤20) da busca atual, então some da lista assim que o operador digita
-  // outra coisa. Guarda o item completo no momento da seleção para a linha
-  // "Status / Revenda" abaixo continuar mostrando os dados do equipamento
+  // da busca atual, então some da lista assim que o operador digita outra
+  // coisa. Guarda o item completo no momento da seleção para o rótulo do
+  // seletor e a linha "Status / Unidade" continuarem mostrando o equipamento
   // escolhido, mesmo depois que a busca mudar.
   const [selectedItemSnapshot, setSelectedItemSnapshot] = useState<Item | null>(null)
   function handleSelectItem(val: string) {
     setSelectedItemId(val)
-    const found = linkableItems.find(i => String(i.id) === val)
+    const found = linkableItems.find((i) => String(i.id) === val)
     if (found) setSelectedItemSnapshot(found)
   }
+
+  const selectableItems = [
+    ...(selectedItemSnapshot && !linkableItems.some((i) => i.id === selectedItemSnapshot.id)
+      ? [selectedItemSnapshot]
+      : []),
+    ...linkableItems,
+  ]
 
   const { data: linkedPeripherals = [], refetch: refetchLinked } = useQuery({
     queryKey: ['item-peripherals', selectedItemId],
@@ -132,24 +141,24 @@ export default function LinkPeripheralPage() {
   const linkMutation = useMutation({
     mutationFn: (pid: number) => linkPeripheral(Number(selectedItemId), pid),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['item-peripherals', selectedItemId] })
-      queryClient.invalidateQueries({ queryKey: ['peripherals'] })
-      toast('Periférico vinculado!')
+      void queryClient.invalidateQueries({ queryKey: ['item-peripherals', selectedItemId] })
+      void queryClient.invalidateQueries({ queryKey: ['peripherals'] })
+      toast.success('Periférico vinculado!')
     },
     onError: (err: unknown) => {
-      toast(getErrorMessage(err, 'Erro ao vincular.'), 'error')
+      toast.error(getErrorMessage(err, 'Erro ao vincular.'))
     },
   })
 
   const unlinkMutation = useMutation({
     mutationFn: (linkId: number) => unlinkPeripheral(linkId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['item-peripherals', selectedItemId] })
-      queryClient.invalidateQueries({ queryKey: ['peripherals'] })
-      toast('Periférico desvinculado.')
+      void queryClient.invalidateQueries({ queryKey: ['item-peripherals', selectedItemId] })
+      void queryClient.invalidateQueries({ queryKey: ['peripherals'] })
+      toast.success('Periférico desvinculado.')
     },
     onError: (err: unknown) => {
-      toast(getErrorMessage(err, 'Erro ao desvincular.'), 'error')
+      toast.error(getErrorMessage(err, 'Erro ao desvincular.'))
     },
   })
 
@@ -163,90 +172,127 @@ export default function LinkPeripheralPage() {
         replaceAttachment ?? undefined
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['item-peripherals', selectedItemId] })
-      queryClient.invalidateQueries({ queryKey: ['peripherals'] })
+      void queryClient.invalidateQueries({ queryKey: ['item-peripherals', selectedItemId] })
+      void queryClient.invalidateQueries({ queryKey: ['peripherals'] })
       setReplacingLinkId(null)
       setReplacingOldId(null)
       setReplaceNewId('')
       setReplaceReason('')
       setReplaceAttachment(null)
-      toast('Periférico substituído com sucesso!')
+      toast.success('Periférico substituído com sucesso!')
     },
     onError: (err: unknown) => {
-      toast(getErrorMessage(err, 'Erro ao substituir.'), 'error')
+      toast.error(getErrorMessage(err, 'Erro ao substituir.'))
     },
   })
 
-  const selectedItem = linkableItems.find(i => String(i.id) === selectedItemId) ?? selectedItemSnapshot
+  const selectedItem = selectableItems.find((i) => String(i.id) === selectedItemId)
 
   return (
-    <div className="page-container-reading space-y-6">
-      <PageHeader
-        eyebrow="Ativos de Suporte"
-        eyebrowDetail="Vínculo de Periféricos"
-        title="Vincular Periféricos"
-        description="Associe periféricos a equipamentos como desktops, notebooks, switches e impressoras."
-      />
+    <div className="space-y-6 max-w-6xl mx-auto">
+      {/* Cabeçalho */}
+      <div className="border-b border-border pb-4">
+        <div className="flex items-center gap-2">
+          <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
+            Ativos de Suporte
+          </span>
+          <span className="text-muted-foreground">•</span>
+          <span className="text-caption text-foreground font-medium">Vínculo de Periféricos</span>
+        </div>
+        <h1 className="text-heading-lg font-semibold tracking-tight text-foreground mt-0.5">
+          Vincular Periféricos
+        </h1>
+        <p className="text-body-sm text-muted-foreground mt-1">
+          Associe periféricos a equipamentos como desktops, notebooks, switches e impressoras.
+        </p>
+      </div>
 
       {/* Seletor de equipamento */}
-      <div className="surface-panel p-4 flex flex-col gap-2">
-        <Label>Selecione o Equipamento</Label>
-        <div className="max-w-md">
+      <div className="rounded border border-border bg-surface p-5 space-y-3">
+        <Label className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
+          Selecione o Equipamento Principal
+        </Label>
+        <div className="max-w-xl">
           {/* Busca no servidor (debounce de 400ms) controlando o próprio campo
-              de busca do dropdown via `search`/`onSearchChange` — sem isso, o
-              usuário veria uma segunda caixa de busca (a interna do
-              SearchableSelect) além desta, filtrando só os 20 já carregados. */}
+              de busca do dropdown via `search`/`onSearchChange`. */}
           <SearchableSelect
-            options={linkableItems.map((i) => ({
+            options={selectableItems.map((i) => ({
               value: String(i.id),
-              label: `#${i.id} — ${i.tipo} ${i.brand || ''} ${i.model || ''}`,
+              label: `#${i.id} — ${i.tipo} ${i.brand || ''} ${i.model || ''}`.trim(),
               subtitle: [i.revenda, i.identificador].filter(Boolean).join(' • '),
             }))}
             value={selectedItemId}
             onValueChange={handleSelectItem}
-            placeholder="Selecione um equipamento..."
-            searchPlaceholder="Buscar por marca, modelo ou identificador (patrimônio)..."
+            placeholder="Selecione ou busque um equipamento…"
+            searchPlaceholder="Buscar por marca, modelo ou patrimônio…"
             search={itemSearch}
             onSearchChange={setItemSearch}
           />
         </div>
         {selectedItem && (
-          <p className="text-body-sm text-muted-foreground">
-            Status: <strong>{selectedItem.status}</strong> · Revenda: <strong>{selectedItem.revenda}</strong>
-          </p>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-caption text-muted-foreground pt-1">
+            <span>
+              Status: <strong className="text-foreground">{selectedItem.status || '—'}</strong>
+            </span>
+            <span aria-hidden="true">•</span>
+            <span>
+              Unidade: <strong className="text-foreground">{selectedItem.revenda || '—'}</strong>
+            </span>
+            {selectedItem.assigned_to && (
+              <>
+                <span aria-hidden="true">•</span>
+                <span>
+                  Alocado: <strong className="text-foreground">{selectedItem.assigned_to}</strong>
+                </span>
+              </>
+            )}
+          </div>
         )}
       </div>
 
       {selectedItemId && (
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Periféricos vinculados */}
-          <div className="surface-panel p-4 space-y-3">
-            <PanelHeader
-              title={<>Periféricos Vinculados (<span className="num">{linkedPeripherals.length}</span>)</>}
-              actions={
-                <Button size="sm" variant="ghost" onClick={() => refetchLinked()}>
-                  <RefreshCw size={13} />
-                </Button>
-              }
-            />
+          <div className="rounded border border-border bg-surface p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div>
+                <h2 className="text-body font-semibold text-foreground">
+                  Periféricos Vinculados ({linkedPeripherals.length})
+                </h2>
+                <p className="text-caption text-muted-foreground">Componentes conectados a este ativo.</p>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => void refetchLinked()}
+                className="size-8 p-0"
+                aria-label="Atualizar lista"
+              >
+                <RefreshCw className="size-3.5" />
+              </Button>
+            </div>
+
             {linkedPeripherals.length === 0 ? (
-              <p className="text-body-sm text-muted-foreground py-10 text-center">Nenhum periférico vinculado.</p>
+              <p className="text-body-sm text-muted-foreground py-12 text-center">Nenhum periférico vinculado.</p>
             ) : (
-              <div className="space-y-2">
-                {linkedPeripherals.map(p => (
+              <div className="space-y-2.5">
+                {linkedPeripherals.map((p) => (
                   <div key={p.link_id} className="flex flex-col gap-1">
                     <PeripheralCard
                       peripheral={p}
                       action={() => unlinkMutation.mutate(p.link_id!)}
                       actionLabel="Desvincular"
-                      actionIcon={<Unlink size={13} />}
+                      actionIcon={<Unlink className="size-3" />}
                       variant="destructive"
                     />
                     <button
-                      className="text-xs text-muted-foreground hover:text-foreground hover:underline text-left ml-1"
-                      onClick={() => { setReplacingLinkId(p.link_id!); setReplacingOldId(p.id) }}
+                      className="text-xs text-muted-foreground hover:text-foreground hover:underline text-left ml-1 cursor-pointer"
+                      onClick={() => {
+                        setReplacingLinkId(p.link_id!)
+                        setReplacingOldId(p.id)
+                      }}
                     >
-                      Substituir...
+                      Substituir por outro…
                     </button>
                   </div>
                 ))}
@@ -255,19 +301,25 @@ export default function LinkPeripheralPage() {
           </div>
 
           {/* Periféricos disponíveis */}
-          <div className="surface-panel p-4 space-y-3">
-            <PanelHeader title={<>Periféricos Disponíveis (<span className="num">{availablePeripherals.length}</span>)</>} />
+          <div className="rounded border border-border bg-surface p-5 space-y-4">
+            <div className="border-b border-border pb-3">
+              <h2 className="text-body font-semibold text-foreground">
+                Periféricos Disponíveis ({availablePeripherals.length})
+              </h2>
+              <p className="text-caption text-muted-foreground">Itens em estoque livres para vinculação.</p>
+            </div>
+
             {availablePeripherals.length === 0 ? (
-              <p className="text-body-sm text-muted-foreground py-10 text-center">Nenhum periférico disponível.</p>
+              <p className="text-body-sm text-muted-foreground py-12 text-center">Nenhum periférico disponível.</p>
             ) : (
-              <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
-                {availablePeripherals.map(p => (
+              <div className="space-y-2.5 max-h-[440px] overflow-y-auto pr-1">
+                {availablePeripherals.map((p) => (
                   <PeripheralCard
                     key={p.id}
                     peripheral={p}
                     action={() => linkMutation.mutate(p.id)}
                     actionLabel="Vincular"
-                    actionIcon={<Link2 size={13} />}
+                    actionIcon={<Link2 className="size-3" />}
                   />
                 ))}
               </div>
@@ -278,16 +330,25 @@ export default function LinkPeripheralPage() {
 
       {/* Painel de substituição */}
       {replacingLinkId && replacingOldId && (
-        <div className="figure-ground-panel space-y-4">
-          <PanelHeader title="Substituição de Periférico" />
-          <h3 className="text-heading-sm text-foreground">Substituir Periférico #<span className="num">{replacingOldId}</span></h3>
-          <div className="grid grid-cols-2 gap-4">
+        <div className="rounded border border-border bg-surface-alt p-6 space-y-4">
+          <div className="border-b border-border pb-2">
+            <h3 className="text-body-lg font-semibold text-foreground">
+              Substituição de Periférico #{replacingOldId}
+            </h3>
+            <p className="text-caption text-muted-foreground">
+              Selecione o novo periférico que assumirá o vínculo e informe a justificativa.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
-              <Label>Novo Periférico (ID)</Label>
+              <Label className="text-caption font-medium">Novo Periférico Substituto *</Label>
               <Select value={replaceNewId} onValueChange={setReplaceNewId}>
-                <SelectTrigger><SelectValue placeholder="Selecione o substituto" /></SelectTrigger>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Selecione o substituto" />
+                </SelectTrigger>
                 <SelectContent>
-                  {availablePeripherals.map(p => (
+                  {availablePeripherals.map((p) => (
                     <SelectItem key={p.id} value={String(p.id)}>
                       #{p.id} — {p.tipo} {p.brand} {p.model}
                     </SelectItem>
@@ -296,24 +357,41 @@ export default function LinkPeripheralPage() {
               </Select>
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Motivo da Substituição *</Label>
-              <Input value={replaceReason} onChange={e => setReplaceReason(e.target.value)} placeholder="Ex: Defeito, Upgrade..." />
+              <Label className="text-caption font-medium">Motivo da Substituição *</Label>
+              <Input
+                value={replaceReason}
+                onChange={(e) => setReplaceReason(e.target.value)}
+                placeholder="Ex: Defeito, Upgrade, Avaria…"
+                className="h-9"
+              />
             </div>
           </div>
-          <FileUpload
-            accept={{ 'application/pdf': ['.pdf'], 'image/*': ['.jpg', '.jpeg', '.png'] }}
-            onFile={setReplaceAttachment}
-            label="Comprovante (opcional)"
-          />
-          <div className="flex gap-3">
+
+          <div className="pt-2">
+            <FileUpload
+              accept={{ 'application/pdf': ['.pdf'], 'image/*': ['.jpg', '.jpeg', '.png'] }}
+              onFile={setReplaceAttachment}
+              label="Comprovante / laudo (opcional)"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2 border-t border-border">
             <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setReplacingLinkId(null)
+                setReplacingOldId(null)
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              size="sm"
               disabled={!replaceNewId || !replaceReason || replaceMutation.isPending}
               onClick={() => replaceMutation.mutate()}
             >
-              {replaceMutation.isPending ? 'Substituindo...' : 'Confirmar Substituição'}
-            </Button>
-            <Button variant="ghost" onClick={() => { setReplacingLinkId(null); setReplacingOldId(null) }}>
-              Cancelar
+              {replaceMutation.isPending ? 'Substituindo…' : 'Confirmar Substituição'}
             </Button>
           </div>
         </div>

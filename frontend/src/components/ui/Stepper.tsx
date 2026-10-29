@@ -39,7 +39,7 @@ export function Stepper({ steps, currentStep, onStepClick, className }: StepperP
                   {/* Indicador monocromático */}
                   <div
                     className={cn(
-                      'size-7 shrink-0 rounded flex items-center justify-center text-xs font-mono font-semibold border transition-colors',
+                      'size-7 shrink-0 rounded-[4px] flex items-center justify-center text-xs font-mono font-semibold border transition-colors',
                       isCompleted && 'bg-foreground text-background border-foreground font-semibold',
                       isCurrent && 'border-foreground bg-surface text-foreground font-bold shadow-sm',
                       !isCompleted && !isCurrent && 'border-border text-muted-foreground bg-transparent'
