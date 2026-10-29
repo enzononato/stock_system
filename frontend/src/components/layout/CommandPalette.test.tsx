@@ -88,10 +88,13 @@ describe('CommandPalette', () => {
     usuarioMock.role = 'Técnico'
     render(<Harness initialOpen />)
 
-    expect(screen.getByRole('option', { name: /Cadastrar Equipamento/ })).toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: /Remover \/ Estorno/ })).not.toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: /Gestão de Usuários/ })).not.toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: /Unidades de Revenda/ })).not.toBeInTheDocument()
+    // Rótulos iguais aos do menu da origin/FT_STC (ver navigation.ts). O nome
+    // acessível da opção começa pelo título do ícone animado ("Patrimônios
+    // Cadastro"), então a âncora é só no fim do rótulo.
+    expect(screen.getByRole('option', { name: /Cadastro$/ })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /Baixa de Ativos$/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /Usuários$/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /Unidades$/ })).not.toBeInTheDocument()
   })
 
   it('Enter navega para o destino filtrado e fecha a paleta', async () => {

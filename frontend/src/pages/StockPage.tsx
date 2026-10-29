@@ -1,66 +1,84 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import type { ColumnDef } from '@tanstack/react-table'
 import { listItemsPaginated, type Item } from '@/api/items'
 import { listUnidades } from '@/api/unidades'
-import { DataTable } from '@/components/ui/DataTable'
-import { StatusBadge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ItemDetailsModal } from '@/components/equipment/ItemDetailsModal'
-import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { useAuth } from '@/contexts/AuthContext'
 import { useConstants } from '@/hooks/useConstants'
-import { formatDate } from '@/lib/utils'
-import { Plus, Pencil, RefreshCw, Eye, Loader2, X } from 'lucide-react'
+import { cn, formatDate } from '@/lib/utils'
+import { Eye, Pencil, Plus, RefreshCw, Search, X } from 'lucide-react'
 
 const STATUS_OPTIONS = ['Disponível', 'Indisponível', 'Pendente', 'Pendente Devolução']
-const PAGE_SIZE = 10
+// 7 linhas por página, como na FT_STC.
+const PAGE_SIZE = 7
+
+// Selo monocromático de status (mesmo visual da FT_STC): símbolo + rótulo em
+// caixa alta, sem cor — o símbolo é que diferencia o estado.
+function MonoBadge({ status }: { status?: string }) {
+  if (!status) return <span className="text-muted-foreground text-xs">—</span>
+  let symbol = '●'
+  if (status === 'Disponível') symbol = '○'
+  else if (status.startsWith('Pendente')) symbol = '!'
+  else if (status === 'Baixado' || status === 'Descartado') symbol = '×'
+  return (
+    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-sm border border-border text-foreground font-mono text-xs font-medium">
+      <span className="font-bold text-[11px]">{symbol}</span>
+      <span className="uppercase tracking-wider text-[11px]">{status}</span>
+    </span>
+  )
+}
 
 export default function StockPage() {
   const { hasRole } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { equipmentTypes, isLoading: constantsLoading } = useConstants()
-  const [filterTipo, setFilterTipo] = useState('all')
-  const [filterStatus, setFilterStatus] = useState('all')
-  const [filterRevenda, setFilterRevenda] = useState('all')
-  const [pageIndex, setPageIndex] = useState(0)
+
   // `search` é o que o usuário digita; `searchAplicado` é o que vai para a
   // query, com atraso, para não disparar uma requisição por tecla (mesmo
   // padrão do HistoryPage).
   const [search, setSearch] = useState('')
   const [searchAplicado, setSearchAplicado] = useState('')
-  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [filterTipo, setFilterTipo] = useState('all')
+  const [filterStatus, setFilterStatus] = useState('all')
+  const [filterRevenda, setFilterRevenda] = useState('all')
+  const [page, setPage] = useState(0)
   const [selectedItem, setSelectedItem] = useState<Item | null>(null)
 
-  const hasFilters =
-    filterTipo !== 'all' || filterStatus !== 'all' || filterRevenda !== 'all' || searchAplicado !== ''
-
-  // Espera o usuário parar de digitar antes de consultar o servidor, e volta
-  // para a primeira página (mesmo padrão do HistoryPage): o resultado da nova
-  // busca não tem relação com a página em que ele estava.
+  // Espera o usuário parar de digitar antes de consultar o servidor e volta
+  // para a primeira página: o resultado da nova busca não tem relação com a
+  // página em que ele estava.
   useEffect(() => {
+    const termo = search.trim()
+    if (termo === searchAplicado) return
     const timer = setTimeout(() => {
-      setSearchAplicado(search.trim())
-      setPageIndex(0)
+      setSearchAplicado(termo)
+      setPage(0)
     }, 400)
     return () => clearTimeout(timer)
-  }, [search])
+  }, [search, searchAplicado])
 
   const { data: unidades = [] } = useQuery({
     queryKey: ['unidades-filter'],
     queryFn: () => listUnidades(),
   })
 
-  // Lista paginada de verdade: 10 itens por página, filtros e busca resolvidos
-  // no SQL (backend/app/db/inventory_manager_db.py). Antes disto a tela
-  // buscava `limit: 500` (o teto do backend, settings.MAX_PAGE_SIZE) e
-  // renderizava tudo — acima de 500 itens ativos a tabela truncava em
-  // silêncio, sem aviso nenhum ao usuário.
-  const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['items', 'list', filterTipo, filterStatus, filterRevenda, pageIndex, searchAplicado],
+  // Lista paginada de verdade: filtros e busca resolvidos no SQL
+  // (backend/app/db/inventory_manager_db.py). Nada de buscar um lote grande
+  // (`limit: 500`) e filtrar/paginar no cliente — acima do teto do backend a
+  // tabela truncaria em silêncio.
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
+    queryKey: ['items', 'list', filterTipo, filterStatus, filterRevenda, page, searchAplicado],
     queryFn: () =>
       listItemsPaginated({
         tipo: filterTipo !== 'all' ? filterTipo : undefined,
@@ -68,268 +86,344 @@ export default function StockPage() {
         revenda: filterRevenda !== 'all' ? filterRevenda : undefined,
         search: searchAplicado || undefined,
         limit: PAGE_SIZE,
-        offset: pageIndex * PAGE_SIZE,
+        offset: page * PAGE_SIZE,
       }),
     placeholderData: keepPreviousData,
   })
 
   const items = data?.items ?? []
   const total = data?.total ?? 0
+  const hasFilters =
+    filterTipo !== 'all' ||
+    filterStatus !== 'all' ||
+    filterRevenda !== 'all' ||
+    search !== '' ||
+    searchAplicado !== ''
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
-  function handleTipoChange(value: string) {
-    setFilterTipo(value)
-    setPageIndex(0)
-  }
+  // Se a página atual ficou vazia (ex.: itens baixados por outra pessoa),
+  // recua para a última página que ainda existe.
+  useEffect(() => {
+    if (data && page > 0 && items.length === 0 && total > 0) {
+      setPage(Math.max(0, Math.ceil(total / PAGE_SIZE) - 1))
+    }
+  }, [data, items.length, page, total])
 
-  function handleStatusChange(value: string) {
-    setFilterStatus(value)
-    setPageIndex(0)
-  }
-
-  function handleRevendaChange(value: string) {
-    setFilterRevenda(value)
-    setPageIndex(0)
-  }
-
-  function handleClearFilters() {
+  function resetFilters() {
+    setSearch('')
+    setSearchAplicado('')
     setFilterTipo('all')
     setFilterStatus('all')
     setFilterRevenda('all')
-    setSearch('')
-    setSearchAplicado('')
-    setPageIndex(0)
+    setPage(0)
   }
 
-  const handleRefresh = async () => {
-    setIsRefreshing(true)
-    // Invalida a lista paginada e todos os cartões de indicador de uma vez —
-    // todas as queries desta tela usam o prefixo 'items'.
-    await queryClient.invalidateQueries({ queryKey: ['items'] })
-    setTimeout(() => setIsRefreshing(false), 500)
+  function handleRefresh() {
+    // Invalida tudo que usa o prefixo 'items' (lista paginada e afins).
+    void queryClient.invalidateQueries({ queryKey: ['items'] })
   }
-
-  const columns: ColumnDef<Item, unknown>[] = [
-    {
-      accessorKey: 'id',
-      header: 'ID',
-      size: 60,
-      cell: ({ row }) => (
-        <button
-          onClick={() => setSelectedItem(row.original)}
-          className="flex items-center gap-1 whitespace-nowrap text-left hover:underline text-body-sm"
-          title="Clique para ver detalhes do item"
-        >
-          <span className="num font-semibold text-foreground">#{row.original.id}</span>
-          {/* Serial (identificador) ao lado do número, como na FT_STC — ajuda a
-              localizar o equipamento sem abrir a ficha. */}
-          {row.original.identificador && (
-            <span className="max-w-[120px] truncate text-caption font-normal text-muted-foreground">
-              ({row.original.identificador})
-            </span>
-          )}
-        </button>
-      ),
-    },
-    { accessorKey: 'tipo', header: 'Tipo' },
-    { accessorKey: 'brand', header: 'Marca' },
-    { accessorKey: 'model', header: 'Modelo' },
-    {
-      accessorKey: 'status',
-      header: 'Status',
-      cell: ({ row }) => <StatusBadge status={row.original.status} />,
-    },
-    {
-      accessorKey: 'assigned_to',
-      header: 'Alocado Para',
-      cell: ({ getValue }) => (getValue() as string) || '-',
-      // Densidade (T7): em telas menores que `md` este dado cede espaço às
-      // colunas essenciais (ID, tipo, status) — some do <thead> e do <tbody>
-      // ao mesmo tempo via `meta.className`, lido pelo DataTable.
-      meta: { className: 'hidden md:table-cell' },
-    },
-    { accessorKey: 'revenda', header: 'Unidade', meta: { className: 'hidden lg:table-cell' } },
-    {
-      accessorKey: 'date_registered',
-      header: 'Cadastro',
-      cell: ({ getValue }) => <span className="num">{formatDate(getValue() as string)}</span>,
-      meta: { className: 'hidden xl:table-cell' },
-    },
-    {
-      id: 'actions',
-      header: '',
-      cell: ({ row }: { row: { original: Item } }) => (
-        // Ações só aparecem no hover da linha (o `group` vem do <tr> do
-        // DataTable) — mantém a tabela densa sem dois botões cravados em
-        // toda linha o tempo todo.
-        <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setSelectedItem(row.original)}
-            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground hover:bg-surface-alt rounded"
-            title="Ver detalhes do equipamento"
-          >
-            <Eye size={14} />
-          </Button>
-          {hasRole('Gestor', 'Técnico') && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate(`/edit/${row.original.id}`)}
-              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground hover:bg-surface-alt rounded"
-              title="Editar equipamento"
-            >
-              <Pencil size={14} />
-            </Button>
-          )}
-        </div>
-      ),
-    },
-  ]
 
   return (
     <div className="space-y-6">
-      {/* Header Bar */}
-      <PageHeader
-        eyebrow="Inventário"
-        eyebrowDetail="Painel Operacional de Equipamentos"
-        title={
-          <span className="inline-flex items-baseline gap-3">
-            Estoque de Equipamentos
-            {/* Substitui os antigos cartões de indicador (Total, Disponíveis, Em
-                Empréstimo, Ações Pendentes): a contagem já vem de graça do
-                `total` da resposta paginada, sem requisição extra — a
-                referência (origin/redesign-frontend) mostra o mesmo texto no
-                lugar dos cartões, que ela mantém só no Dashboard. */}
-            <span className="text-caption font-mono num text-muted-foreground">({total} ativos registrados)</span>
-          </span>
-        }
-        description="Gerenciamento centralizado de hardware e insumos de TI"
-        actions={
-          <>
-            <Button variant="outline" size="sm" onClick={handleRefresh}>
-              <RefreshCw size={14} className={isRefreshing || isFetching ? 'animate-spin' : ''} />
-              Atualizar
+      {/* Cabeçalho Operacional */}
+      <div className="border-b border-border pb-5">
+        <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-3">
+          <div>
+            <span className="text-caption text-muted-foreground font-mono">
+              INVENTÁRIO · DATA GRID OPERACIONAL
+            </span>
+            <div className="flex items-baseline gap-3 mt-0.5">
+              <h1 className="text-heading-lg font-semibold tracking-tight text-foreground">
+                Estoque de Equipamentos
+              </h1>
+              <span className="text-caption font-mono num text-muted-foreground">
+                ({total} ativos registrados)
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={isFetching}
+              className="h-8 text-xs"
+            >
+              <RefreshCw className={cn('mr-1.5 size-3.5', isFetching && 'animate-spin')} />
+              {isFetching ? 'Atualizando…' : 'Atualizar'}
             </Button>
             {hasRole('Gestor', 'Técnico') && (
-              <Button variant="gradient" size="sm" onClick={() => navigate('/register')}>
-                <Plus size={16} />
-                Novo Equipamento
+              <Button size="sm" onClick={() => navigate('/register')} className="h-8 text-xs">
+                <Plus className="mr-1.5 size-3.5" />
+                Novo Ativo
               </Button>
             )}
-          </>
-        }
-      />
-
-      {/* Filter Bar */}
-      <div className="surface-panel p-3 space-y-3">
-        <PanelHeader title="Filtros de Consulta" />
-        <div className="flex flex-wrap items-center gap-3">
-          <Select value={filterTipo} onValueChange={handleTipoChange} disabled={constantsLoading}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Tipo de Equipamento" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os tipos</SelectItem>
-              {equipmentTypes.map((t) => (
-                <SelectItem key={t} value={t}>
-                  {t}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={filterStatus} onValueChange={handleStatusChange}>
-            <SelectTrigger className="w-56">
-              <SelectValue placeholder="Status do Item" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os status</SelectItem>
-              {STATUS_OPTIONS.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={filterRevenda} onValueChange={handleRevendaChange}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Unidade" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas as unidades</SelectItem>
-              {unidades.map((u) => (
-                <SelectItem key={u.id} value={u.nome}>
-                  {u.nome}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {hasFilters && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleClearFilters}
-              className="text-xs text-muted-foreground hover:text-foreground"
-            >
-              <X size={14} />
-              Limpar Filtros
-            </Button>
-          )}
+          </div>
         </div>
       </div>
 
-      {/* Data Table */}
-      {isLoading ? (
-        <div className="surface-panel p-12 flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          <p className="text-body-sm text-muted-foreground">Carregando estoque...</p>
-        </div>
-      ) : (
-        <>
-          {/* Estado vazio distingue "não há item cadastrado" (frota realmente
-              vazia) de "nenhum resultado para este filtro" (há itens, mas os
-              filtros/busca atuais não encontram nenhum) — o segundo sugere
-              limpar os filtros. Renderizado além da DataTable (não no lugar
-              dela) para não tirar do usuário a busca/paginação já em uso. */}
-          {items.length === 0 && (
-            <div className="surface-panel p-6 flex flex-col items-center gap-2 text-center">
-              <p className="text-body-sm text-foreground font-medium">
-                {hasFilters ? 'Nenhum resultado para este filtro.' : 'Nenhum item cadastrado.'}
-              </p>
-              <p className="text-body-sm text-muted-foreground">
-                {hasFilters
-                  ? 'Ajuste os filtros ou a busca para encontrar o que procura.'
-                  : 'Cadastre um equipamento para começar a usar o estoque.'}
-              </p>
-              {hasFilters && (
-                <Button variant="outline" size="sm" onClick={handleClearFilters}>
-                  <X size={14} />
-                  Limpar Filtros
-                </Button>
-              )}
-            </div>
-          )}
-          <DataTable
-            data={items}
-            columns={columns}
-            onRowClick={(item) => setSelectedItem(item)}
-            searchPlaceholder="Buscar por patrimônio, marca, modelo, usuário, setor, IP..."
-            pagination={{
-              total,
-              pageIndex,
-              pageSize: PAGE_SIZE,
-              onPageChange: setPageIndex,
-              search,
-              onSearchChange: setSearch,
-            }}
-          />
-        </>
-      )}
+      {/* Toolbar de Filtros */}
+      <div className="bg-surface border border-border rounded-md p-4 space-y-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          {/* Busca */}
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por patrimônio, marca, modelo, usuário ou serial..."
+              className="h-9 pl-9 text-xs"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                title="Limpar busca"
+              >
+                <X className="size-3.5" />
+              </button>
+            )}
+          </div>
 
-      {/* Modal de Detalhes do Equipamento */}
+          {/* Filtros em linha */}
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              value={filterTipo}
+              onValueChange={(v) => {
+                setFilterTipo(v)
+                setPage(0)
+              }}
+              disabled={constantsLoading}
+            >
+              <SelectTrigger className="h-9 w-36 text-xs">
+                <SelectValue placeholder="Tipo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os tipos</SelectItem>
+                {equipmentTypes.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {t}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={filterStatus}
+              onValueChange={(v) => {
+                setFilterStatus(v)
+                setPage(0)
+              }}
+            >
+              <SelectTrigger className="h-9 w-36 text-xs">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos status</SelectItem>
+                {STATUS_OPTIONS.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={filterRevenda}
+              onValueChange={(v) => {
+                setFilterRevenda(v)
+                setPage(0)
+              }}
+            >
+              <SelectTrigger className="h-9 w-40 text-xs">
+                <SelectValue placeholder="Unidade" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as unidades</SelectItem>
+                {unidades.map((u) => (
+                  <SelectItem key={u.id} value={u.nome}>
+                    {u.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {hasFilters && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={resetFilters}
+                className="h-9 px-2 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <X className="mr-1 size-3" /> Limpar
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Tabela de Alta Densidade */}
+      <div className="bg-surface border border-border rounded-md overflow-hidden">
+        <table className="w-full text-left">
+          <thead className="border-b border-border text-caption uppercase tracking-wider text-muted-foreground bg-surface-alt">
+            <tr>
+              <th className="py-2.5 px-4 font-semibold">Patrimônio</th>
+              <th className="py-2.5 px-4 font-semibold">Tipo</th>
+              <th className="py-2.5 px-4 font-semibold">Equipamento</th>
+              <th className="py-2.5 px-4 font-semibold">Status</th>
+              <th className="py-2.5 px-4 font-semibold hidden md:table-cell">Alocado Para</th>
+              <th className="py-2.5 px-4 font-semibold hidden lg:table-cell">Unidade</th>
+              <th className="py-2.5 px-4 font-semibold hidden xl:table-cell">Cadastro</th>
+              <th className="py-2.5 px-4" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {isLoading ? (
+              <tr>
+                <td colSpan={8} className="py-16 text-center text-caption text-muted-foreground">
+                  Carregando equipamentos…
+                </td>
+              </tr>
+            ) : error ? (
+              <tr>
+                <td colSpan={8} className="py-16 text-center text-caption text-destructive">
+                  Erro ao carregar.{' '}
+                  <button type="button" onClick={() => void refetch()} className="underline">
+                    Tentar novamente
+                  </button>
+                </td>
+              </tr>
+            ) : items.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="py-16 text-center text-caption text-muted-foreground">
+                  {hasFilters
+                    ? 'Nenhum patrimônio corresponde aos filtros aplicados.'
+                    : 'Não há equipamentos cadastrados no estoque.'}
+                </td>
+              </tr>
+            ) : (
+              items.map((row) => (
+                <tr
+                  key={row.id}
+                  className="hover:bg-surface-alt cursor-pointer transition-colors group"
+                  onClick={() => setSelectedItem(row)}
+                >
+                  <td className="py-2.5 px-4">
+                    <button
+                      type="button"
+                      className="num font-mono text-xs font-semibold text-foreground hover:underline flex items-center gap-1"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setSelectedItem(row)
+                      }}
+                    >
+                      <span>#{row.id}</span>
+                      {row.identificador && (
+                        <span className="text-muted-foreground font-normal">({row.identificador})</span>
+                      )}
+                    </button>
+                  </td>
+                  <td className="py-2.5 px-4">
+                    <span className="font-medium text-foreground truncate max-w-[140px] block text-body-sm">
+                      {row.tipo || '—'}
+                    </span>
+                  </td>
+                  <td className="py-2.5 px-4">
+                    <span
+                      className="text-foreground truncate max-w-[200px] block text-body-sm"
+                      title={[row.brand, row.model].filter(Boolean).join(' ')}
+                    >
+                      {row.brand} {row.model || '—'}
+                    </span>
+                  </td>
+                  <td className="py-2.5 px-4">
+                    <MonoBadge status={row.status} />
+                  </td>
+                  <td className="py-2.5 px-4 hidden md:table-cell">
+                    <span className="text-muted-foreground truncate max-w-[160px] block text-body-sm">
+                      {row.assigned_to || '—'}
+                    </span>
+                  </td>
+                  <td className="py-2.5 px-4 hidden lg:table-cell">
+                    <span className="text-muted-foreground text-xs truncate max-w-[120px] block">
+                      {row.revenda || '—'}
+                    </span>
+                  </td>
+                  <td className="py-2.5 px-4 hidden xl:table-cell">
+                    <span className="num font-mono text-xs text-muted-foreground">
+                      {formatDate(row.date_registered)}
+                    </span>
+                  </td>
+                  <td className="py-2.5 px-4">
+                    {/* Ações só aparecem no hover da linha. */}
+                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="size-8 p-0 text-muted-foreground hover:text-foreground"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedItem(row)
+                        }}
+                        title="Ver ficha técnica"
+                      >
+                        <Eye className="size-3.5" />
+                      </Button>
+                      {hasRole('Gestor', 'Técnico') && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="size-8 p-0 text-muted-foreground hover:text-foreground"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            navigate(`/edit/${row.id}`)
+                          }}
+                          title="Editar equipamento"
+                        >
+                          <Pencil className="size-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+
+        {/* Paginação (total vem do servidor) */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-border px-4 py-3 text-xs text-muted-foreground bg-surface-alt">
+            <span>
+              Página {page + 1} de {totalPages} · {total} registros
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={page === 0}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                className="h-7 px-2.5 text-xs"
+              >
+                ← Anterior
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={page >= totalPages - 1}
+                onClick={() => setPage((p) => p + 1)}
+                className="h-7 px-2.5 text-xs"
+              >
+                Próxima →
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Modal de detalhe */}
       <ItemDetailsModal item={selectedItem} onClose={() => setSelectedItem(null)} />
     </div>
   )

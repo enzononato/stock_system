@@ -1,26 +1,30 @@
 import { useMemo, useState } from 'react'
 import { isAxiosError } from 'axios'
 import { useQuery } from '@tanstack/react-query'
-import { getLoansChart, getRegistrationsChart, getMonthlyReport, type ReportRow } from '@/api/reports'
-import { listUnidades } from '@/api/unidades'
 import {
   AreaChart,
   Area,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
 } from 'recharts'
+import { Calendar } from 'lucide-react'
+
+import { getLoansChart, getRegistrationsChart, getMonthlyReport, type ReportRow } from '@/api/reports'
+import { listUnidades } from '@/api/unidades'
+import { LoadingState, EmptyState, ErrorState } from '@/components/ui/StateBlocks'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { StatBlock } from '@/components/ui/StatBlock'
-import { Button } from '@/components/ui/button'
-import { LoadingState, EmptyState, ErrorState } from '@/components/ui/StateBlocks'
-import { Calendar, Filter } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { useTheme } from '@/lib/theme'
 import { useAuth } from '@/contexts/AuthContext'
@@ -63,6 +67,11 @@ function mensagem403Unidade(error: unknown): string | undefined {
  * Paleta dos gráficos em escala de cinza, lida dos tokens CSS para acompanhar
  * o modo claro/escuro. recharts recebe cor por prop (fill/stroke), então não dá
  * para usar classe do Tailwind aqui — é preciso resolver o valor computado.
+ *
+ * Os valores reproduzem a FT_STC, que usava `var(--foreground)`,
+ * `var(--muted-foreground)`, `var(--primary)` e `var(--text-muted)` direto nas
+ * props. --foreground e --muted-foreground são aliases de --text-primary e
+ * --text-secondary (index.css), então lemos os tokens de base.
  */
 function corDoToken(nome: string, alternativa: string): string {
   if (typeof window === 'undefined') return alternativa
@@ -71,10 +80,28 @@ function corDoToken(nome: string, alternativa: string): string {
 }
 
 const CORES_GRAFICO = {
+  /** Linha e pontos da série principal (equivale a --foreground). */
   serie1: () => corDoToken('--text-primary', '#111111'),
-  serie2: () => corDoToken('--text-muted', '#85857E'),
+  /** Linha e pontos da série secundária (equivale a --muted-foreground). */
+  serie2: () => corDoToken('--text-secondary', '#5F5F5A'),
+  /** Degradê sob a série de empréstimos do gráfico principal. */
+  degradePrimario: () => corDoToken('--primary', '#111111'),
+  /** Degradê sob a série de devoluções do gráfico principal. */
+  degradeSecundario: () => corDoToken('--text-muted', '#85857E'),
   grade: () => corDoToken('--border', '#D9D9D4'),
   eixo: () => corDoToken('--text-secondary', '#5F5F5A'),
+}
+
+function estiloTooltip() {
+  return {
+    backgroundColor: corDoToken('--surface', '#FFFFFF'),
+    borderColor: corDoToken('--border', '#D9D9D4'),
+    borderRadius: 4,
+    fontSize: 12,
+    fontWeight: 600,
+    color: corDoToken('--text-primary', '#111111'),
+    boxShadow: corDoToken('--shadow-overlay', '0 2px 12px rgba(0, 0, 0, 0.08)'),
+  }
 }
 
 interface PontoDia {
@@ -106,10 +133,9 @@ export default function ChartsPage() {
   // é ela quem dispara o re-render. tsconfig.json tem noUnusedLocals:false
   // e o projeto não tem eslint, então nada aqui acusaria erro de build se
   // esta linha for apagada numa limpeza de "variável não usada": tsc, os
-  // 132+ testes e o vite build continuariam verdes, e os gráficos
-  // simplesmente parariam de acompanhar a troca de tema silenciosamente
-  // (nenhum teste cobre ChartsPage, e o jsdom não calcula CSS mesmo que
-  // cobrisse).
+  // testes e o vite build continuariam verdes, e os gráficos simplesmente
+  // parariam de acompanhar a troca de tema silenciosamente (nenhum teste
+  // cobre ChartsPage, e o jsdom não calcula CSS mesmo que cobrisse).
   useTheme()
 
   const { hasRole } = useAuth()
@@ -268,7 +294,7 @@ export default function ChartsPage() {
     filtrado ? ` · ${params.unidade}` : ''
   }`
 
-  const loansVazio =loansChartData.every((d) => !d.Empréstimos && !d.Devoluções)
+  const loansVazio = loansChartData.every((d) => !d.Empréstimos && !d.Devoluções)
   const regVazio = regChartData.every((d) => !d.Cadastros)
   const weekdayVazio = weekdayChartData.every((d) => !d.Empréstimos)
 
@@ -277,277 +303,301 @@ export default function ChartsPage() {
     setParams({ year: Number(year), month: Number(month), unidade: filtroUnidade })
   }
 
+  const tooltip = estiloTooltip()
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="page-container-dense space-y-6">
       <PageHeader
-        eyebrow="Business Intelligence"
-        eyebrowDetail="Indicadores Operacionais"
-        title="Dashboard & Indicadores"
-        description="Análise temporal de empréstimos, devoluções e novos cadastros de equipamentos"
+        eyebrow="Inteligência de Operações · Análise Comparativa"
+        title="Indicadores Operacionais"
+        description="Movimentação patrimonial comparativa por período, filial e tipo de operação."
       />
 
-      {/* Filter Control Bar */}
-      <div className="flex flex-wrap items-end gap-4 surface-panel p-4">
-        <div className="flex items-center gap-2 text-foreground text-caption pr-2">
-          <Filter size={16} />
-          <span>Filtrar Período</span>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label>Ano</Label>
-          <Input
-            value={year}
-            inputMode="numeric"
-            maxLength={4}
-            onChange={(e) => setYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
-            className="w-28"
-            aria-invalid={!anoValido}
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label>Mês</Label>
-          <Select value={month} onValueChange={setMonth}>
-            <SelectTrigger className="w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {MONTHS.map((m, i) => (
-                <SelectItem key={i + 1} value={String(i + 1)}>
-                  {m}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        {podeFiltrarPorUnidade && (
-          <div className="flex flex-col gap-1.5">
-            <Label>Unidade</Label>
-            <Select value={filtroUnidade} onValueChange={setFiltroUnidade}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="Todas as unidades" />
+      {/* Barra de filtro */}
+      <div className="rounded-md border border-border bg-surface p-4">
+        <div className="flex flex-wrap items-end gap-4">
+          <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground self-end pb-1">
+            Período
+          </span>
+
+          <div className="space-y-1">
+            <Label className="text-caption font-medium">Ano</Label>
+            <Input
+              inputMode="numeric"
+              maxLength={4}
+              value={year}
+              onChange={(e) => setYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              className="w-24 h-9 rounded-sm border-border bg-background text-body-sm font-mono"
+              aria-invalid={!anoValido}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-caption font-medium">Mês</Label>
+            <Select value={month} onValueChange={setMonth}>
+              <SelectTrigger className="w-40 h-9 rounded-sm border-border bg-background text-body-sm">
+                <SelectValue />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas as unidades</SelectItem>
-                {unidades.map((u) => (
-                  <SelectItem key={u.id} value={u.nome}>
-                    {u.nome}
+              <SelectContent className="rounded-sm border-border bg-surface">
+                {MONTHS.map((m, i) => (
+                  <SelectItem key={m} value={String(i + 1)} className="text-body-sm">
+                    {m}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-        )}
-        <Button variant="gradient" onClick={aplicarFiltro} disabled={!anoValido}>
-          <Calendar size={15} />
-          Aplicar Filtro
-        </Button>
-        {!anoValido && (
-          <p className="text-caption text-muted-foreground pb-2">Ano inválido (2000–2100)</p>
-        )}
+
+          {/* Seletor de unidade só para quem pode chamar GET /reports/monthly. */}
+          {podeFiltrarPorUnidade && (
+            <div className="space-y-1">
+              <Label className="text-caption font-medium">Unidade / Filial</Label>
+              <Select value={filtroUnidade} onValueChange={setFiltroUnidade}>
+                <SelectTrigger className="w-52 h-9 rounded-sm border-border bg-background text-body-sm">
+                  <SelectValue placeholder="Todas" />
+                </SelectTrigger>
+                <SelectContent className="rounded-sm border-border bg-surface">
+                  <SelectItem value="all" className="text-body-sm">
+                    Todas as unidades
+                  </SelectItem>
+                  {unidades.map((u) => (
+                    <SelectItem key={u.id} value={u.nome} className="text-body-sm">
+                      {u.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <Button
+            size="sm"
+            onClick={aplicarFiltro}
+            disabled={!anoValido}
+            className="h-9 rounded-sm bg-primary text-primary-foreground hover:opacity-90 font-medium px-4"
+          >
+            <Calendar className="mr-1.5 size-4" />
+            Aplicar Filtro
+          </Button>
+
+          {!anoValido && (
+            <p className="text-caption text-destructive self-end pb-1">Ano inválido (2000–2100)</p>
+          )}
+        </div>
       </div>
 
-      {/* Summary KPI Cards for Selected Month */}
+      {/* KPIs numéricos */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Legenda do período abaixo de cada total (como na FT_STC): deixa claro
-            a qual mês e unidade o número se refere depois de aplicar o filtro. */}
-        <div className="surface-panel p-4">
-          <StatBlock label="Empréstimos no Mês" value={totalEmprestimos} symbol="↑" />
-          <p className="text-caption text-muted-foreground mt-1">{periodoLegenda}</p>
-        </div>
-
-        <div className="surface-panel p-4">
-          <StatBlock label="Devoluções no Mês" value={totalDevolucoes} symbol="↓" />
-          <p className="text-caption text-muted-foreground mt-1">{periodoLegenda}</p>
-        </div>
-
-        <div className="surface-panel p-4">
-          <StatBlock label="Cadastros no Mês" value={totalCadastros} symbol="#" />
-          <p className="text-caption text-muted-foreground mt-1">{periodoLegenda}</p>
-        </div>
+        {[
+          { label: 'Empréstimos no mês', value: totalEmprestimos, symbol: '↑' },
+          { label: 'Devoluções no mês', value: totalDevolucoes, symbol: '↓' },
+          { label: 'Cadastros no mês', value: totalCadastros, symbol: '+' },
+        ].map((stat) => (
+          <div key={stat.label} className="surface-panel p-5">
+            <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground block">
+              {stat.label}
+            </span>
+            <div className="flex items-baseline gap-2 mt-2">
+              <span className="font-mono text-heading-lg font-bold text-foreground">{stat.value}</span>
+              <span className="font-mono text-body-lg text-muted-foreground">{stat.symbol}</span>
+            </div>
+            <span className="text-caption text-muted-foreground mt-1 block">{periodoLegenda}</span>
+          </div>
+        ))}
       </div>
 
-      {/* Gráfico 1: Empréstimos x Devoluções */}
+      {/* Gráfico 1: área de empréstimos × devoluções */}
       <div className="surface-panel p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-body-lg font-semibold text-foreground">
-              Movimentação de Empréstimos × Devoluções por Dia
-            </h3>
-            <p className="text-caption text-muted-foreground">
-              Comparativo de saídas e retornos de equipamentos em {MONTHS[params.month - 1]} de {params.year}
-              {filtrado ? ` · ${params.unidade}` : ''}
-            </p>
-          </div>
+        <div className="border-b border-border pb-3">
+          <h2 className="text-body-lg font-semibold text-foreground">
+            Movimentação de Empréstimos × Devoluções por Dia
+          </h2>
+          <p className="text-caption text-muted-foreground mt-0.5">
+            Comparativo de saídas e retornos de equipamentos em {periodoLegenda}
+          </p>
         </div>
 
         {isLoading ? (
-          <LoadingState label="Carregando gráfico..." className="h-72" />
+          <LoadingState label="Carregando indicadores..." />
         ) : loansError ? (
-          <ErrorState
-            error={loansError}
-            message={mensagem403Unidade(loansError)}
-            onRetry={repetirLoans}
-            title="Não foi possível carregar este gráfico"
-            className="h-72"
-          />
+          <ErrorState error={loansError} message={mensagem403Unidade(loansError)} onRetry={repetirLoans} />
         ) : loansVazio ? (
-          <EmptyState title="Nenhuma movimentação neste período." className="h-72" />
+          <EmptyState
+            title="Nenhuma movimentação registrada neste período"
+            description="Tente selecionar outro mês ou ano no filtro acima."
+          />
         ) : (
-          <ResponsiveContainer width="100%" height={320}>
-            <AreaChart data={loansChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <defs>
-                <linearGradient id="gradEmprestimos" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={CORES_GRAFICO.serie1()} stopOpacity={0.25} />
-                  <stop offset="95%" stopColor={CORES_GRAFICO.serie1()} stopOpacity={0.02} />
-                </linearGradient>
-                <linearGradient id="gradDevolucoes" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={CORES_GRAFICO.serie2()} stopOpacity={0.25} />
-                  <stop offset="95%" stopColor={CORES_GRAFICO.serie2()} stopOpacity={0.02} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={CORES_GRAFICO.grade()} vertical={false} />
-              <XAxis dataKey="dia" tick={{ fontSize: 11, fill: CORES_GRAFICO.eixo() }} axisLine={false} tickLine={false} />
-              <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: CORES_GRAFICO.eixo() }} axisLine={false} tickLine={false} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: corDoToken('--surface', '#FFFFFF'),
-                  borderColor: corDoToken('--border', '#D9D9D4'),
-                  borderRadius: 'var(--radius-md)',
-                  color: corDoToken('--text-primary', '#111111'),
-                  fontSize: '12px',
-                  fontWeight: '600',
-                }}
-              />
-              <Area
-                type="monotone"
-                dataKey="Empréstimos"
-                stroke={CORES_GRAFICO.serie1()}
-                strokeWidth={2}
-                fill="url(#gradEmprestimos)"
-                dot={{ r: 2, fill: CORES_GRAFICO.serie1() }}
-                activeDot={{ r: 4 }}
-              />
-              <Area
-                type="monotone"
-                dataKey="Devoluções"
-                stroke={CORES_GRAFICO.serie2()}
-                strokeWidth={2}
-                fill="url(#gradDevolucoes)"
-                dot={{ r: 2, fill: CORES_GRAFICO.serie2() }}
-                activeDot={{ r: 4 }}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        )}
+          <div className="min-w-0 overflow-x-auto">
+            <div className="min-w-[540px]">
+              <ResponsiveContainer width="100%" height={320}>
+                <AreaChart data={loansChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="gradEmp" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={CORES_GRAFICO.degradePrimario()} stopOpacity={0.25} />
+                      <stop offset="95%" stopColor={CORES_GRAFICO.degradePrimario()} stopOpacity={0.02} />
+                    </linearGradient>
+                    <linearGradient id="gradDev" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={CORES_GRAFICO.degradeSecundario()} stopOpacity={0.2} />
+                      <stop offset="95%" stopColor={CORES_GRAFICO.degradeSecundario()} stopOpacity={0.01} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke={CORES_GRAFICO.grade()} vertical={false} />
+                  <XAxis
+                    dataKey="dia"
+                    tick={{ fontSize: 11, fill: CORES_GRAFICO.eixo() }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    tick={{ fontSize: 11, fill: CORES_GRAFICO.eixo() }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip contentStyle={tooltip} />
+                  <Area
+                    type="monotone"
+                    dataKey="Empréstimos"
+                    stroke={CORES_GRAFICO.serie1()}
+                    strokeWidth={2}
+                    fill="url(#gradEmp)"
+                    dot={{ r: 2.5, fill: CORES_GRAFICO.serie1() }}
+                    activeDot={{ r: 4.5 }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="Devoluções"
+                    stroke={CORES_GRAFICO.serie2()}
+                    strokeWidth={2}
+                    fill="url(#gradDev)"
+                    dot={{ r: 2.5, fill: CORES_GRAFICO.serie2() }}
+                    activeDot={{ r: 4.5 }}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
 
-        {/* Legenda manual — só este primeiro gráfico tem legenda (igual à
-            referência, origin/redesign-frontend); os outros dois ficam sem.
-            As cores vêm de CORES_GRAFICO/corDoToken (mesmo mecanismo das
-            séries do gráfico acima) via style inline, nunca de classe
-            Tailwind fixa — senão não acompanharia a troca de tema. */}
-        {!isLoading && !loansError && !loansVazio && (
-          <div className="flex items-center gap-6 pt-3 border-t border-border text-caption">
-            <div className="flex items-center gap-1.5">
-              <div className="w-6 h-0.5" style={{ backgroundColor: CORES_GRAFICO.serie1() }} />
-              <span className="text-foreground font-medium">Empréstimos</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-6 h-0.5" style={{ backgroundColor: CORES_GRAFICO.serie2() }} />
-              <span className="text-muted-foreground">Devoluções</span>
+              {/* Legenda manual monocromática — classes de token, acompanham o tema. */}
+              <div className="flex items-center gap-6 mt-4 pt-3 border-t border-border text-caption">
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-1 rounded bg-foreground" />
+                  <span className="text-foreground font-medium">Empréstimos</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-1 rounded bg-muted-foreground" />
+                  <span className="text-muted-foreground">Devoluções</span>
+                </div>
+              </div>
             </div>
           </div>
         )}
       </div>
 
-      {/* Gráfico 2: Novos Cadastros + Gráfico 3: Distribuição Semanal */}
+      {/* Grade: cadastros por dia + distribuição semanal */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="surface-panel p-6 space-y-4">
-          <div>
-            <h3 className="text-body-lg font-semibold text-foreground">
-              Novos Cadastros de Equipamentos por Dia
-            </h3>
-            <p className="text-caption text-muted-foreground">
-              Volume de inclusões de patrimônios no acervo em {MONTHS[params.month - 1]} de {params.year}
-              {filtrado ? ` · ${params.unidade}` : ''}
+        {/* Gráfico 2: área de cadastros por dia */}
+        <div className="surface-panel p-5">
+          <div className="border-b border-border pb-3 mb-4">
+            <h2 className="text-body-lg font-semibold text-foreground">Cadastros por Dia</h2>
+            <p className="text-caption text-muted-foreground mt-0.5">
+              Novos patrimônios registrados no período.
             </p>
           </div>
 
           {isLoading ? (
-            <LoadingState label="Carregando gráfico..." className="h-64" />
+            <LoadingState label="Carregando cadastros..." />
           ) : regError ? (
-            <ErrorState
-              error={regError}
-              message={mensagem403Unidade(regError)}
-              onRetry={repetirReg}
-              title="Não foi possível carregar este gráfico"
-              className="h-64"
-            />
+            <ErrorState error={regError} message={mensagem403Unidade(regError)} onRetry={repetirReg} />
           ) : regVazio ? (
-            <EmptyState title="Nenhuma movimentação neste período." className="h-64" />
+            <EmptyState title="Nenhum cadastro neste período." />
           ) : (
-            <ResponsiveContainer width="100%" height={256}>
-              <BarChart data={regChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={CORES_GRAFICO.grade()} vertical={false} />
-                <XAxis dataKey="dia" tick={{ fontSize: 11, fill: CORES_GRAFICO.eixo() }} axisLine={false} tickLine={false} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: CORES_GRAFICO.eixo() }} axisLine={false} tickLine={false} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: corDoToken('--surface', '#FFFFFF'),
-                    borderColor: corDoToken('--border', '#D9D9D4'),
-                    borderRadius: 'var(--radius-md)',
-                    color: corDoToken('--text-primary', '#111111'),
-                    fontSize: '12px',
-                    fontWeight: '600',
-                  }}
-                />
-                <Bar dataKey="Cadastros" fill={CORES_GRAFICO.serie1()} radius={[6, 6, 0, 0]} maxBarSize={32} />
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="overflow-x-auto">
+              <div className="min-w-[300px]">
+                <ResponsiveContainer width="100%" height={230}>
+                  <AreaChart data={regChartData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="gradCad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={CORES_GRAFICO.serie1()} stopOpacity={0.22} />
+                        <stop offset="95%" stopColor={CORES_GRAFICO.serie1()} stopOpacity={0.01} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke={CORES_GRAFICO.grade()} vertical={false} />
+                    <XAxis
+                      dataKey="dia"
+                      tick={{ fontSize: 10, fill: CORES_GRAFICO.eixo() }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      tick={{ fontSize: 10, fill: CORES_GRAFICO.eixo() }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip contentStyle={tooltip} />
+                    <Area
+                      type="monotone"
+                      dataKey="Cadastros"
+                      stroke={CORES_GRAFICO.serie1()}
+                      strokeWidth={2}
+                      fill="url(#gradCad)"
+                      dot={{ r: 2.5, fill: CORES_GRAFICO.serie1() }}
+                      activeDot={{ r: 4.5 }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
           )}
         </div>
 
-        {/* Gráfico 3: Distribuição Semanal de Empréstimos */}
-        <div className="surface-panel p-6 space-y-4">
-          <div>
-            <h3 className="text-body-lg font-semibold text-foreground">
-              Distribuição Semanal de Empréstimos
-            </h3>
-            <p className="text-caption text-muted-foreground">
-              Concentração de movimentações por dia da semana em {MONTHS[params.month - 1]} de {params.year}
-              {filtrado ? ` · ${params.unidade}` : ''}
+        {/* Gráfico 3: área de distribuição por dia da semana */}
+        <div className="surface-panel p-5">
+          <div className="border-b border-border pb-3 mb-4">
+            <h2 className="text-body-lg font-semibold text-foreground">Distribuição Semanal de Empréstimos</h2>
+            <p className="text-caption text-muted-foreground mt-0.5">
+              Concentração de saídas por dia da semana.
             </p>
           </div>
 
           {isLoading ? (
-            <LoadingState label="Carregando gráfico..." className="h-64" />
+            <LoadingState label="Carregando indicadores..." />
           ) : loansError ? (
-            <ErrorState
-              error={loansError}
-              message={mensagem403Unidade(loansError)}
-              onRetry={repetirLoans}
-              title="Não foi possível carregar este gráfico"
-              className="h-64"
-            />
+            <ErrorState error={loansError} message={mensagem403Unidade(loansError)} onRetry={repetirLoans} />
           ) : weekdayVazio ? (
-            <EmptyState title="Nenhuma movimentação neste período." className="h-64" />
+            <EmptyState title="Nenhum dado disponível para este período." />
           ) : (
-            <ResponsiveContainer width="100%" height={256}>
-              <BarChart data={weekdayChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+            <ResponsiveContainer width="100%" height={230}>
+              <AreaChart data={weekdayChartData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="gradSem" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={CORES_GRAFICO.serie1()} stopOpacity={0.2} />
+                    <stop offset="95%" stopColor={CORES_GRAFICO.serie1()} stopOpacity={0.01} />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={CORES_GRAFICO.grade()} vertical={false} />
-                <XAxis dataKey="dia" tick={{ fontSize: 11, fill: CORES_GRAFICO.eixo() }} axisLine={false} tickLine={false} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: CORES_GRAFICO.eixo() }} axisLine={false} tickLine={false} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: corDoToken('--surface', '#FFFFFF'),
-                    borderColor: corDoToken('--border', '#D9D9D4'),
-                    borderRadius: 'var(--radius-md)',
-                    color: corDoToken('--text-primary', '#111111'),
-                    fontSize: '12px',
-                    fontWeight: '600',
-                  }}
+                <XAxis
+                  dataKey="dia"
+                  tick={{ fontSize: 11, fill: CORES_GRAFICO.eixo() }}
+                  axisLine={false}
+                  tickLine={false}
                 />
-                <Bar dataKey="Empréstimos" fill={CORES_GRAFICO.serie1()} radius={[6, 6, 0, 0]} maxBarSize={32} />
-              </BarChart>
+                <YAxis
+                  allowDecimals={false}
+                  tick={{ fontSize: 10, fill: CORES_GRAFICO.eixo() }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip contentStyle={tooltip} />
+                <Area
+                  type="monotone"
+                  dataKey="Empréstimos"
+                  stroke={CORES_GRAFICO.serie1()}
+                  strokeWidth={2}
+                  fill="url(#gradSem)"
+                  dot={{ r: 2.5, fill: CORES_GRAFICO.serie1() }}
+                  activeDot={{ r: 4.5 }}
+                />
+              </AreaChart>
             </ResponsiveContainer>
           )}
         </div>

@@ -4,9 +4,13 @@ import { listUsers, createUser, removeUser, updatePassword, type User } from '@/
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Badge } from '@/components/ui/badge'
-import { DataTable } from '@/components/ui/DataTable'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { toast } from '@/components/ui/toast'
 import { getErrorMessage } from '@/lib/api-error'
 import {
@@ -21,31 +25,36 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
-import type { ColumnDef } from '@tanstack/react-table'
 import { Trash2, Key, ShieldCheck, Wrench, GraduationCap, X, Check } from 'lucide-react'
 
-const ROLES = ['Gestor', 'Técnico', 'Jovem Aprendiz']
+const ROLES = ['Gestor', 'Técnico', 'Jovem Aprendiz'] as const
 
-/** Ícone por papel de acesso — só um sinalizador de leitura rápida, sem cor (paleta monocromática). */
-const ROLE_ICONS: Record<string, typeof ShieldCheck> = {
-  Gestor: ShieldCheck,
-  'Técnico': Wrench,
-  'Jovem Aprendiz': GraduationCap,
-}
-
-/** Texto de ajuda por papel (nível e alcance), mostrado como legenda no cadastro. */
-const ROLE_AJUDA: Record<string, { nivel: string; descricao: string }> = {
+const ROLE_META: Record<
+  string,
+  {
+    label: string
+    sublabel: string
+    description: string
+    icon: typeof ShieldCheck
+  }
+> = {
   Gestor: {
-    nivel: 'Nível administrador',
-    descricao: 'Acesso total: cadastros, relatórios, estornos e configurações do sistema.',
+    label: 'Gestor',
+    sublabel: 'NÍVEL ADMINISTRADOR',
+    description: 'ACESSO TOTAL: CADASTROS, RELATÓRIOS, ESTORNOS E CONFIGURAÇÕES DO SISTEMA.',
+    icon: ShieldCheck,
   },
-  'Técnico': {
-    nivel: 'Nível operador',
-    descricao: 'Operações de estoque: empréstimos, devoluções e cadastro de periféricos.',
+  Técnico: {
+    label: 'Técnico',
+    sublabel: 'NÍVEL OPERADOR',
+    description: 'OPERAÇÕES DE ESTOQUE: EMPRÉSTIMOS, DEVOLUÇÕES, CADASTRO DE PERIFÉRICOS.',
+    icon: Wrench,
   },
   'Jovem Aprendiz': {
-    nivel: 'Nível assistente',
-    descricao: 'Consulta e operações limitadas, sob supervisão de Gestor ou Técnico.',
+    label: 'Jovem Aprendiz',
+    sublabel: 'NÍVEL ASSISTENTE',
+    description: 'CONSULTA E OPERAÇÕES LIMITADAS SOB SUPERVISÃO DE GESTOR OU TÉCNICO.',
+    icon: GraduationCap,
   },
 }
 
@@ -55,7 +64,7 @@ export default function UsersPage() {
   const [password, setPassword] = useState('')
   const [role, setRole] = useState('')
   const [changingPasswordId, setChangingPasswordId] = useState<number | null>(null)
-  const [changingUsername, setChangingUsername] = useState('')
+  const [changingUsername, setChangingUsername] = useState<string>('')
   const [newPassword, setNewPassword] = useState('')
 
   const { data: users = [] } = useQuery({ queryKey: ['users'], queryFn: listUsers })
@@ -63,8 +72,10 @@ export default function UsersPage() {
   const createMutation = useMutation({
     mutationFn: () => createUser({ username, password, role }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] })
-      setUsername(''); setPassword(''); setRole('')
+      void queryClient.invalidateQueries({ queryKey: ['users'] })
+      setUsername('')
+      setPassword('')
+      setRole('')
       toast('Usuário criado com sucesso!')
     },
     onError: (err: unknown) => toast(getErrorMessage(err, 'Erro ao criar usuário.'), 'error'),
@@ -77,7 +88,7 @@ export default function UsersPage() {
   const removeMutation = useMutation({
     mutationFn: (id: number) => removeUser(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] })
+      void queryClient.invalidateQueries({ queryKey: ['users'] })
       toast('Usuário removido.')
     },
     onError: (err: unknown) => toast(getErrorMessage(err, 'Erro ao remover usuário.'), 'error'),
@@ -86,79 +97,23 @@ export default function UsersPage() {
   const passwordMutation = useMutation({
     mutationFn: ({ id, pass }: { id: number; pass: string }) => updatePassword(id, pass),
     onSuccess: () => {
-      setChangingPasswordId(null); setChangingUsername(''); setNewPassword('')
+      setChangingPasswordId(null)
+      setChangingUsername('')
+      setNewPassword('')
       toast('Senha alterada com sucesso!')
     },
     onError: (err: unknown) => toast(getErrorMessage(err, 'Erro ao alterar senha.'), 'error'),
   })
 
-  const columns: ColumnDef<User, unknown>[] = [
-    { accessorKey: 'id', header: 'ID', size: 60, cell: ({ getValue }) => <span className="num">{getValue() as number}</span> },
-    { accessorKey: 'username', header: 'Usuário' },
-    {
-      accessorKey: 'role',
-      header: 'Função',
-      cell: ({ getValue }) => {
-        const r = getValue() as string
-        const Icon = ROLE_ICONS[r]
-        return (
-          <Badge variant="default">
-            {Icon && <Icon size={12} aria-hidden />}
-            {r}
-          </Badge>
-        )
-      },
+  // A lista de usuários é pequena e vem inteira de /api/users (sem paginação
+  // no servidor) — agrupar por função no cliente não esconde registros.
+  const byRole = ROLES.reduce<Record<string, User[]>>(
+    (acc, r) => {
+      acc[r] = users.filter((u) => u.role === r)
+      return acc
     },
-    {
-      id: 'actions',
-      header: '',
-      cell: ({ row }) => (
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant="ghost"
-            title="Alterar senha"
-            onClick={() => {
-              setChangingPasswordId(row.original.id)
-              setChangingUsername(row.original.username)
-              setNewPassword('')
-            }}
-          >
-            <Key size={14} />
-          </Button>
-          {/* Confirmação antes de remover — ação destrutiva e irreversível. */}
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-muted-foreground hover:text-destructive"
-                disabled={removeMutation.isPending}
-                title="Remover usuário"
-              >
-                <Trash2 size={14} />
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Remover usuário "{row.original.username}"?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Esta ação não pode ser desfeita. Não é possível remover seu próprio usuário
-                  nem o último Gestor do sistema.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={() => removeMutation.mutate(row.original.id)}>
-                  Remover
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
-      ),
-    },
-  ]
+    {} as Record<string, User[]>
+  )
 
   return (
     <div className="page-container-reading space-y-8">
@@ -169,20 +124,26 @@ export default function UsersPage() {
         description="Gerencie os usuários do sistema e seus níveis de acesso."
       />
 
-      {/* Cadastro de usuário — cartão próprio, separado da listagem. */}
+      {/* Criar usuário */}
       <form
-        onSubmit={(e) => { e.preventDefault(); createMutation.mutate() }}
+        onSubmit={(e) => {
+          e.preventDefault()
+          createMutation.mutate()
+        }}
         className="surface-panel p-6 space-y-4"
       >
-        <PanelHeader title="Cadastro de Usuário" description="Defina usuário, senha e função de acesso." />
+        <PanelHeader
+          title="Cadastro de Usuário"
+          description="Defina usuário, senha e função de acesso."
+        />
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="flex flex-col gap-1.5">
             <Label>Nome de Usuário *</Label>
             <Input
               value={username}
-              onChange={e => setUsername(e.target.value)}
-              placeholder="ex: joao.silva"
+              onChange={(e) => setUsername(e.target.value)}
               required
+              placeholder="ex: joao.silva"
             />
           </div>
           <div className="flex flex-col gap-1.5">
@@ -190,36 +151,27 @@ export default function UsersPage() {
             <Input
               type="password"
               value={password}
-              onChange={e => setPassword(e.target.value)}
-              placeholder="••••••••"
+              onChange={(e) => setPassword(e.target.value)}
               required
+              placeholder="••••••••"
             />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Função *</Label>
             <Select value={role} onValueChange={setRole} required>
-              <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-              <SelectContent>{ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione" />
+              </SelectTrigger>
+              <SelectContent>
+                {ROLES.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {r}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
           </div>
         </div>
-        {/* Legenda dos níveis de acesso — ajuda a escolher a função certa. */}
-        <dl className="grid grid-cols-1 lg:grid-cols-3 gap-3 border-t border-border pt-4">
-          {ROLES.map((r) => {
-            const Icon = ROLE_ICONS[r]
-            const ajuda = ROLE_AJUDA[r]
-            return (
-              <div key={r} className="space-y-0.5">
-                <dt className="flex items-center gap-1.5 text-body-sm font-medium text-foreground">
-                  {Icon && <Icon size={13} className="text-muted-foreground shrink-0" aria-hidden />}
-                  {r}
-                  <span className="text-caption font-normal text-muted-foreground">· {ajuda?.nivel}</span>
-                </dt>
-                <dd className="text-caption text-muted-foreground leading-snug">{ajuda?.descricao}</dd>
-              </div>
-            )
-          })}
-        </dl>
         <div className="flex justify-end">
           <Button type="submit" disabled={createMutation.isPending || !username || !password || !role}>
             {createMutation.isPending ? 'Criando...' : 'Criar Usuário'}
@@ -229,36 +181,41 @@ export default function UsersPage() {
 
       {/* Alterar senha — banner inline identificando o usuário-alvo. */}
       {changingPasswordId && (
-        <div className="figure-ground-panel space-y-3">
-          <PanelHeader
-            title="Segurança da Conta"
-            actions={
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-7 text-muted-foreground"
-                onClick={() => { setChangingPasswordId(null); setChangingUsername(''); setNewPassword('') }}
-              >
-                <X size={14} />
-              </Button>
-            }
-          />
-          <h3 className="text-heading-sm text-foreground">
-            Alterar Senha — <span className="font-mono">{changingUsername}</span>{' '}
-            <span className="text-muted-foreground font-normal">#<span className="num">{changingPasswordId}</span></span>
-          </h3>
-          <div className="flex gap-3">
+        <div className="surface-panel p-5 border-l-2 border-primary space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-body-sm font-semibold text-foreground">
+              Alterar senha — <span className="font-mono text-muted-foreground">{changingUsername}</span>{' '}
+              <span className="text-muted-foreground font-normal">#{changingPasswordId}</span>
+            </p>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7 text-muted-foreground"
+              onClick={() => {
+                setChangingPasswordId(null)
+                setChangingUsername('')
+                setNewPassword('')
+              }}
+            >
+              <X size={14} />
+            </Button>
+          </div>
+          <div className="flex gap-2">
             <Input
               type="password"
               value={newPassword}
-              onChange={e => setNewPassword(e.target.value)}
+              onChange={(e) => setNewPassword(e.target.value)}
               placeholder="Nova senha"
-              className="flex-1"
+              className="flex-1 h-9"
               autoFocus
             />
             <Button
-              onClick={() => passwordMutation.mutate({ id: changingPasswordId, pass: newPassword })}
+              size="sm"
+              onClick={() =>
+                passwordMutation.mutate({ id: changingPasswordId, pass: newPassword })
+              }
               disabled={!newPassword || passwordMutation.isPending}
+              className="h-9"
             >
               <Check size={14} className="mr-1.5" />
               {passwordMutation.isPending ? 'Salvando...' : 'Salvar'}
@@ -267,7 +224,117 @@ export default function UsersPage() {
         </div>
       )}
 
-      <DataTable data={users} columns={columns} searchPlaceholder="Buscar usuário..." />
+      {/* Cards por função */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {ROLES.map((r) => {
+          const meta = ROLE_META[r]
+          const Icon = meta.icon
+          const roleUsers = byRole[r] ?? []
+
+          return (
+            <div
+              key={r}
+              className="surface-panel p-5 flex flex-col gap-4"
+            >
+              {/* Cabeçalho do card de função */}
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Icon className="size-4 text-muted-foreground shrink-0" aria-hidden />
+                  <span className="font-semibold text-foreground text-body-sm">{meta.label}</span>
+                </div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                  {meta.sublabel}
+                </p>
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  {meta.description}
+                </p>
+              </div>
+
+              {/* Lista de usuários */}
+              <div className="flex flex-col gap-1">
+                {roleUsers.length === 0 ? (
+                  <p className="text-caption text-muted-foreground italic py-2">
+                    Nenhum usuário neste nível.
+                  </p>
+                ) : (
+                  roleUsers.map((user) => (
+                    <div
+                      key={user.id}
+                      className="flex items-center justify-between px-3 py-2 rounded border border-border bg-surface-alt hover:bg-surface transition-colors group"
+                    >
+                      <div>
+                        <p className="text-body-sm font-medium text-foreground">{user.username}</p>
+                        <p className="text-[11px] font-mono text-muted-foreground">#{user.id}</p>
+                      </div>
+
+                      {/* `group-focus-within`: além do hover da FT_STC, as ações
+                          aparecem quando recebem foco pelo teclado. */}
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                        {/* Alterar senha */}
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-7 text-muted-foreground hover:text-foreground"
+                          title="Alterar senha"
+                          onClick={() => {
+                            setChangingPasswordId(user.id)
+                            setChangingUsername(user.username)
+                            setNewPassword('')
+                          }}
+                        >
+                          <Key size={13} />
+                        </Button>
+
+                        {/* Remover usuário */}
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="size-7 text-muted-foreground hover:text-destructive"
+                              title="Remover usuário"
+                              disabled={removeMutation.isPending}
+                            >
+                              <Trash2 size={13} />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>
+                                Remover usuário "{user.username}"?
+                              </AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Esta ação não pode ser desfeita. Não é possível remover seu
+                                próprio usuário nem o último Gestor do sistema.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => removeMutation.mutate(user.id)}
+                              >
+                                Remover
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Rodapé do card */}
+              <div className="border-t border-border pt-3 mt-auto">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                  {roleUsers.length}{' '}
+                  {roleUsers.length === 1 ? 'OPERADOR' : 'OPERADORES'}
+                </p>
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

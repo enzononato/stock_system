@@ -50,7 +50,8 @@ describe('ItemDetailsModal — seção Hardware & Rede', () => {
   it('exibe a seção Hardware & Rede para um item do tipo Desktop', () => {
     renderModal(desktopItem)
 
-    expect(screen.getByText('Especificações de Hardware & Sistema')).toBeInTheDocument()
+    // Título da seção passou a ser o da FT_STC ("Hardware & Sistema").
+    expect(screen.getByText('Hardware & Sistema')).toBeInTheDocument()
     expect(screen.getByText('Processador (CPU)')).toBeInTheDocument()
     expect(screen.getByText('Intel Core i5-11500')).toBeInTheDocument()
   })
@@ -58,7 +59,8 @@ describe('ItemDetailsModal — seção Hardware & Rede', () => {
   it('exibe a seção Hardware & Rede também para um item do tipo Notebook', () => {
     renderModal({ ...desktopItem, id: 43, tipo: 'Notebook' })
 
-    expect(screen.getByText('Especificações de Hardware & Sistema')).toBeInTheDocument()
+    // Título da seção passou a ser o da FT_STC ("Hardware & Sistema").
+    expect(screen.getByText('Hardware & Sistema')).toBeInTheDocument()
   })
 })
 

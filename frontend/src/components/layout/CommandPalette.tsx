@@ -152,20 +152,3 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     document.body
   )
 }
-
-export function CommandPaletteTrigger({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="hidden sm:flex items-center gap-1.5 h-8 px-2.5 rounded border border-border bg-surface hover:bg-surface-alt hover:border-border-strong text-muted-foreground hover:text-foreground transition-colors duration-micro text-xs"
-      title="Busca rápida (Ctrl+K)"
-    >
-      <Search size={14} className="shrink-0" aria-hidden="true" />
-      <span>Buscar</span>
-      <kbd className="ml-1 rounded-sm border border-border bg-surface px-1 py-0.5 text-[10px] font-mono text-muted-foreground">
-        Ctrl K
-      </kbd>
-    </button>
-  )
-}

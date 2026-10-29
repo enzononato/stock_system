@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { server } from '@/test/server'
 import { renderWithClient } from '@/test/render'
@@ -26,7 +27,7 @@ beforeAll(() => {
 // botão de confirmar continuava destravado ou travado por engano. Este teste
 // cobre a integração real (não só o componente isolado): clica no QUADRADO
 // (nunca no texto ao lado, que nem é mais clicável nesta tela) e confirma que
-// o botão "Confirmar Remoção" destrava só depois disso.
+// o botão "Confirmar Baixa Definitiva" destrava só depois disso.
 
 const itemDisponivel = {
   id: 77,
@@ -58,18 +59,23 @@ function mockServidor() {
   )
 }
 
+// MemoryRouter: o layout da FT_STC trouxe os botões "Cancelar e Voltar" e
+// "Cancelar", que usam `useNavigate` — sem um roteador em volta a página nem
+// monta. Não altera nada do que o teste verifica.
 function renderPage() {
   return renderWithClient(
-    <>
+    <MemoryRouter>
       <RemovePage />
       <ToastContainer />
-    </>
+    </MemoryRouter>
   )
 }
 
 /** Seleciona o único equipamento disponível e o motivo — os dois pré-requisitos que, junto com a ciência, destravam o botão. */
 async function selecionarEquipamentoEMotivo(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole('button', { name: /Selecione um equipamento disponível/i }))
+  // Texto do gatilho passou a seguir o layout da FT_STC ("Pesquisar por marca,
+  // modelo ou identificador…"); o significado do passo é o mesmo.
+  await user.click(await screen.findByRole('button', { name: /Pesquisar por marca, modelo ou identificador/i }))
   await user.click(await screen.findByRole('button', { name: /Notebook Dell Latitude/i }))
   // Ficha do ativo aparece assim que a seleção é processada.
   await screen.findByText('Ficha do Ativo Selecionado')
@@ -84,7 +90,8 @@ describe('RemovePage — checkbox de ciência de irreversibilidade', () => {
     const user = userEvent.setup()
     renderPage()
 
-    const botaoConfirmar = await screen.findByRole('button', { name: /Confirmar Remoção/i })
+    // Rótulo do botão segue a FT_STC ("Confirmar Baixa Definitiva").
+    const botaoConfirmar = await screen.findByRole('button', { name: /Confirmar Baixa Definitiva/i })
     expect(botaoConfirmar).toBeDisabled()
 
     await selecionarEquipamentoEMotivo(user)
@@ -99,7 +106,8 @@ describe('RemovePage — checkbox de ciência de irreversibilidade', () => {
 
     await selecionarEquipamentoEMotivo(user)
 
-    const botaoConfirmar = screen.getByRole('button', { name: /Confirmar Remoção/i })
+    // Rótulo do botão segue a FT_STC ("Confirmar Baixa Definitiva").
+    const botaoConfirmar = screen.getByRole('button', { name: /Confirmar Baixa Definitiva/i })
     expect(botaoConfirmar).toBeDisabled()
 
     // Clicar no texto ao lado não deve fazer nada: não há mais um <label>

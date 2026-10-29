@@ -23,7 +23,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
 import { useAuth } from '@/contexts/AuthContext'
 import { getErrorMessage } from '@/lib/api-error'
 import { cn, formatDateTime, exportToCsv } from '@/lib/utils'
@@ -195,44 +194,58 @@ export default function HistoryPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      <PageHeader
-        eyebrow="Auditoria e Rastreabilidade"
-        eyebrowDetail="Linha Temporal"
-        title="Histórico de Operações"
-        description="Registro cronológico e imutável de todas as ações realizadas no sistema patrimonial."
-        actions={
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={history.length === 0}
-            onClick={() =>
-              exportToCsv('historico', history as unknown as Record<string, unknown>[], [
-                { key: 'id', label: 'ID' },
-                { key: 'operador', label: 'Operador' },
-                { key: 'operation', label: 'Operação' },
-                { key: 'tipo', label: 'Tipo' },
-                { key: 'marca', label: 'Marca' },
-                { key: 'modelo', label: 'Modelo' },
-                { key: 'identificador', label: 'Identificador' },
-                { key: 'usuario', label: 'Usuário' },
-                { key: 'setor', label: 'Setor' },
-                { key: 'revenda', label: 'Revenda' },
-                { key: 'data_operacao', label: 'Data' },
-              ])
-            }
-            className="text-xs h-8"
-          >
-            <Download className="mr-1.5 size-3.5" />
-            Exportar CSV
-          </Button>
-        }
-      />
+      {/* Cabeçalho */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-border pb-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
+              Auditoria e Rastreabilidade
+            </span>
+            <span className="text-muted-foreground">•</span>
+            <span className="text-caption text-foreground font-medium">Linha Temporal</span>
+          </div>
+          <h1 className="text-heading-lg font-semibold tracking-tight text-foreground mt-0.5">
+            Histórico de Operações
+          </h1>
+          <p className="text-body-sm text-muted-foreground mt-1">
+            Registro cronológico e imutável de todas as ações realizadas no sistema patrimonial.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={history.length === 0}
+          onClick={() =>
+            exportToCsv('historico', history as unknown as Record<string, unknown>[], [
+              { key: 'id', label: 'ID' },
+              { key: 'operador', label: 'Operador' },
+              { key: 'operation', label: 'Operação' },
+              { key: 'tipo', label: 'Tipo' },
+              { key: 'marca', label: 'Marca' },
+              { key: 'modelo', label: 'Modelo' },
+              { key: 'identificador', label: 'Identificador' },
+              { key: 'usuario', label: 'Usuário' },
+              { key: 'setor', label: 'Setor' },
+              { key: 'revenda', label: 'Revenda' },
+              { key: 'data_operacao', label: 'Data' },
+            ])
+          }
+          className="text-xs h-8"
+        >
+          <Download className="mr-1.5 size-3.5" />
+          Exportar CSV
+        </Button>
+      </div>
 
       {/* Grid: 280px filtros / 1fr timeline */}
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6 items-start">
         {/* Painel de Filtros */}
         <div className="rounded border border-border bg-surface p-5 space-y-5">
-          <PanelHeader title="Filtros de Consulta" />
+          <div className="border-b border-border pb-2.5">
+            <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
+              Filtros de Consulta
+            </span>
+          </div>
 
           <div className="space-y-2">
             <Label className="text-caption font-medium">Busca Geral</Label>
@@ -319,24 +332,23 @@ export default function HistoryPage() {
 
         {/* Timeline Editorial */}
         <div className="rounded border border-border bg-surface p-5 space-y-1">
-          <PanelHeader
-            title={`Linha Temporal — ${total} evento${total !== 1 ? 's' : ''} auditados`}
-            className="pb-3 mb-4"
-            actions={
-              history.length > 0 ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={toggleAll}
-                  className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground"
-                >
-                  <ChevronsUpDown className="mr-1 size-3" />
-                  {allExpanded ? 'Recolher todos' : 'Expandir todos'}
-                </Button>
-              ) : undefined
-            }
-          />
+          <div className="border-b border-border pb-3 mb-4 flex items-center justify-between">
+            <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
+              Linha Temporal — {total} evento{total !== 1 ? 's' : ''} auditados
+            </span>
+            {history.length > 0 && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={toggleAll}
+                className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+              >
+                <ChevronsUpDown className="mr-1 size-3" />
+                {allExpanded ? 'Recolher todos' : 'Expandir todos'}
+              </Button>
+            )}
+          </div>
 
           {isLoading ? (
             <div className="py-12 text-center text-caption text-muted-foreground">
@@ -363,7 +375,8 @@ export default function HistoryPage() {
 
                   return (
                     <div key={entry.id} className="relative flex gap-3 pb-2.5 last:pb-0">
-                      {/* Nó da Timeline */}
+                      {/* Nó da Timeline — `shadow-sm` no lugar do `shadow-xs` da FT_STC,
+                          que não existe nesta configuração do Tailwind. */}
                       <div className="relative z-10 flex-shrink-0 mt-0.5">
                         <div
                           className={cn(
@@ -574,7 +587,7 @@ export default function HistoryPage() {
                   </h3>
                 </DialogTitle>
                 <DialogDescription className="text-caption text-muted-foreground mt-0.5">
-                  Esta ação reverterá os efeitos de &quot;{reversingEntry?.operation}&quot; no estoque de forma imediata.
+                  Esta ação reverterá os efeitos de "{reversingEntry?.operation}" no estoque de forma imediata.
                 </DialogDescription>
               </div>
             </div>

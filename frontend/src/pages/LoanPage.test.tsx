@@ -14,6 +14,12 @@ import LoanPage from '@/pages/LoanPage'
 // o painel de confirmação pós-empréstimo já têm cobertura própria em outros
 // pontos da suíte (isValidCpf em utils, ConfirmacaoTermo embutido aqui).
 
+// Títulos das etapas seguem o texto visual da FT_STC (antes: "1. Equipamento",
+// "2. Colaborador", "3. Condições") — só o texto mudou, o comportamento testado é o mesmo.
+const TITULO_ETAPA_1 = '1. Seleção do Equipamento'
+const TITULO_ETAPA_2 = '2. Dados do Colaborador Responsável'
+const TITULO_ETAPA_3 = '3. Condições Operacionais e Alocação'
+
 const itemDisponivel = {
   id: 42,
   tipo: 'Notebook',
@@ -48,7 +54,8 @@ function renderPage() {
 
 /** Etapa 1: abre o SearchableSelect de equipamento e escolhe o único item disponível. */
 async function selecionarEquipamento(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole('button', { name: /Selecione um equipamento disponível/i }))
+  // Placeholder do seletor segue o texto da FT_STC ("Buscar por ID, modelo, tipo ou serial…").
+  await user.click(await screen.findByRole('button', { name: /Buscar por ID, modelo, tipo ou serial/i }))
   await user.click(await screen.findByRole('button', { name: /Notebook Dell Latitude/i }))
 }
 
@@ -56,7 +63,7 @@ async function selecionarEquipamento(user: ReturnType<typeof userEvent.setup>) {
 async function avancarParaColaborador(user: ReturnType<typeof userEvent.setup>) {
   await selecionarEquipamento(user)
   await user.click(screen.getByRole('button', { name: /Próximo/i }))
-  await screen.findByRole('heading', { name: '2. Colaborador' })
+  await screen.findByRole('heading', { name: TITULO_ETAPA_2 })
 }
 
 /** Avança da etapa 2 (Colaborador) para a etapa 3 (Condições), preenchendo nome e CPF válidos. */
@@ -66,7 +73,7 @@ async function avancarParaCondicoes(user: ReturnType<typeof userEvent.setup>) {
   await user.type(funcionarioInput, 'João da Silva')
   await user.type(cpfInput, '52998224725') // CPF válido (dígitos verificadores corretos)
   await user.click(screen.getByRole('button', { name: /Próximo/i }))
-  await screen.findByRole('heading', { name: '3. Condições' })
+  await screen.findByRole('heading', { name: TITULO_ETAPA_3 })
 }
 
 describe('LoanPage — assistente de 4 passos', () => {
@@ -75,11 +82,11 @@ describe('LoanPage — assistente de 4 passos', () => {
     const user = userEvent.setup()
     renderPage()
 
-    await screen.findByRole('heading', { name: '1. Equipamento' })
+    await screen.findByRole('heading', { name: TITULO_ETAPA_1 })
     await user.click(screen.getByRole('button', { name: /Próximo/i }))
 
     expect(await screen.findByText('Selecione um equipamento disponível.')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '1. Equipamento' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: TITULO_ETAPA_1 })).toBeInTheDocument()
   })
 
   it('CPF inválido barra o avanço no passo 2 (Colaborador)', async () => {
@@ -95,7 +102,7 @@ describe('LoanPage — assistente de 4 passos', () => {
     await user.click(screen.getByRole('button', { name: /Próximo/i }))
 
     expect(await screen.findByText('CPF inválido.')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '2. Colaborador' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: TITULO_ETAPA_2 })).toBeInTheDocument()
   })
 
   it('preenche a revenda automaticamente a partir do item, mas ainda barra sem o setor no passo 3 (Condições)', async () => {
@@ -110,7 +117,7 @@ describe('LoanPage — assistente de 4 passos', () => {
     // barra o avanço, confirmando que o preenchimento automático ocorreu.
     expect(await screen.findByText('Selecione o setor.')).toBeInTheDocument()
     expect(screen.queryByText('Selecione a revenda.')).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '3. Condições' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: TITULO_ETAPA_3 })).toBeInTheDocument()
   })
 
   it('permite voltar a uma etapa já concluída, mas não pular para uma etapa futura', async () => {
@@ -122,7 +129,7 @@ describe('LoanPage — assistente de 4 passos', () => {
 
     // Volta livre: "Equipamento" (etapa concluída) está clicável no Stepper.
     await user.click(screen.getByRole('button', { name: /Equipamento/i }))
-    expect(await screen.findByRole('heading', { name: '1. Equipamento' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: TITULO_ETAPA_1 })).toBeInTheDocument()
 
     // Sem avanço: de volta à etapa 1, "Condições" e "Confirmação" (etapas
     // futuras, ainda não concluídas) ficam desabilitadas no Stepper.
@@ -132,7 +139,7 @@ describe('LoanPage — assistente de 4 passos', () => {
     expect(botaoConfirmacao).toBeDisabled()
 
     await user.click(botaoCondicoes)
-    expect(screen.getByRole('heading', { name: '1. Equipamento' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: TITULO_ETAPA_1 })).toBeInTheDocument()
   })
 
   it('o toggle "É pessoa jurídica" continua desmarcado por padrão', async () => {
