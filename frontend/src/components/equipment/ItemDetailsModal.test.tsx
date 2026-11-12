@@ -128,3 +128,10 @@ describe('ItemDetailsModal — edição inline', () => {
     expect(chamouBackend).toBe(false)
   })
 })
+
+describe('ItemDetailsModal — página completa', () => {
+  it('oferece o atalho "Ver página completa" para a página de detalhe', () => {
+    renderModal(desktopItem)
+    expect(screen.getByRole('button', { name: 'Ver página completa' })).toBeInTheDocument()
+  })
+})

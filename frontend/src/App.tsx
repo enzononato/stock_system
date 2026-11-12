@@ -5,6 +5,7 @@ import { RestrictedAccess } from '@/components/layout/RestrictedAccess'
 import LoginPage from '@/pages/LoginPage'
 import DashboardPage from '@/pages/DashboardPage'
 import StockPage from '@/pages/StockPage'
+import ItemDetailPage from '@/pages/ItemDetailPage'
 import RegisterItemPage from '@/pages/RegisterItemPage'
 import PeripheralsPage from '@/pages/PeripheralsPage'
 import LinkPeripheralPage from '@/pages/LinkPeripheralPage'
@@ -46,6 +47,7 @@ export default function App() {
               o estoque, que ocupava "/", mudou para "/stock". */}
           <Route index element={<DashboardPage />} />
           <Route path="stock" element={<StockPage />} />
+          <Route path="items/:id" element={<ItemDetailPage />} />
           <Route path="charts" element={<ChartsPage />} />
 
           {/* Gestor + Técnico */}
