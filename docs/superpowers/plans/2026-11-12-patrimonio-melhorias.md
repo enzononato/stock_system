@@ -48,7 +48,7 @@
 | F3 Termos e RevSign | `2026-11-12-patrimonio-f3-termos.md` | F0 | `routers/loans.py`, `inventory_manager_db.py` (empréstimo/devolução), `LoanPage`, `ReturnPage`, `jobs.py` |
 | F4 Ciclo de vida e manutenção | `2026-11-12-patrimonio-f4-ciclo-vida.md` | F0 | `routers/items.py`, `schemas/items.py`, `RegisterItemPage`, `RemovePage`, ENUM de `items.status` |
 | F5 Linhas telefônicas | `2026-11-12-patrimonio-f5-linhas.md` | F0 | só arquivos novos + rotas/menu |
-| F6 Inventário | `2026-11-12-patrimonio-f6-inventario.md` | F0 | `StockPage` (seleção para etiquetas), rotas/menu |
+| F6 Inventário | `2026-11-12-patrimonio-f6-inventario.md` | F0 | só arquivos novos (tela própria `/etiquetas`) + rotas/menu |
 | F8 Acessos | `2026-11-12-patrimonio-f8-acessos.md` | F0 | só arquivos novos + rotas/menu + aba do colaborador |
 | F7 Painel, alertas e exportações | `2026-11-12-patrimonio-f7-painel.md` | F0, F3, F4, F5, F6 integradas | `DashboardPage`, exportações nas telas das outras fases |
 
