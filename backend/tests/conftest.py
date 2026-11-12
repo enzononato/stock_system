@@ -41,6 +41,8 @@ import pymysql
 import pymysql.cursors
 import pytest
 
+pytest_plugins = ["tests.fixtures_colaboradores"]
+
 # ────────────────────────────────────────────────────────────────────────────
 # Configuração do ambiente de teste (guard de segurança)
 # ────────────────────────────────────────────────────────────────────────────
