@@ -305,3 +305,23 @@
 - [ ] **Step 3: Implementar.**
 - [ ] **Step 4: Rodar** `npx vitest run`, `npx tsc --noEmit` e `npm run build` → verdes.
 - [ ] **Step 5: Commit** `feat(base): locais e nome na base de RH nas unidades, e tela de auditoria`.
+
+### Task 14: Página de detalhe do colaborador com abas plugáveis
+
+**Files:**
+- Create: `frontend/src/features/colaborador-detail/types.ts`, `frontend/src/features/colaborador-detail/registry.ts`, `frontend/src/features/colaborador-detail/tabs/dados.tsx`, `frontend/src/features/colaborador-detail/tabs/equipamentos.tsx`, `frontend/src/pages/ColaboradorDetailPage.tsx`, `frontend/src/pages/ColaboradorDetailPage.test.tsx`
+- Modify: `frontend/src/App.tsx` (rota `colaboradores/:id`, Gestor e Técnico), `frontend/src/pages/ColaboradoresPage.tsx` (nome na tabela vira link para o detalhe)
+
+**Interfaces:**
+- Consumes: `getColaborador(id)` (Task 12), `listItemsPaginated` de `api/items.ts` (filtro por colaborador: `GET /api/items?colaborador_id=<id>` — parâmetro novo que a F1 implementa no backend; até lá o MSW simula), `StatusPill`, `Pagination`, `upper`, `formatTelefone` (Task 10); mesmo desenho do registro de `features/item-detail/registry.ts` (Task 11, incluindo exclusão de `*.test.tsx`, validação do default export e aviso de id duplicado).
+- Produces:
+  - `interface ColaboradorDetailTab { id: string; label: string; order: number; roles?: string[]; Component: ComponentType<{ colaborador: Colaborador }> }`
+  - `getColaboradorDetailTabs(role: string | undefined): ColaboradorDetailTab[]` e `buildColaboradorDetailTabs(modules, role)` (pura). **Cada fase acrescenta uma aba criando um arquivo em `features/colaborador-detail/tabs/`.** Ordens reservadas: dados 10, equipamentos 20, termos 30 (F3), linhas 40 (F5), acessos 50 (F8).
+  - `ColaboradorDetailPage` em `/colaboradores/:id`: cabeçalho com nome, CPF formatado, cargo, setor, UNIDADE e situação em `StatusPill`; abas com `?aba=`; 404 → "Colaborador não encontrado".
+  - Aba `dados`: matrícula, e-mail, telefone, superior imediato (link para o detalhe do superior), origem (RH/manual), última sincronização.
+  - Aba `equipamentos`: equipamentos com o colaborador (`GET /api/items?colaborador_id=`), com link para `/items/:id`, paginados.
+- [ ] **Step 1: Testes** (MSW): abas Dados e Equipamentos aparecem; superior vira link; `?aba=equipamentos` chama `/api/items` com `colaborador_id`; 404 mostra "Colaborador não encontrado"; o nome na `ColaboradoresPage` leva ao detalhe.
+- [ ] **Step 2: Rodar e ver falhar.**
+- [ ] **Step 3: Implementar.**
+- [ ] **Step 4: Rodar** `npx vitest run`, `npx tsc --noEmit` → verdes.
+- [ ] **Step 5: Commit** `feat(colaboradores): página de detalhe do colaborador com abas plugáveis`.
