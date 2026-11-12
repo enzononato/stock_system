@@ -65,11 +65,16 @@ export default function ColaboradoresPage() {
   const queryClient = useQueryClient()
 
   const [pageSize, setPageSize] = usePageSize('colaboradores')
-  const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [situacao, setSituacao] = useState('')
   const [unidadeId, setUnidadeId] = useState('')
   const busca = useDebouncedValue(search.trim(), 300)
+  // A página vale só para o termo (já com debounce) em que foi escolhida: quando
+  // a busca aplicada muda, volta para a 1 na mesma renderização, sem disparar
+  // uma requisição extra com o termo novo e a página antiga.
+  const [paginaDaBusca, setPaginaDaBusca] = useState({ page: 1, busca: '' })
+  const page = paginaDaBusca.busca === busca ? paginaDaBusca.page : 1
+  const setPage = (p: number) => setPaginaDaBusca({ page: p, busca })
 
   const [dialog, setDialog] = useState<{ open: boolean; colaborador: Colaborador | null }>({
     open: false,
@@ -172,7 +177,6 @@ export default function ColaboradoresPage() {
             value={search}
             onChange={(e) => {
               setSearch(e.target.value)
-              setPage(1)
             }}
             className="pl-10"
           />

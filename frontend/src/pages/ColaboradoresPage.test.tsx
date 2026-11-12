@@ -32,6 +32,7 @@ const maria: Colaborador = {
   telefone: '74999990000',
   email_manual: false,
   telefone_manual: false,
+  superior_id: 3,
   superior_nome: 'JOAO CHEFE',
   origem: 'rh',
 }
@@ -44,7 +45,8 @@ const jose: Colaborador = {
   situacao: 'afastado',
   email: null,
   telefone: null,
-  superior_nome: null,
+  superior_id: 3,
+  superior_nome: 'JOAO CHEFE',
   origem: 'manual',
 }
 
@@ -71,6 +73,7 @@ function mockBase(opts: { items?: Colaborador[]; total?: number; sync?: unknown 
       return HttpResponse.json({ items, total: opts.total ?? items.length })
     }),
     http.get('/api/colaboradores/sincronizacao', () => HttpResponse.json(opts.sync ?? syncOk)),
+    http.get('/api/colaboradores/3', () => HttpResponse.json({ ...maria, id: 3, nome: 'JOAO CHEFE' })),
     http.get('/api/colaboradores/cargos', () => HttpResponse.json(['Analista', 'Gerente'])),
     http.get('/api/unidades', () =>
       HttpResponse.json([{ id: 1, nome: 'Juazeiro', razao_social: 'X', cnpj: '1', is_active: true }])
@@ -104,7 +107,7 @@ describe('ColaboradoresPage', () => {
     expect(tabela.getByText('Ativo')).toBeInTheDocument()
     expect(tabela.getByText('Afastado')).toBeInTheDocument()
     expect(screen.getAllByText('(74) 99999-0000').length).toBeGreaterThan(0)
-    expect(screen.getByText('JOAO CHEFE')).toBeInTheDocument()
+    expect(screen.getAllByText('JOAO CHEFE').length).toBeGreaterThan(0)
   })
 
   it('pagina no servidor com offset e limit conforme a página', async () => {
@@ -130,10 +133,21 @@ describe('ColaboradoresPage', () => {
     await waitFor(() =>
       expect(pedidos.some((p) => p.get('situacao') === 'desligado' && p.get('offset') === '0')).toBe(true)
     )
+
+    // volta para uma página adiante e só então busca: a busca precisa zerar a página
+    await user.click(screen.getByRole('button', { name: 'Próxima' }))
+    await waitFor(() =>
+      expect(pedidos.some((p) => p.get('situacao') === 'desligado' && p.get('offset') === '25')).toBe(true)
+    )
+    const antes = pedidos.length
     await user.type(screen.getByPlaceholderText(/buscar colaborador/i), 'mar')
     await waitFor(() =>
       expect(pedidos.some((p) => p.get('busca') === 'mar' && p.get('offset') === '0')).toBe(true)
     )
+    // nada de requisição extra com o termo antigo ou com a página antiga
+    const depois = pedidos.slice(antes)
+    expect(depois.every((p) => p.get('busca') === 'mar')).toBe(true)
+    expect(depois.every((p) => p.get('offset') === '0')).toBe(true)
   })
 
   it('Gestor vê "Sincronizar agora" e o resumo vai para o toast', async () => {
@@ -196,15 +210,49 @@ describe('ColaboradoresPage', () => {
     expect(await screen.findByText('E-mail: E-mail inválido.')).toBeInTheDocument()
   })
 
-  it('editar colaborador da base só envia e-mail, telefone e superior', async () => {
-    mockBase()
-    let corpo: Record<string, unknown> | null = null
+  function capturarPut(id: number) {
+    const capturado: { corpo: Record<string, unknown> | null; chamadas: number } = { corpo: null, chamadas: 0 }
     server.use(
-      http.put('/api/colaboradores/7', async ({ request }) => {
-        corpo = (await request.json()) as Record<string, unknown>
-        return HttpResponse.json({ ...maria, email: 'novo@revalle.com' })
+      http.put(`/api/colaboradores/${id}`, async ({ request }) => {
+        capturado.chamadas += 1
+        capturado.corpo = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(maria)
       })
     )
+    return capturado
+  }
+
+  it('RH: alterar só o superior envia exatamente { superior_id }', async () => {
+    mockBase()
+    const put = capturarPut(7)
+    renderPage()
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: /editar maria silva/i }))
+    const dialog = screen.getByRole('dialog')
+    await user.click(await within(dialog).findByRole('button', { name: /joao chefe/i }))
+    await user.click(await within(dialog).findByText('JOSE LIMA'))
+    await user.click(within(dialog).getByRole('button', { name: /salvar/i }))
+
+    await waitFor(() => expect(put.corpo).not.toBeNull())
+    expect(put.corpo).toEqual({ superior_id: 8 })
+  })
+
+  it('RH: esvaziar o e-mail envia exatamente { email: null }', async () => {
+    mockBase()
+    const put = capturarPut(7)
+    renderPage()
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: /editar maria silva/i }))
+    await user.clear(screen.getByLabelText('E-mail'))
+    await user.click(screen.getByRole('button', { name: /salvar/i }))
+
+    await waitFor(() => expect(put.corpo).not.toBeNull())
+    expect(put.corpo).toEqual({ email: null })
+  })
+
+  it('RH: trocar o e-mail envia só o e-mail (telefone formatado igual ao guardado não vai)', async () => {
+    mockBase()
+    const put = capturarPut(7)
     renderPage()
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: /editar maria silva/i }))
@@ -213,9 +261,72 @@ describe('ColaboradoresPage', () => {
     await user.type(email, 'novo@revalle.com')
     await user.click(screen.getByRole('button', { name: /salvar/i }))
 
-    await waitFor(() => expect(corpo).not.toBeNull())
-    expect(Object.keys(corpo!).sort()).toEqual(['email', 'superior_id', 'telefone'])
-    expect(corpo!.email).toBe('novo@revalle.com')
+    await waitFor(() => expect(put.corpo).not.toBeNull())
+    expect(put.corpo).toEqual({ email: 'novo@revalle.com' })
+  })
+
+  it('RH: telefone alterado vai só com dígitos', async () => {
+    mockBase()
+    const put = capturarPut(7)
+    renderPage()
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: /editar maria silva/i }))
+    const tel = screen.getByLabelText('Telefone')
+    await user.clear(tel)
+    await user.type(tel, '(74) 98888-7777')
+    await user.click(screen.getByRole('button', { name: /salvar/i }))
+
+    await waitFor(() => expect(put.corpo).not.toBeNull())
+    expect(put.corpo).toEqual({ telefone: '74988887777' })
+  })
+
+  it('manual: alterar só o cargo envia exatamente { cargo }', async () => {
+    mockBase()
+    const put = capturarPut(8)
+    renderPage()
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: /editar jose lima/i }))
+    const cargo = screen.getByLabelText(/^Cargo/)
+    await user.clear(cargo)
+    await user.type(cargo, 'Gerente')
+    await user.click(screen.getByRole('button', { name: /salvar/i }))
+
+    await waitFor(() => expect(put.corpo).not.toBeNull())
+    expect(put.corpo).toEqual({ cargo: 'Gerente' })
+  })
+
+  it('sem alterações não chama a API e avisa', async () => {
+    mockBase()
+    const put = capturarPut(7)
+    renderPage()
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: /editar maria silva/i }))
+    await user.click(screen.getByRole('button', { name: /salvar/i }))
+
+    expect(await screen.findByText('Nenhuma alteração.')).toBeInTheDocument()
+    expect(put.chamadas).toBe(0)
+  })
+
+  it('não deixa o colaborador ser superior de si mesmo', async () => {
+    mockBase()
+    const put = capturarPut(7)
+    renderPage()
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: /editar maria silva/i }))
+    const dialog = screen.getByRole('dialog')
+    await user.click(await within(dialog).findByRole('button', { name: /joao chefe/i }))
+    await user.click(await within(dialog).findByText('MARIA SILVA'))
+    await user.click(within(dialog).getByRole('button', { name: /salvar/i }))
+
+    expect(await screen.findByText('O colaborador não pode ser superior de si mesmo.')).toBeInTheDocument()
+    expect(put.chamadas).toBe(0)
+  })
+
+  it('o campo Superior tem nome acessível', async () => {
+    mockBase()
+    renderPage()
+    await userEvent.setup().click(await screen.findByRole('button', { name: /editar maria silva/i }))
+    expect(screen.getByRole('group', { name: 'Superior' })).toBeInTheDocument()
   })
 
   it('cadastra colaborador manual e mostra erro de CPF duplicado (409)', async () => {

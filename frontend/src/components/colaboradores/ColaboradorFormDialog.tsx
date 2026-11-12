@@ -26,6 +26,11 @@ import { getErrorMessage } from '@/lib/api-error'
 import { formatTelefone, upper } from '@/lib/format'
 import { formatCpf, isValidCpf, maskCpfInput } from '@/lib/utils'
 
+/** Só os dígitos do telefone (formato guardado no backend); vazio vira `null`. */
+function digitos(v: string | null | undefined): string | null {
+  return (v ?? '').replace(/\D/g, '') || null
+}
+
 const AVISO_RH = 'Vem da base de RH'
 
 const selectClass =
@@ -106,27 +111,54 @@ function FormBody({ colaborador, onClose }: { colaborador: Colaborador | null; o
       }
     }
 
-    const contato: ColaboradorInput = {
-      email: form.email.trim() || null,
-      telefone: form.telefone.trim() || null,
-      superior_id: superiorId,
-    }
-    if (!baseEditavel) {
-      mutation.mutate(contato)
+    if (superiorId !== null && colaborador && superiorId === colaborador.id) {
+      toast('O colaborador não pode ser superior de si mesmo.', 'error')
       return
     }
-    const base: ColaboradorInput = {
-      nome: form.nome.trim(),
-      cargo: form.cargo.trim() || null,
-      setor: form.setor.trim() || null,
-      unidade_id: form.unidadeId ? Number(form.unidadeId) : null,
-      situacao: form.situacao,
+
+    const email = form.email.trim() || null
+    const telefone = digitos(form.telefone)
+    const cargo = form.cargo.trim() || null
+    const setor = form.setor.trim() || null
+    const unidadeId = form.unidadeId ? Number(form.unidadeId) : null
+
+    if (!colaborador) {
+      mutation.mutate({
+        cpf: form.cpf.replace(/\D/g, ''),
+        nome: form.nome.trim(),
+        matricula: form.matricula.trim() || null,
+        cargo,
+        setor,
+        unidade_id: unidadeId,
+        situacao: form.situacao,
+        email,
+        telefone,
+        superior_id: superiorId,
+      })
+      return
     }
-    mutation.mutate(
-      editando
-        ? { ...base, ...contato }
-        : { ...base, ...contato, cpf: form.cpf.replace(/\D/g, ''), matricula: form.matricula.trim() || null }
-    )
+
+    // Edição: contrato "chave ausente = sem mudança, null = limpar". Só vai o
+    // que o usuário realmente alterou — reenviar e-mail/telefone da base de RH
+    // os marcaria como editados à mão e a sincronização pararia de atualizá-los.
+    const mudancas: ColaboradorInput = {}
+    if (email !== (colaborador.email?.trim() || null)) mudancas.email = email
+    if (telefone !== digitos(colaborador.telefone)) mudancas.telefone = telefone
+    if (superiorId !== (colaborador.superior_id ?? null)) mudancas.superior_id = superiorId
+    if (baseEditavel) {
+      const nome = form.nome.trim()
+      if (nome !== colaborador.nome) mudancas.nome = nome
+      if (cargo !== (colaborador.cargo?.trim() || null)) mudancas.cargo = cargo
+      if (setor !== (colaborador.setor?.trim() || null)) mudancas.setor = setor
+      if (unidadeId !== (colaborador.unidade_id ?? null)) mudancas.unidade_id = unidadeId
+      if (form.situacao !== colaborador.situacao) mudancas.situacao = form.situacao
+    }
+    if (Object.keys(mudancas).length === 0) {
+      toast('Nenhuma alteração.')
+      onClose()
+      return
+    }
+    mutation.mutate(mudancas)
   }
 
   const avisoRh = !baseEditavel && (
@@ -257,12 +289,14 @@ function FormBody({ colaborador, onClose }: { colaborador: Colaborador | null; o
           />
         </div>
         <div className="flex flex-col gap-1.5 sm:col-span-2">
-          <Label>Superior</Label>
-          <ColaboradorSelect
-            value={superiorId}
-            onChange={(c) => setSuperiorId(c?.id ?? null)}
-            placeholder="Sem superior definido"
-          />
+          <Label id="colab-superior-label">Superior</Label>
+          <div role="group" aria-labelledby="colab-superior-label">
+            <ColaboradorSelect
+              value={superiorId}
+              onChange={(c) => setSuperiorId(c?.id ?? null)}
+              placeholder="Sem superior definido"
+            />
+          </div>
         </div>
       </div>
 

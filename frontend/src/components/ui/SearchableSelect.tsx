@@ -29,6 +29,8 @@ interface SearchableSelectProps {
    */
   search?: string
   onSearchChange?: (termo: string) => void
+  /** Texto do estado vazio. Sem ele, mantém "Nenhum equipamento encontrado com ...". */
+  emptyText?: string
 }
 
 export function SearchableSelect({
@@ -41,6 +43,7 @@ export function SearchableSelect({
   disabled = false,
   search: searchControlado,
   onSearchChange,
+  emptyText,
 }: SearchableSelectProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [searchInterno, setSearchInterno] = useState('')
@@ -158,7 +161,7 @@ export function SearchableSelect({
           <div className="flex-1 overflow-y-auto max-h-60 space-y-0.5 pr-1">
             {filtered.length === 0 ? (
               <div className="py-6 text-center text-xs text-muted-foreground font-medium">
-                Nenhum equipamento encontrado com "{search}"
+                {emptyText ?? `Nenhum equipamento encontrado com "${search}"`}
               </div>
             ) : (
               filtered.map((opt) => {

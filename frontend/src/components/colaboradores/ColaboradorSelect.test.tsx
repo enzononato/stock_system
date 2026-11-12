@@ -78,4 +78,11 @@ describe('ColaboradorSelect', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: /limpar/i }))
     expect(onChange).toHaveBeenCalledWith(null)
   })
+
+  it('sem resultados mostra a mensagem de colaborador', async () => {
+    server.use(http.get('/api/colaboradores', () => HttpResponse.json({ items: [], total: 0 })))
+    renderWithClient(<ColaboradorSelect value={null} onChange={vi.fn()} />)
+    await userEvent.setup().click(screen.getByRole('button', { name: /selecione/i }))
+    expect(await screen.findByText('Nenhum colaborador encontrado.')).toBeInTheDocument()
+  })
 })

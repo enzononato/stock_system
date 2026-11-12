@@ -74,6 +74,7 @@ export function ColaboradorSelect({
         placeholder={placeholder}
         searchPlaceholder="Buscar por nome, CPF ou matrícula..."
         disabled={disabled}
+        emptyText="Nenhum colaborador encontrado."
         search={search}
         onSearchChange={setSearch}
       />
