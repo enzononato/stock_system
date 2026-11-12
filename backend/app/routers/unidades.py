@@ -74,13 +74,6 @@ def create_unidade(
     return {"detail": msg, "id": criada["id"] if criada else None}
 
 
-def _auditar_mudanca(
-    ctx: AuditContext, db: UnidadeDBManager, unidade_id: int, acao: str, antes_unidade: dict
-) -> None:
-    antes, depois = audit.diff(antes_unidade, db.get_unidade(unidade_id) or {})
-    audit.record(ctx, "unidade", unidade_id, acao, antes=antes, depois=depois)
-
-
 @router.put("/{unidade_id}", response_model=dict)
 def update_unidade(
     unidade_id: int,
@@ -100,7 +93,10 @@ def update_unidade(
     ok, msg = db.update_unidade(unidade_id, data)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
-    _auditar_mudanca(ctx, db, unidade_id, "editar", existente)
+    audit.record_diff(
+        ctx, "unidade", unidade_id, "editar", existente,
+        obter_depois=lambda: db.get_unidade(unidade_id) or {},
+    )
     return {"detail": msg}
 
 
@@ -120,7 +116,10 @@ def deactivate_unidade(
     ok, msg = db.deactivate_unidade(unidade_id)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
-    _auditar_mudanca(ctx, db, unidade_id, "desativar", existente)
+    audit.record_diff(
+        ctx, "unidade", unidade_id, "desativar", existente,
+        obter_depois=lambda: db.get_unidade(unidade_id) or {},
+    )
     return {"detail": msg}
 
 
@@ -141,5 +140,8 @@ def reactivate_unidade(
     ok, msg = db.reactivate_unidade(unidade_id)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
-    _auditar_mudanca(ctx, db, unidade_id, "reativar", existente)
+    audit.record_diff(
+        ctx, "unidade", unidade_id, "reativar", existente,
+        obter_depois=lambda: db.get_unidade(unidade_id) or {},
+    )
     return {"detail": msg}

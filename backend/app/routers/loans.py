@@ -23,18 +23,6 @@ def _check_size(content: bytes) -> None:
         raise HTTPException(status_code=413, detail="Arquivo excede o tamanho máximo de 20MB.")
 
 
-def _auditar_etapa(
-    ctx: AuditContext, inv: InventoryDBManager, entidade: str, acao: str,
-    item_id: int, antes_item: "dict | None", extra: "dict | None" = None,
-) -> None:
-    """Grava a mudança do item (só os campos alterados) numa etapa do fluxo de
-    empréstimo/devolução. `extra` entra só no lado "depois"."""
-    antes, depois = audit.diff(antes_item or {}, inv.find(item_id) or {})
-    if extra:
-        depois = {**(depois or {}), **extra}
-    audit.record(ctx, entidade, item_id, acao, antes=antes, depois=depois)
-
-
 @router.post("", response_model=dict)
 def initiate_loan(
     body: LoanRequest,
@@ -57,8 +45,8 @@ def initiate_loan(
     )
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
-    _auditar_etapa(
-        ctx, inv, "emprestimo", "criar", body.item_id, antes_item,
+    audit.record_diff(
+        ctx, "emprestimo", body.item_id, "criar", antes_item, obter_depois=lambda: inv.find(body.item_id),
         extra={"cargo": body.cargo, "center_cost": body.center_cost, "setor": body.setor},
     )
     return {"detail": msg}
@@ -82,8 +70,8 @@ async def confirm_loan(
     ok, msg = inv.confirm_loan(item_id, current_user.username, storage_key)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
-    _auditar_etapa(
-        ctx, inv, "emprestimo", "confirmar", item_id, antes_item,
+    audit.record_diff(
+        ctx, "emprestimo", item_id, "confirmar", antes_item, obter_depois=lambda: inv.find(item_id),
         extra={"termo_assinado": storage_key},
     )
     return {"detail": msg}
@@ -119,7 +107,9 @@ def initiate_return(
     ok, result, filename = inv.generate_return_term_bytes(item_id, current_user.username)
     if not ok:
         raise HTTPException(status_code=400, detail=result)
-    _auditar_etapa(ctx, inv, "devolucao", "criar", item_id, antes_item)
+    audit.record_diff(
+        ctx, "devolucao", item_id, "criar", antes_item, obter_depois=lambda: inv.find(item_id)
+    )
 
     # Salva o DOCX gerado no storage
     storage_key = storage.save("termos_devolucao", filename, result)
@@ -146,8 +136,8 @@ async def confirm_return(
     ok, msg = inv.confirm_return(item_id, current_user.username, storage_key)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
-    _auditar_etapa(
-        ctx, inv, "devolucao", "confirmar", item_id, antes_item,
+    audit.record_diff(
+        ctx, "devolucao", item_id, "confirmar", antes_item, obter_depois=lambda: inv.find(item_id),
         extra={"termo_assinado": storage_key},
     )
     return {"detail": msg}

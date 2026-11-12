@@ -71,7 +71,7 @@ def create_item(
     ok, result = inv.add_item(item_data, current_user.username)
     if not ok:
         raise HTTPException(status_code=400, detail=result)
-    audit.record(ctx, "item", result, "criar", depois=inv.find(result))
+    audit.record_diff(ctx, "item", result, "criar", None, obter_depois=lambda: inv.find(result))
     return {"detail": "Item cadastrado com sucesso.", "id": result}
 
 
@@ -94,8 +94,9 @@ def update_item(
     ok, msg = inv.update_item(item_id, item_data, current_user.username)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
-    antes, depois = audit.diff(existing, inv.find(item_id))
-    audit.record(ctx, "item", item_id, "editar", antes=antes, depois=depois)
+    audit.record_diff(
+        ctx, "item", item_id, "editar", existing, obter_depois=lambda: inv.find(item_id)
+    )
     return {"detail": msg}
 
 

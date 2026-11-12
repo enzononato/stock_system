@@ -13,7 +13,7 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from app.db.database_mysql import get_cursor
 
@@ -166,5 +166,37 @@ def record(
     except Exception:
         logger.exception(
             "Falha ao registrar auditoria (entidade=%s, id=%s, acao=%s).",
+            entidade, entidade_id, acao,
+        )
+
+
+def record_diff(
+    ctx: AuditContext,
+    entidade: str,
+    entidade_id: "int | str | None",
+    acao: str,
+    antes: Optional[dict],
+    obter_depois: Optional[Callable[[], Optional[dict]]] = None,
+    depois: Optional[dict] = None,
+    extra: Optional[dict] = None,
+) -> None:
+    """Auditoria de uma alteração já confirmada, a partir do estado "antes".
+
+    NUNCA levanta: a operação principal já foi gravada, então uma falha ao ler
+    o estado "depois" (`obter_depois`), ao calcular o diff ou ao gravar só é
+    logada (sem valores) e engolida. `depois` é usado se `obter_depois` não for
+    dado. O diff reduz os dois lados aos campos alterados (ver `diff`); `extra`
+    entra só no lado "depois".
+    """
+    try:
+        if obter_depois is not None:
+            depois = obter_depois()
+        antes_diff, depois_diff = diff(antes, depois)
+        if extra:
+            depois_diff = {**(depois_diff or {}), **extra}
+        record(ctx, entidade, entidade_id, acao, antes=antes_diff, depois=depois_diff)
+    except Exception:
+        logger.exception(
+            "Falha ao preparar auditoria (entidade=%s, id=%s, acao=%s).",
             entidade, entidade_id, acao,
         )

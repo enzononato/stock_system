@@ -190,10 +190,10 @@ def test_criar_periferico_grava(client_gestor):
     assert linha["entidade_id"].isdigit()
 
 
-def test_excluir_periferico_grava(client_gestor, periferico_disponivel):
+def test_desativar_periferico_grava(client_gestor, periferico_disponivel):
     resp = client_gestor.delete(f"/api/peripherals/{periferico_disponivel['id']}")
     assert resp.status_code == 200
-    linha = _unica("periferico", "excluir")
+    linha = _unica("periferico", "desativar")
     assert linha["entidade_id"] == str(periferico_disponivel["id"])
     assert linha["antes"] == {"is_active": 1}
     assert linha["depois"] == {"is_active": 0}
@@ -343,3 +343,71 @@ def test_history_filtra_por_item_id(client_gestor, criar_item):
 
     # Sem o filtro, o comportamento continua o mesmo.
     assert client_gestor.get("/api/history").json()["total"] == 2
+
+
+# ── Leitura do estado "depois" não derruba a operação já confirmada ─────────
+
+def _falhar_a_partir_da_segunda_chamada(monkeypatch, classe, nome):
+    original = getattr(classe, nome)
+    chamadas = {"n": 0}
+
+    def _metodo(self, *args, **kwargs):
+        chamadas["n"] += 1
+        if chamadas["n"] > 1:
+            raise RuntimeError("banco indisponível")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(classe, nome, _metodo)
+
+
+def test_falha_ao_ler_depois_nao_derruba_editar_item(client_gestor, item_disponivel, monkeypatch):
+    from app.db.inventory_manager_db import InventoryDBManager
+
+    _falhar_a_partir_da_segunda_chamada(monkeypatch, InventoryDBManager, "find")
+    resp = client_gestor.put(f"/api/items/{item_disponivel['id']}", json={"setor": "Financeiro"})
+    assert resp.status_code == 200
+    assert resp.json() == {"detail": f"Item {item_disponivel['id']} atualizado."}
+    assert _linhas("item", "editar") == []
+
+
+def test_falha_ao_ler_depois_nao_derruba_desativar_unidade(client_gestor, unidade, monkeypatch):
+    from app.db.unidade_db import UnidadeDBManager
+
+    _falhar_a_partir_da_segunda_chamada(monkeypatch, UnidadeDBManager, "get_unidade")
+    resp = client_gestor.delete(f"/api/unidades/{unidade['id']}")
+    assert resp.status_code == 200
+    assert _linhas("unidade", "desativar") == []
+
+
+def test_record_diff_mescla_extra_so_no_depois(monkeypatch):
+    from app.services import audit
+
+    gravado = {}
+    monkeypatch.setattr(audit, "record", lambda ctx, e, i, a, antes=None, depois=None, cur=None: gravado.update(
+        entidade=e, id=i, acao=a, antes=antes, depois=depois))
+    ctx = audit.AuditContext(1, "u", "Gestor", "1.2.3.4")
+    audit.record_diff(
+        ctx, "item", 5, "confirmar", {"status": "Pendente", "x": 1},
+        obter_depois=lambda: {"status": "Indisponível", "x": 1}, extra={"termo": "a.pdf"},
+    )
+    assert gravado == {
+        "entidade": "item", "id": 5, "acao": "confirmar",
+        "antes": {"status": "Pendente"}, "depois": {"status": "Indisponível", "termo": "a.pdf"},
+    }
+
+
+def test_record_diff_nunca_levanta(monkeypatch):
+    from app.services import audit
+
+    chamou = []
+    monkeypatch.setattr(audit, "record", lambda *a, **k: chamou.append(1))
+
+    def _quebra():
+        raise RuntimeError("falhou")
+
+    ctx = audit.AuditContext(1, "u", "Gestor", None)
+    audit.record_diff(ctx, "item", 1, "editar", {"a": 1}, obter_depois=_quebra)
+    assert chamou == []
+    # Sem obter_depois: usa `depois` direto (criação).
+    audit.record_diff(ctx, "item", 1, "criar", None, depois={"a": 1})
+    assert chamou == [1]

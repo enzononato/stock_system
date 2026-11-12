@@ -50,10 +50,13 @@ def create_peripheral(
     # add_peripheral só devolve o id dentro da mensagem ("... cadastrado com ID 12.").
     achado = re.search(r"ID (\d+)\.?$", msg)
     perif_id = int(achado.group(1)) if achado else None
-    audit.record(
-        ctx, "periferico", perif_id, "criar",
-        depois=inv.get_peripheral(perif_id) if perif_id is not None else data,
-    )
+    if perif_id is not None:
+        audit.record_diff(
+            ctx, "periferico", perif_id, "criar", None,
+            obter_depois=lambda: inv.get_peripheral(perif_id),
+        )
+    else:
+        audit.record_diff(ctx, "periferico", None, "criar", None, depois=data)
     return {"detail": msg}
 
 
@@ -70,8 +73,10 @@ def deactivate_peripheral(
     ok, msg = inv.deactivate_peripheral(peripheral_id, current_user.username)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
-    antes, depois = audit.diff(antes_perif or {}, inv.get_peripheral(peripheral_id) or {})
-    audit.record(ctx, "periferico", peripheral_id, "excluir", antes=antes, depois=depois)
+    audit.record_diff(
+        ctx, "periferico", peripheral_id, "desativar", antes_perif or {},
+        obter_depois=lambda: inv.get_peripheral(peripheral_id) or {},
+    )
     return {"detail": msg}
 
 
@@ -96,11 +101,13 @@ def link_peripheral(
     ok, msg = inv.link_peripheral_to_equipment(item_id, peripheral_id, current_user.username)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
-    antes, depois = audit.diff(
+    # `equipamento_id` é sintetizado (o vínculo vive em equipment_peripherals, não
+    # em `peripherals`) para o diff mostrar a que equipamento foi ligado.
+    audit.record_diff(
+        ctx, "periferico", peripheral_id, "vincular",
         {**antes_perif, "equipamento_id": None},
-        {**(inv.get_peripheral(peripheral_id) or {}), "equipamento_id": item_id},
+        obter_depois=lambda: {**(inv.get_peripheral(peripheral_id) or {}), "equipamento_id": item_id},
     )
-    audit.record(ctx, "periferico", peripheral_id, "vincular", antes=antes, depois=depois)
     return {"detail": msg}
 
 
@@ -117,12 +124,13 @@ def unlink_peripheral(
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
     if vinculo:
-        antes, depois = audit.diff(
+        perif_id = vinculo["peripheral_id"]
+        # `equipamento_id` é sintetizado (o vínculo vive em equipment_peripherals,
+        # não em `peripherals`) para o diff mostrar de qual equipamento saiu.
+        audit.record_diff(
+            ctx, "periferico", perif_id, "desvincular",
             {**antes_perif, "equipamento_id": vinculo["equipment_id"]},
-            {**(inv.get_peripheral(vinculo["peripheral_id"]) or {}), "equipamento_id": None},
-        )
-        audit.record(
-            ctx, "periferico", vinculo["peripheral_id"], "desvincular", antes=antes, depois=depois
+            obter_depois=lambda: {**(inv.get_peripheral(perif_id) or {}), "equipamento_id": None},
         )
     return {"detail": msg}
 
@@ -157,13 +165,16 @@ async def replace_peripheral(
     )
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
-    antes, depois = audit.diff(
+    # `equipamento_id` e `substituido_por` não são colunas de `peripherals`: são
+    # sintetizados aqui (o vínculo vive em equipment_peripherals) para o diff
+    # mostrar a que equipamento o periférico estava ligado e qual o substituiu.
+    audit.record_diff(
+        ctx, "periferico", old_peripheral_id, "substituir",
         {**antes_perif, "equipamento_id": item_id, "substituido_por": None},
-        {
+        obter_depois=lambda: {
             **(inv.get_peripheral(old_peripheral_id) or {}),
             "equipamento_id": None,
             "substituido_por": new_peripheral_id,
         },
     )
-    audit.record(ctx, "periferico", old_peripheral_id, "substituir", antes=antes, depois=depois)
     return {"detail": msg}

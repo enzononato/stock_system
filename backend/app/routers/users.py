@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, HTTPException, Depends
 
 from app.schemas.users import UserCreate, UserResponse, PasswordUpdate
@@ -5,6 +7,8 @@ from app.db.user_manager_db import UserDBManager
 from app.dependencies import gestor_only, get_user_db, get_audit_context, CurrentUser
 from app.services import audit
 from app.services.audit import AuditContext
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -24,12 +28,16 @@ def create_user(
     ok, msg = user_db.add_user(body.username, body.password, body.role)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
-    # get_user_by_username traz o hash da senha: copiamos só os campos seguros.
-    criado = user_db.get_user_by_username(body.username) or {}
-    audit.record(
-        ctx, "usuario", criado.get("id"), "criar",
-        depois={"id": criado.get("id"), "username": body.username, "role": body.role},
-    )
+    # O usuário já foi gravado: ler o id para a auditoria não pode derrubar a resposta.
+    try:
+        # get_user_by_username traz o hash da senha: copiamos só os campos seguros.
+        criado = user_db.get_user_by_username(body.username) or {}
+        audit.record(
+            ctx, "usuario", criado.get("id"), "criar",
+            depois={"id": criado.get("id"), "username": body.username, "role": body.role},
+        )
+    except Exception:
+        logger.exception("Falha ao preparar auditoria (entidade=usuario, acao=criar).")
     return {"detail": msg}
 
 
