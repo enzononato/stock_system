@@ -39,6 +39,16 @@ export default {
           DEFAULT: 'var(--primary)',
           foreground: 'var(--primary-foreground)',
         },
+        brand: {
+          DEFAULT: 'var(--brand)',
+          text: 'var(--brand-text)',
+          soft: 'var(--brand-soft)',
+          'soft-foreground': 'var(--brand-soft-foreground)',
+        },
+        lime: {
+          DEFAULT: 'var(--lime)',
+          foreground: 'var(--lime-foreground)',
+        },
         secondary: {
           DEFAULT: 'var(--secondary)',
           foreground: 'var(--secondary-foreground)',

@@ -96,13 +96,15 @@ function listarArquivosFonte(dir: string): string[] {
 }
 
 describe('tokens de design', () => {
-  it('define a paleta monocromática no modo claro', () => {
-    expect(css).toContain('--canvas: #F7F7F5')
+  it('define a paleta de base neutra com azul da marca no modo claro', () => {
+    expect(css).toContain('--canvas: #F5F7FB')
     expect(css).toContain('--surface: #FFFFFF')
     expect(css).toContain('--surface-alt: #F0F0ED')
     expect(css).toContain('--border: #D9D9D4')
     expect(css).toContain('--border-strong: #BDBDB7')
     expect(css).toContain('--text-primary: #111111')
+    expect(css).toContain('--primary: #0131CD')
+    expect(css).toContain('--lime: #B9FC01')
   })
 
   it('define a paleta do modo escuro', () => {
@@ -124,6 +126,8 @@ describe('tokens de design', () => {
     expect(css).toContain('--status-pending')
     expect(css).toContain('--status-return')
     expect(css).toContain('--status-danger')
+    expect(css).toContain('--status-maintenance')
+    expect(css).toContain('--status-retired')
   })
 
   it('expõe os utilitários de tipografia editorial', () => {
@@ -146,7 +150,7 @@ describe('tokens de design', () => {
   })
 
   it('registra os tokens novos no tailwind.config.js', () => {
-    for (const t of ['canvas', 'surface', 'border-strong', 'sidebar', 'micro']) {
+    for (const t of ['canvas', 'surface', 'border-strong', 'sidebar', 'micro', 'brand', 'lime']) {
       expect(config).toContain(t)
     }
   })
@@ -175,7 +179,7 @@ describe('guarda contra opacidade em token customizado', () => {
     // Sanidade: se `colors` for movido para fora do tailwind.config.js (ex.:
     // um módulo importado), a extração acima degenera silenciosamente para
     // uma lista vazia e o teste passaria para sempre sem checar nada. Hoje
-    // existem 29 tokens — exigir mais de 20 garante que a lista real foi
+    // existem 35 tokens — exigir mais de 20 garante que a lista real foi
     // derivada.
     expect(tokens.length).toBeGreaterThan(20)
 
