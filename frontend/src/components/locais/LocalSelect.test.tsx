@@ -63,4 +63,26 @@ describe('LocalSelect', () => {
     renderWithClient(<LocalSelect unidadeId={1} value={null} onChange={() => {}} disabled />)
     expect(screen.getByLabelText('Local')).toBeDisabled()
   })
+
+  it('zera o valor quando a unidade muda e o local não pertence à nova unidade', async () => {
+    server.use(
+      http.get('/api/locais', ({ request }) => {
+        const uid = new URL(request.url).searchParams.get('unidade_id')
+        return HttpResponse.json(uid === '1' ? locais : [])
+      })
+    )
+    const onChange = vi.fn()
+    const { rerender } = renderWithClient(<LocalSelect unidadeId={1} value={10} onChange={onChange} />)
+    await screen.findByRole('option', { name: 'Almoxarifado' })
+    expect(onChange).not.toHaveBeenCalled()
+
+    rerender(<LocalSelect unidadeId={2} value={10} onChange={onChange} />)
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith(null))
+  })
+
+  it('zera o valor quando a unidade fica vazia', () => {
+    const onChange = vi.fn()
+    renderWithClient(<LocalSelect unidadeId={null} value={10} onChange={onChange} />)
+    expect(onChange).toHaveBeenCalledWith(null)
+  })
 })

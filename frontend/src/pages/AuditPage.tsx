@@ -57,6 +57,8 @@ export default function AuditPage() {
   const page = paginaDoFiltro.key === filtroKey ? paginaDoFiltro.page : 1
   const setPage = (p: number) => setPaginaDoFiltro({ page: p, key: filtroKey })
 
+  const periodoInvalido = Boolean(de && ate && de > ate)
+
   const { data, isLoading, isError, error, isFetching, refetch } = useQuery({
     queryKey: ['audit', { entidade: entidadeAplicada, username: usernameAplicado, de, ate, page, pageSize }],
     queryFn: () =>
@@ -69,6 +71,8 @@ export default function AuditPage() {
         offset: (page - 1) * pageSize,
       }),
     placeholderData: keepPreviousData,
+    // Período invertido nunca vai ao servidor: a tela avisa em vez de listar.
+    enabled: !periodoInvalido,
   })
 
   const total = data?.total ?? 0
@@ -141,7 +145,11 @@ export default function AuditPage() {
         </label>
       </div>
 
-      {isLoading ? (
+      {periodoInvalido ? (
+        <p role="alert" className="text-body-sm text-destructive">
+          Período inválido: a data inicial é maior que a final.
+        </p>
+      ) : isLoading ? (
         <LoadingState label="Carregando auditoria..." />
       ) : isError ? (
         <ErrorState error={error} onRetry={() => refetch()} />

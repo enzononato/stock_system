@@ -63,11 +63,32 @@ describe('AuditPage', () => {
   })
 
   it('interpreta ocorrido_em como UTC e exibe no horário local', async () => {
-    mockAudit([statusEntry])
-    renderWithClient(<AuditPage />)
+    // Fuso fixado para o teste não passar "por acaso" numa máquina em UTC:
+    // sem o `Z`, 15:00 seria lido como local e sairia 15:00 em vez de 12:00.
+    const tzOriginal = process.env.TZ
+    process.env.TZ = 'America/Sao_Paulo'
+    try {
+      mockAudit([{ ...statusEntry, ocorrido_em: '2026-11-12T15:00:00' }])
+      renderWithClient(<AuditPage />)
+      expect(await screen.findByText('12/11/2026, 12:00:00')).toBeInTheDocument()
+    } finally {
+      if (tzOriginal === undefined) delete process.env.TZ
+      else process.env.TZ = tzOriginal
+    }
+  })
 
-    const esperado = new Date('2026-11-10T15:30:00Z').toLocaleString('pt-BR')
-    expect(await screen.findByText(esperado)).toBeInTheDocument()
+  it('não consulta o servidor e avisa quando a data inicial é maior que a final', async () => {
+    const pedidos = mockAudit()
+    const user = userEvent.setup()
+    renderWithClient(<AuditPage />)
+    await screen.findByText('status: Disponível → Indisponível')
+    const antes = pedidos.length
+
+    await user.type(screen.getByLabelText('Até'), '2026-11-01')
+    await user.type(screen.getByLabelText('De'), '2026-11-12')
+
+    expect(await screen.findByText('Período inválido: a data inicial é maior que a final.')).toBeInTheDocument()
+    expect(pedidos.slice(antes).some((p) => p.get('de') === '2026-11-12' && p.get('ate') === '2026-11-01')).toBe(false)
   })
 
   it('envia filtros e paginação ao servidor e volta à página 1 ao filtrar', async () => {
