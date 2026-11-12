@@ -57,6 +57,42 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
 
+    # URL pública do frontend (usada nos links dos e-mails enviados pelo sistema)
+    APP_PUBLIC_URL: str = "http://localhost:5173"
+
+    # E-mail: "smtp" envia de verdade; "memory" só guarda em memória (testes)
+    MAIL_BACKEND: str = "smtp"
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 465
+    SMTP_USER: str = ""
+    SMTP_PASS: str = ""
+    SMTP_FROM: str = ""
+
+    # Base de colaboradores (Postgres, somente leitura) e sincronização diária
+    COLABORADORES_DATABASE_URL: str = ""
+    COLABORADORES_TABLE: str = "colaboradores-revalle"
+    COLABORADORES_SCHEMA: str = "public"
+    COLABORADORES_COLUMNS: str = ""
+    COLABORADORES_SYNC_HORA: str = "05:00"
+
+    # Agendador de tarefas em segundo plano (sincronização, alertas)
+    SCHEDULER_ENABLED: bool = True
+
+    # Chave para cifrar o segredo TOTP (2FA) no banco
+    TOTP_ENCRYPTION_KEY: str = ""
+
+    # Integração de assinatura eletrônica (RevSign)
+    REVSIGN_ENABLED: bool = False
+    REVSIGN_BASE_URL: str = ""
+    REVSIGN_API_TOKEN: str = ""
+    REVSIGN_WEBHOOK_SECRET: str = ""
+
+    # Limiares dos alertas do painel, em dias
+    ALERTA_GARANTIA_DIAS: int = 30
+    ALERTA_TERMO_PENDENTE_DIAS: int = 3
+    ALERTA_DEVOLUCAO_PENDENTE_DIAS: int = 7
+    ALERTA_MANUTENCAO_DIAS: int = 15
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
@@ -74,6 +110,11 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",")]
+
+    @property
+    def smtp_from_effective(self) -> str:
+        """Remetente dos e-mails: SMTP_FROM, ou SMTP_USER quando vazio."""
+        return self.SMTP_FROM or self.SMTP_USER
 
     @property
     def cookie_secure_effective(self) -> bool:

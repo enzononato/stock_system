@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
@@ -7,8 +9,11 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
+from app.db.migrations import aplicar_pendentes, garantir_baseline
 from app.dependencies import limiter, get_inventory_db
 from app.routers import auth, users, items, peripherals, loans, documents, history, reports, constants, unidades
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Controle de Estoque Revalle",
@@ -116,6 +121,17 @@ app.include_router(history.router)
 app.include_router(reports.router)
 app.include_router(constants.router)
 app.include_router(unidades.router)
+
+
+@app.on_event("startup")
+def aplicar_migracoes_no_boot() -> None:
+    """Cria as tabelas legadas e aplica as migrações pendentes. Banco fora do ar
+    não impede o boot (o erro fica no log e o /api/health/db reporta 503)."""
+    try:
+        garantir_baseline()
+        aplicar_pendentes()
+    except Exception:
+        logger.exception("Falha ao aplicar as migrações do banco no boot.")
 
 
 @app.get("/api/health")
