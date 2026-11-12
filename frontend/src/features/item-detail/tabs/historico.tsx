@@ -8,13 +8,20 @@ import { formatDateTime } from '@/lib/utils'
 import type { ItemDetailTab } from '../types'
 
 function HistoricoTab({ item }: { item: Item }) {
-  const [pageSize, setPageSize] = usePageSize('item-historico')
+  const [pageSize, setStoredPageSize] = usePageSize('item-historico')
   const [page, setPage] = useState(1)
 
-  // Volta para a primeira página ao trocar de equipamento ou de tamanho de página.
+  // Trocar o tamanho da página volta para a primeira no mesmo evento, para não
+  // disparar uma requisição com a página antiga e o tamanho novo.
+  const setPageSize = (n: number) => {
+    setStoredPageSize(n)
+    setPage(1)
+  }
+
+  // Volta para a primeira página ao trocar de equipamento.
   useEffect(() => {
     setPage(1)
-  }, [item.id, pageSize])
+  }, [item.id])
 
   const { data, isLoading, isError, isFetching } = useQuery({
     queryKey: ['item-history', item.id, page, pageSize],
@@ -25,7 +32,12 @@ function HistoricoTab({ item }: { item: Item }) {
   const entries = data?.items ?? []
   const total = data?.total ?? 0
   const lastPage = Math.max(1, Math.ceil(total / pageSize))
-  const current = Math.min(page, lastPage)
+
+  // Se o total encolheu e a página atual passou da última, ajusta o estado (e,
+  // com ele, o offset da consulta) em vez de só corrigir o que é exibido.
+  useEffect(() => {
+    if (data && page > lastPage) setPage(lastPage)
+  }, [data, page, lastPage])
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Carregando histórico...</p>
   if (isError) return <p className="text-sm text-muted-foreground">Não foi possível carregar o histórico.</p>
@@ -52,7 +64,7 @@ function HistoricoTab({ item }: { item: Item }) {
         ))}
       </ul>
       <Pagination
-        page={current}
+        page={Math.min(page, lastPage)}
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}

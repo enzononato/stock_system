@@ -44,11 +44,13 @@ function DadosTab({ item }: { item: Item }) {
     { label: 'Cadastrado em', value: item.date_registered ? formatDate(item.date_registered) : null },
     { label: 'Emitido em', value: item.date_issued ? formatDate(item.date_issued) : null },
   ])
+  const temColaborador = item.colaborador_id != null || !!item.colaborador_nome
   const colaborador = preenchidas([
     { label: 'Colaborador', value: item.colaborador_nome ?? item.assigned_to },
     { label: 'Setor do colaborador', value: item.colaborador_setor },
     { label: 'Cargo', value: item.colaborador_cargo },
-    { label: 'Superior imediato', value: item.superior_nome },
+    // Com colaborador vinculado a linha sempre aparece: quem consultar sobre o equipamento precisa saber quem é o superior.
+    { label: 'Superior imediato', value: item.superior_nome || (temColaborador ? 'Não informado' : null) },
   ])
   const localizacao = preenchidas([
     { label: 'Local', value: item.local_nome },

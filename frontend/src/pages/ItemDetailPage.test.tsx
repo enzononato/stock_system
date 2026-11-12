@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
-import { screen, waitFor, within } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -130,5 +130,120 @@ describe('registry', () => {
     expect(buildItemDetailTabs(mods, 'Técnico').map((t) => t.id)).toEqual(['c', 'a'])
     expect(buildItemDetailTabs(mods, 'Gestor').map((t) => t.id)).toEqual(['c', 'b', 'a'])
     expect(buildItemDetailTabs(mods, undefined).map((t) => t.id)).toEqual(['c', 'a'])
+  })
+})
+
+describe('ItemDetailPage — superior imediato', () => {
+  it('mostra "Não informado" quando há colaborador mas não há superior', async () => {
+    server.use(http.get('/api/items/7', () => HttpResponse.json({ ...item, superior_nome: null })))
+    renderPage('/items/7')
+    expect(await screen.findByText('Superior imediato')).toBeInTheDocument()
+    expect(screen.getByText('Não informado')).toBeInTheDocument()
+  })
+
+  it('não mostra a linha quando o equipamento não tem colaborador', async () => {
+    server.use(
+      http.get('/api/items/7', () =>
+        HttpResponse.json({ ...item, colaborador_id: null, colaborador_nome: null, superior_nome: null })
+      )
+    )
+    renderPage('/items/7')
+    await screen.findByRole('tablist')
+    expect(screen.queryByText('Superior imediato')).not.toBeInTheDocument()
+  })
+})
+
+describe('ItemDetailPage — paginação do histórico', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  const entrada = (id: number) => ({
+    id,
+    item_id: 7,
+    operation: `Operação ${id}`,
+    data_operacao: '2026-01-10T09:00:00',
+  })
+
+  function mockHistory(total: () => number) {
+    const calls: Array<{ offset: string | null; limit: string | null }> = []
+    server.use(
+      http.get('/api/items/7', () => HttpResponse.json(item)),
+      http.get('/api/history', ({ request }) => {
+        const sp = new URL(request.url).searchParams
+        const offset = sp.get('offset')
+        calls.push({ offset, limit: sp.get('limit') })
+        const t = total()
+        const start = Number(offset)
+        const items = start < t ? [entrada(start + 1)] : []
+        return HttpResponse.json({ items, total: t })
+      })
+    )
+    return calls
+  }
+
+  it('envia limit/offset, avança de página e volta ao offset 0 ao trocar o tamanho', async () => {
+    const calls = mockHistory(() => 120)
+    renderPage('/items/7?aba=historico')
+
+    await screen.findByText('Operação 1')
+    expect(calls[0]).toEqual({ offset: '0', limit: '25' })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Próxima' }))
+    await screen.findByText('Operação 26')
+    expect(calls.at(-1)).toEqual({ offset: '25', limit: '25' })
+
+    const antes = calls.length
+    await userEvent.selectOptions(screen.getByLabelText('Itens por página'), '50')
+    await screen.findByText('Operação 1')
+    // Nenhuma requisição com a página antiga e o tamanho novo.
+    expect(calls.slice(antes)).toEqual([{ offset: '0', limit: '50' }])
+  })
+
+  it('quando o total encolhe e a página passa da última, consulta com o offset ajustado', async () => {
+    let total = 60
+    const calls = mockHistory(() => total)
+    const { client } = renderPage('/items/7?aba=historico')
+
+    await screen.findByText('Operação 1')
+    await userEvent.click(screen.getByRole('button', { name: 'Próxima' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Próxima' }))
+    await screen.findByText('Operação 51')
+    expect(calls.at(-1)).toEqual({ offset: '50', limit: '25' })
+
+    // O histórico encolhe para 30 itens (2 páginas) enquanto o usuário está na página 3.
+    total = 30
+    await act(() => client.invalidateQueries({ queryKey: ['item-history'] }))
+    // A resposta da página 3 vem vazia com total 30 -> o estado vai para a última página (2, offset 25).
+    await screen.findByText('Operação 26')
+    expect(calls.at(-1)).toEqual({ offset: '25', limit: '25' })
+    expect(screen.getByText('2 / 2')).toBeInTheDocument()
+  })
+})
+
+describe('registry — robustez do glob', () => {
+  const Vazio = () => null
+  const valida = (id: string, order: number): ItemDetailTab => ({ id, label: id, order, Component: Vazio })
+
+  it('ignora módulos sem default válido', () => {
+    const mods = {
+      './tabs/a.tsx': { default: valida('a', 20) },
+      './tabs/helper.tsx': {},
+      './tabs/b.tsx': { default: { foo: 1 } },
+      './tabs/c.tsx': { default: valida('c', 10) },
+    }
+    expect(buildItemDetailTabs(mods, 'Gestor').map((t) => t.id)).toEqual(['c', 'a'])
+  })
+
+  it('avisa e ignora ids duplicados', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const mods = {
+      './tabs/a.tsx': { default: valida('x', 10) },
+      './tabs/b.tsx': { default: valida('x', 20) },
+    }
+    const tabs = buildItemDetailTabs(mods, 'Gestor')
+    expect(tabs).toHaveLength(1)
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('duplicado'))
+    warn.mockRestore()
   })
 })
