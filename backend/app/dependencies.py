@@ -1,3 +1,4 @@
+import ipaddress
 from functools import lru_cache
 
 from fastapi import Depends, HTTPException, status, Request
@@ -13,6 +14,8 @@ from app.db.inventory_manager_db import InventoryDBManager
 from app.db.user_manager_db import UserDBManager
 from app.db.token_db import TokenDBManager
 from app.db.unidade_db import UnidadeDBManager
+from app.db.audit_db import AuditDBManager
+from app.services.audit import AuditContext
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -100,6 +103,11 @@ def get_unidade_db() -> UnidadeDBManager:
     return UnidadeDBManager()
 
 
+@lru_cache
+def get_audit_db() -> AuditDBManager:
+    return AuditDBManager()
+
+
 # ── Rate limiting (T2) ──────────────────────────────────────────────────────
 # A aplicação roda atrás de nginx: o IP do cliente real chega no header
 # X-Forwarded-For. Usar apenas request.client.host (padrão do slowapi)
@@ -112,6 +120,42 @@ def get_client_ip(request: Request) -> str:
         # primeiro IP é o do cliente original.
         return forwarded_for.split(",")[0].strip()
     return get_remote_address(request)
+
+
+def _ip_de_proxy_confiavel(host: Optional[str]) -> bool:
+    """Loopback ou rede privada (o nginx do compose): só dele aceitamos o
+    X-Forwarded-For. Um cliente qualquer poderia forjar o header."""
+    try:
+        ip = ipaddress.ip_address(host or "")
+    except ValueError:
+        return False
+    return ip.is_loopback or ip.is_private
+
+
+def _ip_do_cliente(request: Request) -> Optional[str]:
+    host = request.client.host if request.client else None
+    if _ip_de_proxy_confiavel(host):
+        forwarded_for = request.headers.get("X-Forwarded-For")
+        if forwarded_for:
+            primeiro = forwarded_for.split(",")[0].strip()
+            try:
+                return str(ipaddress.ip_address(primeiro))
+            except ValueError:
+                pass  # header malformado: cai para o IP da conexão
+    return host
+
+
+def get_audit_context(
+    request: Request,
+    user: CurrentUser = Depends(get_current_user),
+) -> AuditContext:
+    """Quem está agindo e de onde, para `audit.record(...)`."""
+    return AuditContext(
+        usuario_id=user.id,
+        username=user.username,
+        papel=user.role,
+        ip=_ip_do_cliente(request),
+    )
 
 
 limiter = Limiter(key_func=get_client_ip)

@@ -11,7 +11,7 @@ from slowapi.errors import RateLimitExceeded
 from app.core.config import settings
 from app.db.migrations import aplicar_pendentes, garantir_baseline
 from app.dependencies import limiter, get_inventory_db
-from app.routers import auth, users, items, peripherals, loans, documents, history, reports, constants, unidades
+from app.routers import auth, users, items, peripherals, loans, documents, history, reports, constants, unidades, audit
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +121,7 @@ app.include_router(history.router)
 app.include_router(reports.router)
 app.include_router(constants.router)
 app.include_router(unidades.router)
+app.include_router(audit.router)
 
 
 @app.on_event("startup")
