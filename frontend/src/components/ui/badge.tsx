@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils'
+import { StatusPill } from './StatusPill'
 
 interface BadgeProps {
   children: React.ReactNode
@@ -53,12 +54,7 @@ export function Badge({ children, className, variant = 'default', showDot = fals
   )
 }
 
-/** Mapeia os status do backend (pt-BR) para a cor semântica correspondente. */
-export function StatusBadge({ status }: { status?: string }) {
-  if (!status) return <Badge>-</Badge>
-  if (status === 'Disponível') return <Badge variant="success" showDot>{status}</Badge>
-  if (status === 'Indisponível') return <Badge variant="info" showDot>{status}</Badge>
-  if (status === 'Pendente Devolução') return <Badge variant="purple" showDot>{status}</Badge>
-  if (status.startsWith('Pendente')) return <Badge variant="warning" showDot>{status}</Badge>
-  return <Badge variant="default">{status}</Badge>
+/** Mantido por compatibilidade com as páginas: delega para o `StatusPill`, que deriva o tom do texto. */
+export function StatusBadge({ status }: { status?: string | null }) {
+  return <StatusPill status={status} />
 }
