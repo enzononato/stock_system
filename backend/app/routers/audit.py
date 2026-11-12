@@ -12,6 +12,11 @@ from app.schemas.common import Paginated
 
 logger = logging.getLogger(__name__)
 
+# Faixa aceita em `de`/`ate`: dentro do que o DATETIME do MySQL suporta e longe
+# do estouro de `date` ao somar um dia em `ate`.
+_DATA_MINIMA = date(1000, 1, 1)
+_DATA_MAXIMA = date(9998, 12, 31)
+
 router = APIRouter(prefix="/api/audit", tags=["auditoria"])
 
 
@@ -27,6 +32,11 @@ def listar_auditoria(
     _: CurrentUser = Depends(gestor_only),
     db: AuditDBManager = Depends(get_audit_db),
 ):
+    for limite in (de, ate):
+        if limite is not None and not (_DATA_MINIMA <= limite <= _DATA_MAXIMA):
+            raise HTTPException(status_code=422, detail="Período inválido.")
+    if de is not None and ate is not None and de > ate:
+        raise HTTPException(status_code=422, detail="Período inválido.")
     try:
         rows, total = db.listar(
             entidade=entidade,

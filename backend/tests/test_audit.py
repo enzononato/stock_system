@@ -222,16 +222,98 @@ def test_ip_x_forwarded_for_so_de_proxy_confiavel():
     usuario = CurrentUser(id=3, username="tec", role="Técnico")
 
     # Cliente "testclient" (não é IP privado): o header é ignorado.
-    ctx = get_audit_context(_requisicao("testclient", "203.0.113.9"), usuario)
+    ctx = get_audit_context(_requisicao("testclient", "1.2.3.4"), usuario)
     assert ctx.ip == "testclient"
     assert (ctx.usuario_id, ctx.username, ctx.papel) == (3, "tec", "Técnico")
 
     # IP público direto: o header é ignorado.
-    assert get_audit_context(_requisicao("8.8.4.4", "203.0.113.9"), usuario).ip == "8.8.4.4"
+    assert get_audit_context(_requisicao("8.8.4.4", "1.2.3.4"), usuario).ip == "8.8.4.4"
 
-    # Proxy do compose (rede privada) e loopback: usa o primeiro IP do header.
-    assert get_audit_context(_requisicao("172.18.0.5", "203.0.113.9, 172.18.0.5"), usuario).ip == "203.0.113.9"
-    assert get_audit_context(_requisicao("127.0.0.1", "203.0.113.9"), usuario).ip == "203.0.113.9"
+    # Proxy do compose (rede privada) e loopback: usa o IP anexado pelo proxy.
+    assert get_audit_context(_requisicao("172.18.0.5", "8.8.8.8"), usuario).ip == "8.8.8.8"
+    assert get_audit_context(_requisicao("127.0.0.1", "8.8.8.8"), usuario).ip == "8.8.8.8"
 
     # Sem header: o IP da conexão.
     assert get_audit_context(_requisicao("172.18.0.5"), usuario).ip == "172.18.0.5"
+
+
+@pytest.mark.parametrize(
+    "peer, cadeia, esperado",
+    [
+        # Cadeia forjada pelo cliente: o nginx acrescenta o IP real à direita.
+        ("172.18.0.5", "1.2.3.4, 8.8.4.4", "8.8.4.4"),
+        # Proxies privados intermediários à direita são pulados.
+        ("172.18.0.5", "1.2.3.4, 8.8.4.4, 10.0.0.7", "8.8.4.4"),
+        # Entradas ilegíveis são puladas.
+        ("172.18.0.5", "8.8.4.4, lixo", "8.8.4.4"),
+        # Tudo confiável: vale a entrada válida mais à esquerda.
+        ("172.18.0.5", "10.0.0.9, 192.168.1.4", "10.0.0.9"),
+        # Header sem nenhum IP válido: o par direto.
+        ("172.18.0.5", "lixo, outro", "172.18.0.5"),
+        # Par público: o header é ignorado.
+        ("8.8.4.4", "1.2.3.4, 8.8.8.8", "8.8.4.4"),
+        ("testclient", "1.2.3.4", "testclient"),
+    ],
+)
+def test_ip_real_do_cliente_nao_confia_no_inicio_da_cadeia(peer, cadeia, esperado):
+    from app.dependencies import CurrentUser, get_audit_context, get_client_ip, ip_real_do_cliente
+
+    req = _requisicao(peer, cadeia)
+    assert ip_real_do_cliente(req) == esperado
+    # O limitador de login e a auditoria seguem exatamente a mesma regra.
+    assert get_client_ip(req) == esperado
+    usuario = CurrentUser(id=1, username="u", role="Gestor")
+    assert get_audit_context(req, usuario).ip == esperado
+
+
+# ── Refinamentos da revisão ─────────────────────────────────────────────────
+
+def test_mascarar_qualquer_chave_com_cpf():
+    from app.services.audit import mascarar
+
+    assert mascarar({"cpf_colaborador": "12345678909", "CPF": "98765432100"}) == {
+        "cpf_colaborador": "***.456.789-**",
+        "CPF": "***.654.321-**",
+    }
+
+
+def test_diff_chave_ausente_difere_de_none_e_ordem_estavel():
+    from app.services.audit import diff
+
+    antes, depois = diff({"b": None, "a": 1}, {"a": 1, "b": None, "c": None})
+    assert antes == {"c": None}
+    assert depois == {"c": None}
+
+    antes, depois = diff({"z": 1, "y": 1, "x": 1}, {"z": 2, "y": 2, "x": 2})
+    assert list(antes) == ["x", "y", "z"]
+    assert list(depois) == ["x", "y", "z"]
+
+
+@pytest.mark.integration
+def test_record_grava_datas_em_iso_e_nao_propaga_erro_de_serializacao(limpar_banco):
+    from app.db.database_mysql import get_cursor
+    from app.services import audit
+
+    audit.record(
+        _contexto(), "item", 1, "editar",
+        depois={"quando": datetime(2026, 1, 2, 3, 4, 5), "valor": Decimal("1.50")},
+    )
+    # Valor não serializável em JSON (chave não textual aninhada) não pode derrubar o chamador.
+    audit.record(_contexto(), "item", 2, "editar", depois={"x": {(1, 2): 3}})
+    with get_cursor(commit=False) as cur:
+        cur.execute("SELECT depois FROM audit_log WHERE entidade_id = '1'")
+        assert json.loads(cur.fetchone()["depois"]) == {"quando": "2026-01-02T03:04:05", "valor": "1.50"}
+        cur.execute("SELECT COUNT(*) AS n FROM audit_log WHERE entidade_id = '2'")
+        assert cur.fetchone()["n"] == 0
+
+
+@pytest.mark.integration
+def test_get_audit_periodo_invalido_retorna_422(client_gestor):
+    for params in (
+        {"ate": "9999-12-31"},
+        {"de": "2026-02-01", "ate": "2026-01-01"},
+        {"de": "0001-01-01"},
+    ):
+        resp = client_gestor.get("/api/audit", params=params)
+        assert resp.status_code == 422, params
+        assert resp.json()["detail"] == "Período inválido."

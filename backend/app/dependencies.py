@@ -113,36 +113,46 @@ def get_audit_db() -> AuditDBManager:
 # X-Forwarded-For. Usar apenas request.client.host (padrão do slowapi)
 # rate-limitaria o proxy inteiro como se fosse um único cliente.
 
-def get_client_ip(request: Request) -> str:
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        # O header pode conter uma cadeia "cliente, proxy1, proxy2"; o
-        # primeiro IP é o do cliente original.
-        return forwarded_for.split(",")[0].strip()
-    return get_remote_address(request)
-
-
-def _ip_de_proxy_confiavel(host: Optional[str]) -> bool:
-    """Loopback ou rede privada (o nginx do compose): só dele aceitamos o
-    X-Forwarded-For. Um cliente qualquer poderia forjar o header."""
+def _parse_ip(texto: str):
     try:
-        ip = ipaddress.ip_address(host or "")
+        return ipaddress.ip_address(texto.strip())
     except ValueError:
-        return False
-    return ip.is_loopback or ip.is_private
+        return None
 
 
-def _ip_do_cliente(request: Request) -> Optional[str]:
-    host = request.client.host if request.client else None
-    if _ip_de_proxy_confiavel(host):
-        forwarded_for = request.headers.get("X-Forwarded-For")
-        if forwarded_for:
-            primeiro = forwarded_for.split(",")[0].strip()
-            try:
-                return str(ipaddress.ip_address(primeiro))
-            except ValueError:
-                pass  # header malformado: cai para o IP da conexão
-    return host
+def _ip_confiavel(ip) -> bool:
+    """Loopback ou rede privada (o nginx do compose)."""
+    return ip is not None and (ip.is_loopback or ip.is_private)
+
+
+def ip_real_do_cliente(request: Request) -> str:
+    """IP do cliente real, sem confiar em X-Forwarded-For forjado.
+
+    O nginx do compose usa `$proxy_add_x_forwarded_for`, que ACRESCENTA o IP
+    do cliente ao que ele mandou: a cadeia chega como "<forjado>, <real>" e o
+    primeiro item é controlado pelo atacante. Por isso:
+    - se o par direto não é proxy confiável (loopback/privado), vale o par e o
+      header é ignorado;
+    - senão, percorre a cadeia da DIREITA para a ESQUERDA e devolve o primeiro
+      IP que não é confiável (entradas ilegíveis são puladas);
+    - se todas forem confiáveis, devolve a mais à esquerda que seja válida;
+      sem nenhuma válida, o par direto.
+    """
+    peer = request.client.host if request.client else get_remote_address(request)
+    if not _ip_confiavel(_parse_ip(peer)):
+        return peer
+    cadeia = request.headers.get("X-Forwarded-For", "")
+    validos = [ip for ip in (_parse_ip(p) for p in cadeia.split(",")) if ip is not None]
+    for ip in reversed(validos):
+        if not _ip_confiavel(ip):
+            return str(ip)
+    if validos:
+        return str(validos[0])
+    return peer
+
+
+def get_client_ip(request: Request) -> str:
+    return ip_real_do_cliente(request)
 
 
 def get_audit_context(
@@ -154,7 +164,7 @@ def get_audit_context(
         usuario_id=user.id,
         username=user.username,
         papel=user.role,
-        ip=_ip_do_cliente(request),
+        ip=ip_real_do_cliente(request),
     )
 
 

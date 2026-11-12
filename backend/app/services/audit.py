@@ -45,7 +45,11 @@ def _mascarar_cpf(valor: Any) -> Any:
 def _mascarar_valor(valor: Any) -> Any:
     if isinstance(valor, dict):
         return {
-            chave: _mascarar_cpf(v) if str(chave).lower() == "cpf" else _mascarar_valor(v)
+            chave: (
+                _mascarar_cpf(v)
+                if "cpf" in str(chave).lower() and not isinstance(v, (dict, list, tuple))
+                else _mascarar_valor(v)
+            )
             for chave, v in valor.items()
         }
     if isinstance(valor, (list, tuple)):
@@ -54,16 +58,28 @@ def _mascarar_valor(valor: Any) -> Any:
 
 
 def mascarar(valor: Optional[dict]) -> Optional[dict]:
-    """Cópia de `valor` com a chave `cpf` mascarada (recursivo em dicts/listas)."""
+    """Cópia de `valor` com mascarado todo valor cuja chave contém `cpf`
+    (`cpf`, `cpf_colaborador`...), recursivo em dicts/listas."""
     if valor is None:
         return None
     return _mascarar_valor(valor)
 
 
 def _serializar(valor: Any) -> Any:
-    if isinstance(valor, (datetime, date, Decimal)):
-        return str(valor.isoformat() if isinstance(valor, (datetime, date)) else valor)
+    """Datas em ISO e decimais como texto; demais valores ficam como estão."""
+    if isinstance(valor, (datetime, date)):
+        return valor.isoformat()
+    if isinstance(valor, Decimal):
+        return str(valor)
     return valor
+
+
+def _default_json(valor: Any) -> Any:
+    serializado = _serializar(valor)
+    return serializado if serializado is not valor else str(valor)
+
+
+_AUSENTE = object()
 
 
 def diff(
@@ -79,19 +95,20 @@ def diff(
         )
     novo_antes: dict = {}
     novo_depois: dict = {}
-    for chave in antes.keys() | depois.keys():
-        a = _serializar(antes.get(chave))
-        d = _serializar(depois.get(chave))
+    for chave in sorted(antes.keys() | depois.keys(), key=str):
+        a = _serializar(antes.get(chave, _AUSENTE))
+        d = _serializar(depois.get(chave, _AUSENTE))
         if a != d:
-            novo_antes[chave] = a
-            novo_depois[chave] = d
+            # Chave ausente de um lado aparece como None nesse lado.
+            novo_antes[chave] = None if a is _AUSENTE else a
+            novo_depois[chave] = None if d is _AUSENTE else d
     return novo_antes, novo_depois
 
 
 def _json(valor: Optional[dict]) -> Optional[str]:
     if valor is None:
         return None
-    return json.dumps(mascarar(valor), ensure_ascii=False, default=str)
+    return json.dumps(mascarar(valor), ensure_ascii=False, default=_default_json)
 
 
 _INSERT = (
@@ -116,24 +133,26 @@ def record(
     Sem `cur`: abre `get_cursor()` próprio; em erro faz `logger.exception` e
     NÃO propaga.
     """
-    params = (
-        datetime.now(timezone.utc).replace(tzinfo=None),  # UTC, sem fuso (DATETIME)
-        ctx.usuario_id,
-        ctx.username,
-        ctx.papel,
-        ctx.ip,
-        entidade,
-        None if entidade_id is None else str(entidade_id),
-        acao,
-        _json(antes),
-        _json(depois),
-    )
+    def _params() -> tuple:
+        return (
+            datetime.now(timezone.utc).replace(tzinfo=None),  # UTC, sem fuso (DATETIME)
+            ctx.usuario_id,
+            ctx.username,
+            ctx.papel,
+            ctx.ip,
+            entidade,
+            None if entidade_id is None else str(entidade_id),
+            acao,
+            _json(antes),
+            _json(depois),
+        )
+
     if cur is not None:
-        cur.execute(_INSERT, params)
+        cur.execute(_INSERT, _params())
         return
     try:
         with get_cursor(dict_cursor=False) as proprio:
-            proprio.execute(_INSERT, params)
+            proprio.execute(_INSERT, _params())
     except Exception:
         logger.exception(
             "Falha ao registrar auditoria (entidade=%s, id=%s, acao=%s).",
