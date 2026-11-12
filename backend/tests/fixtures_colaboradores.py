@@ -63,7 +63,12 @@ def base_rh(monkeypatch):
     try:
         admin = psycopg.connect(admin_url, autocommit=True, connect_timeout=5)
     except Exception as e:  # noqa: BLE001
-        pytest.skip(f"Postgres de teste inacessível ({type(e).__name__}).")
+        # Variável definida mas Postgres fora do ar: é falha de ambiente que não pode passar despercebida.
+        pytest.fail(
+            "COLAB_TEST_PG_ADMIN_URL está definido, mas o Postgres de teste está inacessível "
+            f"({type(e).__name__}). Suba o dev-postgres (localhost:5433) ou remova a variável.",
+            pytrace=False,
+        )
 
     try:
         admin.execute(f'DROP DATABASE IF EXISTS "{nome_db}" WITH (FORCE)')

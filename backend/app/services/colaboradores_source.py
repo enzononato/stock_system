@@ -28,6 +28,14 @@ from app.core import config as _config
 
 logger = logging.getLogger(__name__)
 
+# Limite por comando: connect_timeout só cobre a conexão; consulta lenta/lock não pode travar a requisição.
+STATEMENT_TIMEOUT_MS = 30000
+
+
+def _descrever_erro(e: Exception) -> str:
+    sqlstate = getattr(e, "sqlstate", None)
+    return f"{type(e).__name__}, sqlstate={sqlstate}" if sqlstate else type(e).__name__
+
 MSG_INDISPONIVEL = "Base de colaboradores indisponível no momento."
 
 
@@ -102,15 +110,31 @@ def _so_digitos(valor: object) -> str:
     return re.sub(r"\D", "", "" if valor is None else str(valor))
 
 
+def cpf_valido(cpf: str) -> bool:
+    """CPF com 11 dígitos (máscara tolerada), não todos iguais e dígitos verificadores corretos."""
+    digitos = _so_digitos(cpf)
+    if len(digitos) != 11 or len(set(digitos)) == 1:
+        return False
+    for tamanho in (9, 10):
+        soma = sum(int(d) * peso for d, peso in zip(digitos[:tamanho], range(tamanho + 1, 1, -1)))
+        if int(digitos[tamanho]) != (soma * 10 % 11) % 10:
+            return False
+    return True
+
+
 def _parse_override(override: str) -> dict[str, str]:
     resultado: dict[str, str] = {}
     for parte in (override or "").split(","):
         if "=" not in parte:
             continue
         campo, coluna = parte.split("=", 1)
-        campo, coluna = campo.strip().lower(), coluna.strip()
-        if campo in CAMPOS and coluna:
-            resultado[campo] = coluna
+        campo, coluna = campo.strip(), coluna.strip()
+        if not campo and not coluna:
+            continue
+        if campo.lower() not in CAMPOS:
+            raise ColaboradoresSourceError(f"COLABORADORES_COLUMNS: campo desconhecido '{campo}'.")
+        if coluna:
+            resultado[campo.lower()] = coluna
     return resultado
 
 
@@ -157,7 +181,7 @@ def normalizar_situacao(valor: object, demissao: object = None) -> Literal["ativ
     texto = _sem_acento(str(valor)).strip().lower() if valor is not None else ""
     if texto in ("false", "0", "n", "nao"):
         return "desligado"
-    if any(chave in texto for chave in ("deslig", "demit", "inativ", "rescis")):
+    if any(chave in texto for chave in ("deslig", "demit", "demiss", "inativ", "desativ", "rescis", "rescin", "encerr")):
         return "desligado"
     if any(chave in texto for chave in ("afast", "licen")):
         return "afastado"
@@ -174,15 +198,23 @@ def conectar() -> psycopg.Connection:
     if not url:
         raise ColaboradoresIndisponivel()
     try:
-        return psycopg.connect(
+        conn = psycopg.connect(
             url,
             connect_timeout=10,
-            options="-c default_transaction_read_only=on",
+            options=f"-c default_transaction_read_only=on -c statement_timeout={STATEMENT_TIMEOUT_MS}",
         )
     except psycopg.Error as e:
-        # Só o tipo do erro: a mensagem do driver pode trazer host/usuário da conexão.
-        logger.error("Falha ao conectar na base de colaboradores (%s).", type(e).__name__)
+        # Só tipo/SQLSTATE do erro: a mensagem do driver pode trazer host/usuário da conexão.
+        logger.error("Falha ao conectar na base de colaboradores (%s).", _descrever_erro(e))
         raise ColaboradoresIndisponivel() from None
+    try:
+        # Reforço: se um pooler descartar as opções de startup, a sessão do driver continua read-only.
+        conn.read_only = True
+    except psycopg.Error as e:
+        conn.close()
+        logger.error("Falha ao preparar a sessão da base de colaboradores (%s).", _descrever_erro(e))
+        raise ColaboradoresIndisponivel() from None
+    return conn
 
 
 def _descobrir_na_base(conn: psycopg.Connection) -> dict[str, str]:
@@ -215,14 +247,20 @@ def _consultar(conn: psycopg.Connection, mapa: dict[str, str], cpf_digitos: str 
         consulta += sql.SQL(
             " WHERE length({d}) BETWEEN 1 AND 11 AND lpad({d}, 11, '0') = %s"
         ).format(d=digitos_coluna)
+        consulta += sql.SQL(" ORDER BY {nome}").format(nome=sql.Identifier(mapa["nome"]))
         params = (cpf_digitos,)
 
     resultado: list[ColaboradorRH] = []
+    cpf_ruim = nome_vazio = 0
     for linha in conn.execute(consulta, params).fetchall():
         bruto = dict(zip(campos, linha))
         digitos = _so_digitos(bruto.get("cpf"))
         nome = _texto_ou_none(bruto.get("nome"))
-        if not digitos or len(digitos) > 11 or not nome:
+        if not digitos or len(digitos) > 11:
+            cpf_ruim += 1
+            continue
+        if not nome:
+            nome_vazio += 1
             continue
         resultado.append(
             ColaboradorRH(
@@ -238,6 +276,13 @@ def _consultar(conn: psycopg.Connection, mapa: dict[str, str], cpf_digitos: str 
                 gestor_nome=_texto_ou_none(bruto.get("gestor")),
             )
         )
+    if cpf_ruim or nome_vazio:
+        # Só contagens, nunca dados pessoais.
+        logger.info(
+            "Base de colaboradores: %d linha(s) ignorada(s) por CPF vazio/maior que 11 dígitos e %d por nome vazio.",
+            cpf_ruim,
+            nome_vazio,
+        )
     return resultado
 
 
@@ -248,7 +293,7 @@ def _executar(cpf_digitos: str | None) -> list[ColaboradorRH]:
     except ColaboradoresSourceError:
         raise
     except psycopg.Error as e:
-        logger.error("Falha ao consultar a base de colaboradores (%s).", type(e).__name__)
+        logger.error("Falha ao consultar a base de colaboradores (%s).", _descrever_erro(e))
         raise ColaboradoresIndisponivel() from None
 
 

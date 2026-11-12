@@ -65,6 +65,11 @@ def test_normalizar_nome_coluna():
         ("Afastado", None, "afastado"),
         ("Licença maternidade", None, "afastado"),
         ("Afastado", "2024-03-01", "desligado"),
+        ("Desativado", None, "desligado"),
+        ("Demissão", None, "desligado"),
+        ("Rescindido", None, "desligado"),
+        ("Contrato rescindido", None, "desligado"),
+        ("Encerrado", None, "desligado"),
     ],
 )
 def test_normalizar_situacao(valor, demissao, esperado):
@@ -112,8 +117,63 @@ def test_buscar_por_cpf(base_rh):
 
 def test_sessao_somente_leitura(base_rh):
     with src.conectar() as conn:
+        assert conn.read_only is True
+        assert conn.execute("SHOW statement_timeout").fetchone()[0] == "30s"
         with pytest.raises(psycopg.errors.ReadOnlySqlTransaction):
             conn.execute('INSERT INTO "colaboradores-revalle" ("CPF", "Nome Completo") VALUES (%s, %s)', ("1", "X"))
+
+
+def test_override_com_campo_desconhecido_levanta():
+    with pytest.raises(src.ColaboradoresSourceError, match="COLABORADORES_COLUMNS: campo desconhecido 'cpff'."):
+        src.descobrir_colunas(["CPF", "Nome Completo"], override="cpff=CPF")
+
+
+def test_descoberta_nao_mapeia_data_nascimento(base_rh):
+    with src.conectar() as conn:
+        mapa = src._descobrir_na_base(conn)
+    assert "Data Nascimento" not in mapa.values()
+    assert mapa["cpf"] == "CPF" and mapa["nome"] == "Nome Completo"
+
+
+@pytest.mark.parametrize(
+    "cpf,esperado",
+    [
+        ("52998224725", True),
+        ("529.982.247-25", True),
+        ("11144477735", True),
+        ("52998224726", False),
+        ("11111111111", False),
+        ("00000000000", False),
+        ("123", False),
+        ("123456789012", False),
+        ("", False),
+        ("abc", False),
+    ],
+)
+def test_cpf_valido(cpf, esperado):
+    assert src.cpf_valido(cpf) is esperado
+
+
+def test_ler_todos_registra_ignoradas_sem_pii(base_rh, caplog):
+    import logging
+
+    base_rh(
+        'INSERT INTO "colaboradores-revalle" ("CPF", "Nome Completo") VALUES (%s, %s), (%s, %s)',
+        ("123456789012", "Fulano Segredo", "39053344705", " "),
+    )
+    with caplog.at_level(logging.INFO, logger="app.services.colaboradores_source"):
+        src.ler_todos()
+    mensagens = " ".join(r.getMessage() for r in caplog.records)
+    assert "1 linha(s) ignorada(s) por CPF" in mensagens and "1 por nome vazio" in mensagens
+    assert "Fulano" not in mensagens and "39053344705" not in mensagens
+
+
+def test_buscar_por_cpf_duplicado_resolve_pelo_nome(base_rh):
+    base_rh(
+        'INSERT INTO "colaboradores-revalle" ("CPF", "Nome Completo") VALUES (%s, %s), (%s, %s)',
+        ("529.982.247-25", "Zuleica Duplicada", "52998224725", "Abel Duplicado"),
+    )
+    assert src.buscar_por_cpf(CPF_ATIVO).nome == "Abel Duplicado"
 
 
 def test_url_vazia_indisponivel(monkeypatch):
