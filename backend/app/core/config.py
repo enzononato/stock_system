@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     SMTP_USER: str = ""
     SMTP_PASS: str = ""
     SMTP_FROM: str = ""
+    # Verifica o certificado TLS do servidor SMTP. Só desative se o certificado
+    # do servidor de e-mail não corresponder ao nome do host.
+    SMTP_VERIFY_TLS: bool = True
 
     # Base de colaboradores (Postgres, somente leitura) e sincronização diária
     COLABORADORES_DATABASE_URL: str = ""

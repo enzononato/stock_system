@@ -8,6 +8,7 @@ import html as _html
 import logging
 import re
 import smtplib
+import ssl
 from dataclasses import dataclass
 from email.message import EmailMessage
 from pathlib import Path
@@ -40,8 +41,23 @@ def limpar_outbox() -> None:
     outbox.clear()
 
 
+def _formatar_link(url: str, rotulo_html: str) -> str:
+    # As entidades HTML são decodificadas depois, uma única vez, em _html_para_texto.
+    rotulo = re.sub(r"<[^>]+>", "", rotulo_html).strip()
+    url = url.strip()
+    if not url or url == rotulo:
+        return rotulo
+    return f"{rotulo} ({url})" if rotulo else url
+
+
 def _html_para_texto(html: str) -> str:
     texto = re.sub(r"(?is)<(script|style|head)\b.*?</\1\s*>", "", html)
+    # Links viram "rótulo (URL)" para que a URL não se perca no texto puro.
+    texto = re.sub(
+        r"""(?is)<a\b[^>]*?\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')[^>]*>(.*?)</a\s*>""",
+        lambda m: _formatar_link(m.group(1) or m.group(2) or "", m.group(3)),
+        texto,
+    )
     texto = re.sub(r"(?i)<br\s*/?>|</(p|div|h[1-6]|tr|li)\s*>", "\n", texto)
     texto = re.sub(r"<[^>]+>", "", texto)
     texto = _html.unescape(texto)
@@ -49,8 +65,31 @@ def _html_para_texto(html: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", "\n".join(linhas)).strip()
 
 
+def _contexto_tls() -> ssl.SSLContext:
+    """Contexto TLS: verifica certificado e hostname, salvo SMTP_VERIFY_TLS=false."""
+    contexto = ssl.create_default_context()
+    if not settings.SMTP_VERIFY_TLS:
+        logger.warning("SMTP_VERIFY_TLS desativado: o certificado do servidor SMTP não será verificado.")
+        contexto.check_hostname = False
+        contexto.verify_mode = ssl.CERT_NONE
+    return contexto
+
+
+def _validar_destinatarios(to: str | list[str]) -> list[str]:
+    brutos = [to] if isinstance(to, str) else list(to)
+    validos = []
+    for end in brutos:
+        limpo = end.strip() if isinstance(end, str) else ""
+        if not limpo or re.search(r"[\r\n]", limpo):
+            raise MailError("Destinatário de e-mail inválido.")
+        validos.append(limpo)
+    if not validos:
+        raise MailError("Destinatário de e-mail inválido.")
+    return validos
+
+
 def send_mail(to: str | list[str], subject: str, html: str, text: str | None = None) -> None:
-    destinatarios = [to] if isinstance(to, str) else list(to)
+    destinatarios = _validar_destinatarios(to)
     assunto = re.sub(r"[\r\n]+", " ", subject).strip()
     corpo_texto = text if text is not None else _html_para_texto(html)
 
@@ -69,13 +108,16 @@ def send_mail(to: str | list[str], subject: str, html: str, text: str | None = N
         msg.set_content(corpo_texto)
         msg.add_alternative(html, subtype="html")
 
+        contexto = _contexto_tls()
         if settings.SMTP_PORT == 465:
-            conexao = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=SMTP_TIMEOUT)
+            conexao = smtplib.SMTP_SSL(
+                settings.SMTP_HOST, settings.SMTP_PORT, timeout=SMTP_TIMEOUT, context=contexto
+            )
         else:
             conexao = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=SMTP_TIMEOUT)
         with conexao as smtp:
             if settings.SMTP_PORT != 465:
-                smtp.starttls()
+                smtp.starttls(context=contexto)
             if settings.SMTP_USER:
                 smtp.login(settings.SMTP_USER, settings.SMTP_PASS)
             smtp.send_message(msg)

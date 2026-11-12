@@ -1,5 +1,7 @@
 """Testes unitários do serviço de e-mail (app/services/mail.py). Sem rede nem banco."""
 import smtplib
+import ssl
+from email.header import decode_header, make_header
 
 import pytest
 
@@ -18,6 +20,8 @@ class _SMTPFalso:
 
     def __init__(self, host, port, timeout=None, **kwargs):
         self.host, self.port, self.timeout = host, port, timeout
+        self.context = kwargs.get("context")
+        self.starttls_context = None
         self.chamadas: list = []
         self.mensagens: list = []
         _SMTPFalso.instancias.append(self)
@@ -31,6 +35,7 @@ class _SMTPFalso:
         return False
 
     def starttls(self, *a, **k):
+        self.starttls_context = k.get("context")
         self.chamadas.append("starttls")
 
     def login(self, user, senha):
@@ -161,3 +166,68 @@ def test_render_email_sem_botao():
 def test_render_email_nao_reinterpreta_marcadores():
     html = render_email("{{CORPO}}", "<p>x</p>")
     assert html.count("<p>x</p>") == 1
+
+
+def test_tls_verificado_por_padrao_na_porta_465():
+    send_mail("a@b.com", "Assunto", "<p>Oi</p>")
+    ctx = _SMTPFalso.instancias[0].context
+    assert isinstance(ctx, ssl.SSLContext)
+    assert ctx.check_hostname is True
+    assert ctx.verify_mode == ssl.CERT_REQUIRED
+
+
+def test_tls_verificado_por_padrao_no_starttls(monkeypatch):
+    monkeypatch.setattr(settings, "SMTP_PORT", 587)
+    send_mail("a@b.com", "Assunto", "<p>Oi</p>")
+    ctx = _SMTPFalso.instancias[0].starttls_context
+    assert isinstance(ctx, ssl.SSLContext)
+    assert ctx.check_hostname is True
+    assert ctx.verify_mode == ssl.CERT_REQUIRED
+
+
+@pytest.mark.parametrize("porta", [465, 587])
+def test_tls_sem_verificacao_quando_desativado(monkeypatch, caplog, porta):
+    monkeypatch.setattr(settings, "SMTP_PORT", porta)
+    monkeypatch.setattr(settings, "SMTP_VERIFY_TLS", False)
+    with caplog.at_level("WARNING"):
+        send_mail("a@b.com", "Assunto", "<p>Oi</p>")
+    smtp = _SMTPFalso.instancias[0]
+    ctx = smtp.context if porta == 465 else smtp.starttls_context
+    assert ctx.check_hostname is False
+    assert ctx.verify_mode == ssl.CERT_NONE
+    avisos = [r for r in caplog.records if r.levelname == "WARNING"]
+    assert len(avisos) == 1
+    assert "segredo-smtp" not in caplog.text
+
+
+def test_texto_alternativo_inclui_url_do_link():
+    url = "https://app.exemplo.com/reset?token=abc&x=1"
+    html = render_email("Redefinir senha", "<p>Clique abaixo.</p>", url, "Redefinir senha")
+    send_mail("a@b.com", "Assunto", html)
+    texto = _SMTPFalso.instancias[0].mensagens[0].get_body(("plain",)).get_content()
+    assert f"Redefinir senha ({url})" in texto
+    assert "&amp;" not in texto
+    assert "{{" not in texto
+
+
+def test_texto_alternativo_link_com_href_igual_ao_rotulo():
+    assert mail._html_para_texto('<a href="https://x.com">https://x.com</a>') == "https://x.com"
+
+
+@pytest.mark.parametrize("destino", ["a@b.com\r\nBcc: x@y.com", "", "   ", ["ok@b.com", "x@y.com\nz@w.com"], []])
+def test_destinatario_invalido_vira_mail_error(destino):
+    with pytest.raises(MailError) as exc:
+        send_mail(destino, "Assunto", "<p>Oi</p>")
+    assert str(exc.value) == "Destinatário de e-mail inválido."
+    assert _SMTPFalso.instancias == []
+
+
+def test_destinatario_e_limpo_de_espacos():
+    send_mail("  a@b.com ", "Assunto", "<p>Oi</p>")
+    assert _SMTPFalso.instancias[0].mensagens[0]["To"] == "a@b.com"
+
+
+def test_assunto_com_acento_e_decodificado():
+    send_mail("a@b.com", "Redefinição de senha", "<p>Oi</p>")
+    cabecalho = _SMTPFalso.instancias[0].mensagens[0]["Subject"]
+    assert str(make_header(decode_header(str(cabecalho)))) == "Redefinição de senha"
