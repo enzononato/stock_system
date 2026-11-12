@@ -30,9 +30,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import { LocaisDialog } from '@/components/locais/LocaisDialog'
 import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Pencil, Ban, BarChart3, RotateCcw, Loader2 } from 'lucide-react'
+import { Pencil, Ban, BarChart3, MapPin, RotateCcw, Loader2 } from 'lucide-react'
 
 // --- Validação e máscaras -----------------------------------------------------
 // `lib/utils.ts` (fora da posse deste módulo) já tem `isValidCpf` seguindo o
@@ -167,19 +168,21 @@ function IndicadoresPanel({ dados }: { dados: IndicadoresUnidade }) {
 
 // --- Página ---------------------------------------------------------------------
 
-const emptyForm = { nome: '', razaoSocial: '', cnpj: '', endereco: '', cep: '', cidade: '', uf: '' }
+const emptyForm = { nome: '', razaoSocial: '', cnpj: '', endereco: '', cep: '', cidade: '', uf: '', aliasRh: '' }
 
 export default function UnidadesPage() {
   const queryClient = useQueryClient()
 
   const [editingId, setEditingId] = useState<number | null>(null)
   const [originalNome, setOriginalNome] = useState('')
+  const [originalAliasRh, setOriginalAliasRh] = useState('')
   const [form, setForm] = useState(emptyForm)
 
   const [confirmRenameOpen, setConfirmRenameOpen] = useState(false)
   const [pendingData, setPendingData] = useState<UnidadeInput | null>(null)
 
   const [indicadoresUnidadeId, setIndicadoresUnidadeId] = useState<number | null>(null)
+  const [locaisUnidade, setLocaisUnidade] = useState<Unidade | null>(null)
 
   // Por padrão a lista só traz as unidades ativas (o dia a dia de
   // Cadastrar/Emprestar). Sem esta alternância, uma unidade inativada some da
@@ -210,6 +213,7 @@ export default function UnidadesPage() {
   function resetForm() {
     setEditingId(null)
     setOriginalNome('')
+    setOriginalAliasRh('')
     setForm(emptyForm)
   }
 
@@ -261,6 +265,7 @@ export default function UnidadesPage() {
   function startEdit(u: Unidade) {
     setEditingId(u.id)
     setOriginalNome(u.nome)
+    setOriginalAliasRh(u.alias_rh ?? '')
     setForm({
       nome: u.nome,
       razaoSocial: u.razao_social,
@@ -269,6 +274,7 @@ export default function UnidadesPage() {
       cep: u.cep ?? '',
       cidade: u.cidade ?? '',
       uf: u.uf ?? '',
+      aliasRh: u.alias_rh ?? '',
     })
   }
 
@@ -293,6 +299,7 @@ export default function UnidadesPage() {
       toast('UF deve ter exatamente 2 letras.', 'error')
       return null
     }
+    const aliasRh = form.aliasRh.trim()
     return {
       nome: form.nome.trim(),
       razao_social: form.razaoSocial.trim(),
@@ -301,6 +308,8 @@ export default function UnidadesPage() {
       cep: form.cep.trim() || undefined,
       cidade: form.cidade.trim() || undefined,
       uf: form.uf.trim() || undefined,
+      // Vazio: na criação não envia; na edição só envia '' se havia valor (limpar).
+      alias_rh: aliasRh || (editingId !== null && originalAliasRh ? '' : undefined),
     }
   }
 
@@ -348,7 +357,7 @@ export default function UnidadesPage() {
       header: 'Nome',
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
-          <span className={row.original.is_active ? '' : 'text-muted-foreground line-through'}>
+          <span className={row.original.is_active ? 'uppercase' : 'uppercase text-muted-foreground line-through'}>
             {row.original.nome}
           </span>
           {!row.original.is_active && <Badge variant="default">Inativa</Badge>}
@@ -378,6 +387,14 @@ export default function UnidadesPage() {
             onClick={() => setIndicadoresUnidadeId(row.original.id)}
           >
             <BarChart3 size={14} />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-label={`Locais da unidade ${row.original.nome}`}
+            onClick={() => setLocaisUnidade(row.original)}
+          >
+            <MapPin size={14} />
           </Button>
           <Button
             size="sm"
@@ -489,6 +506,15 @@ export default function UnidadesPage() {
             />
           </div>
           <div className="flex flex-col gap-1.5">
+            <Label htmlFor="unidade-alias-rh">Nome na base de RH</Label>
+            <Input
+              id="unidade-alias-rh"
+              value={form.aliasRh}
+              onChange={(e) => setForm((f) => ({ ...f, aliasRh: e.target.value }))}
+              placeholder="Como a unidade aparece no RH (opcional)"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
             <Label htmlFor="unidade-endereco">Endereço</Label>
             <Input
               id="unidade-endereco"
@@ -588,6 +614,14 @@ export default function UnidadesPage() {
       ) : (
         <DataTable data={unidades} columns={columns} searchPlaceholder="Buscar unidade..." />
       )}
+
+      <LocaisDialog
+        unidade={locaisUnidade}
+        open={locaisUnidade !== null}
+        onOpenChange={(open) => {
+          if (!open) setLocaisUnidade(null)
+        }}
+      />
 
       {/* Indicadores */}
       {indicadoresUnidadeId !== null && (
