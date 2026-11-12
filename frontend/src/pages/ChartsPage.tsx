@@ -69,7 +69,7 @@ function mensagem403Unidade(error: unknown): string | undefined {
  * para usar classe do Tailwind aqui — é preciso resolver o valor computado.
  *
  * Os valores reproduzem a FT_STC, que usava `var(--foreground)`,
- * `var(--muted-foreground)`, `var(--primary)` e `var(--text-muted)` direto nas
+ * `var(--muted-foreground)`, `var(--brand-text)` (antes --primary, ilegível em azul sobre o preto) e `var(--text-muted)` direto nas
  * props. --foreground e --muted-foreground são aliases de --text-primary e
  * --text-secondary (index.css), então lemos os tokens de base.
  */
@@ -85,7 +85,7 @@ const CORES_GRAFICO = {
   /** Linha e pontos da série secundária (equivale a --muted-foreground). */
   serie2: () => corDoToken('--text-secondary', '#5F5F5A'),
   /** Degradê sob a série de empréstimos do gráfico principal. */
-  degradePrimario: () => corDoToken('--primary', '#111111'),
+  degradePrimario: () => corDoToken('--brand-text', '#0131CD'),
   /** Degradê sob a série de devoluções do gráfico principal. */
   degradeSecundario: () => corDoToken('--text-muted', '#85857E'),
   grade: () => corDoToken('--border', '#D9D9D4'),

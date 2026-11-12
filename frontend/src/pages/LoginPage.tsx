@@ -77,7 +77,7 @@ export default function LoginPage() {
             </div>
             <div>
               <span className="text-sm font-bold tracking-tight text-foreground">Revalle</span>
-              <span className="ml-2 rounded border border-[var(--login-border)] bg-[var(--login-wash)] px-1.5 py-0.5 text-[10px] font-semibold text-primary uppercase">
+              <span className="ml-2 rounded border border-[var(--login-border)] bg-[var(--login-wash)] px-1.5 py-0.5 text-[10px] font-semibold text-brand-text uppercase">
                 Enterprise Core
               </span>
             </div>
@@ -108,7 +108,7 @@ export default function LoginPage() {
 
         {/* Rodapé institucional */}
         <div className="relative z-10 space-y-3 shrink-0">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-brand-text">
             <Sparkles className="size-3.5" />
             <span>Controle Patrimonial de Alto Desempenho</span>
           </div>

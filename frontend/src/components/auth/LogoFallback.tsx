@@ -14,7 +14,7 @@ export function LogoFallback() {
 
       {/* Card/Insígnia geométrica Solvd */}
       <div className="relative flex flex-col items-center rounded-2xl border border-[var(--login-border)] bg-[var(--login-glass)] p-8 backdrop-blur-xl shadow-2xl transition-transform duration-300 hover:border-[var(--login-border-strong)]">
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 rounded-full border border-[var(--login-border-strong)] bg-[var(--login-glass)] px-3 py-0.5 text-[10px] font-semibold tracking-wider text-primary uppercase">
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 rounded-full border border-[var(--login-border-strong)] bg-[var(--login-glass)] px-3 py-0.5 text-[10px] font-semibold tracking-wider text-brand-text uppercase">
           <Cpu className="size-3" />
           <span>Controle de Patrimônio</span>
         </div>
@@ -36,7 +36,7 @@ export function LogoFallback() {
           TI.
         </p>
 
-        <div className="mt-5 flex items-center gap-2 text-[11px] font-medium text-primary">
+        <div className="mt-5 flex items-center gap-2 text-[11px] font-medium text-brand-text">
           <ShieldCheck className="size-3.5" />
           <span>Sessão protegida por criptografia</span>
         </div>
