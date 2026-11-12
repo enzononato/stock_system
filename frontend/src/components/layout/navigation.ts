@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react'
-import type { LucideIcon } from 'lucide-react'
+import { Contact, type LucideIcon } from 'lucide-react'
 import {
   DashboardIcon,
   EstoqueIcon,
@@ -82,6 +82,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { to: '/users', label: 'Usuários', icon: UsuariosIcon, roles: ['Gestor'] },
       { to: '/unidades', label: 'Unidades', icon: EmpresasIcon, roles: ['Gestor'] },
+      { to: '/colaboradores', label: 'Colaboradores', icon: Contact, roles: ['Gestor', 'Técnico'] },
       { to: '/terms', label: 'Termos de Resp.', icon: TermosIcon, roles: ['Gestor', 'Técnico'] },
       { to: '/report', label: 'Relatórios', icon: RelatoriosIcon, roles: ['Gestor', 'Técnico'] },
       { to: '/charts', label: 'Indicadores', icon: DashboardIcon },
