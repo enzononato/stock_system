@@ -49,6 +49,8 @@ export interface ListItemsParams {
   status?: string
   revenda?: string
   search?: string
+  /** Só equipamentos com este colaborador. */
+  colaborador_id?: number
   limit?: number
   offset?: number
 }

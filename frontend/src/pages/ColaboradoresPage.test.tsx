@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { screen, waitFor, within } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { server } from '@/test/server'
 import { renderWithClient } from '@/test/render'
@@ -84,10 +85,10 @@ function mockBase(opts: { items?: Colaborador[]; total?: number; sync?: unknown 
 
 function renderPage() {
   return renderWithClient(
-    <>
+    <MemoryRouter>
       <ColaboradoresPage />
       <ToastContainer />
-    </>
+    </MemoryRouter>
   )
 }
 
@@ -97,6 +98,14 @@ beforeEach(() => {
 })
 
 describe('ColaboradoresPage', () => {
+  it('o nome do colaborador é um link para o detalhe', async () => {
+    mockBase()
+    renderPage()
+    const link = await screen.findByRole('link', { name: 'MARIA SILVA' })
+    expect(link).toHaveAttribute('href', '/colaboradores/7')
+    expect(screen.getByRole('link', { name: 'JOSE LIMA' })).toHaveAttribute('href', '/colaboradores/8')
+  })
+
   it('lista colaboradores com CPF formatado, unidade em maiúsculas e situação', async () => {
     mockBase()
     renderPage()

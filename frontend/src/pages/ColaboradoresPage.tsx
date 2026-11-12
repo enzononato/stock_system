@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Plus, RefreshCw, Search } from 'lucide-react'
 import {
@@ -261,7 +262,14 @@ export default function ColaboradoresPage() {
                       key={c.id}
                       className="border-b border-border transition-colors duration-micro last:border-0 hover:bg-surface-alt"
                     >
-                      <td className="whitespace-nowrap px-4 py-2.5 text-body-sm font-medium">{upper(c.nome)}</td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-body-sm font-medium">
+                        <Link
+                          to={`/colaboradores/${c.id}`}
+                          className="rounded-sm text-brand-text hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        >
+                          {upper(c.nome)}
+                        </Link>
+                      </td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-body-sm tabular-nums">{formatCpf(c.cpf)}</td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-body-sm">{c.cargo || '—'}</td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-body-sm">{c.setor || '—'}</td>
