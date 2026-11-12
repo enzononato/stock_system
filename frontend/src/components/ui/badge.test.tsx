@@ -30,32 +30,25 @@ describe('Badge', () => {
 })
 
 describe('StatusBadge', () => {
+  // StatusBadge agora renderiza StatusPill: o selo é uma pílula colorida
+  // (texto no tom, fundo no tom -bg) em vez do selo monocromático com ponto.
   it('mostra travessão quando não há status', () => {
     render(<StatusBadge />)
-    expect(screen.getByText('-')).toBeInTheDocument()
+    expect(screen.getByText('—')).toBeInTheDocument()
   })
 
-  // O selo virou monocromático: a cor da variante não aparece mais na classe
-  // do shell, só na do ponto (dot) — por isso a tabela abaixo passou a
-  // comparar com a classe de `dotClasses`, não mais com `badge-status-*`.
   it.each([
-    ['Disponível', 'bg-[var(--status-available)]'],
-    ['Indisponível', 'bg-[var(--status-loaned)]'],
-    ['Pendente Devolução', 'bg-[var(--status-return)]'],
-    ['Pendente', 'bg-[var(--status-pending)]'],
-  ])('mapeia %s para %s', (status, classe) => {
-    const { container } = render(<StatusBadge status={status} />)
-    expect(container.innerHTML).toContain(classe)
+    ['Disponível', 'var(--status-available)'],
+    ['Indisponível', 'var(--status-loaned)'],
+    ['Pendente Devolução', 'var(--status-return)'],
+    ['Pendente', 'var(--status-pending)'],
+  ])('mapeia %s para a cor %s', (status, cor) => {
+    render(<StatusBadge status={status} />)
+    expect(screen.getByText(status).style.color).toBe(cor)
   })
 
   it('status desconhecido cai no neutro em vez de sumir', () => {
-    const { container } = render(<StatusBadge status="Qualquer Coisa" />)
-    expect(screen.getByText('Qualquer Coisa')).toBeInTheDocument()
-    // Shell é idêntico entre variantes agora, então não dá mais para provar o
-    // branch "default" pela classe do selo. O fallback é o único caminho que
-    // não passa showDot, então a ausência do ponto colorido comprova que caiu
-    // nele (se "Qualquer Coisa" batesse por engano num branch mapeado, um
-    // ponto apareceria e este assert quebraria).
-    expect(container.querySelector('.rounded-full')).not.toBeInTheDocument()
+    render(<StatusBadge status="Qualquer Coisa" />)
+    expect(screen.getByText('Qualquer Coisa').style.color).toBe('var(--status-neutral)')
   })
 })

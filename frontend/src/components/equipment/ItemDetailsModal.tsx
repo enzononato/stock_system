@@ -557,25 +557,38 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
               <Button variant="outline" size="sm" onClick={onClose}>
                 Fechar
               </Button>
-              {canEdit && (
-                <div className="flex items-center gap-2">
-                  {/* Atalho para o formulário completo (não existe na FT_STC), no mesmo estilo dos demais botões. */}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      onClose()
-                      navigate(`/edit/${item.id}`)
-                    }}
-                  >
-                    Formulário Completo
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
-                    <Pencil className="size-3.5 mr-1.5" aria-hidden />
-                    Editar
-                  </Button>
-                </div>
-              )}
+              <div className="flex items-center gap-2">
+                {/* Página de detalhe com abas (dados, histórico, ...), aberta para todos os papéis. */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    onClose()
+                    navigate(`/items/${item.id}`)
+                  }}
+                >
+                  Ver página completa
+                </Button>
+                {canEdit && (
+                  <>
+                    {/* Atalho para o formulário completo (não existe na FT_STC), no mesmo estilo dos demais botões. */}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        onClose()
+                        navigate(`/edit/${item.id}`)
+                      }}
+                    >
+                      Formulário Completo
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+                      <Pencil className="size-3.5 mr-1.5" aria-hidden />
+                      Editar
+                    </Button>
+                  </>
+                )}
+              </div>
             </>
           )}
         </div>

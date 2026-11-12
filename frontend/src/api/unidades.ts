@@ -16,6 +16,11 @@ export interface Unidade {
   cep?: string
   cidade?: string
   uf?: string
+  /**
+   * Nome da unidade como aparece na base de RH (usado para ligar colaboradores
+   * sincronizados à unidade quando o nome difere do cadastrado aqui).
+   */
+  alias_rh?: string | null
   is_active: boolean
 }
 
@@ -28,6 +33,8 @@ export interface UnidadeInput {
   cep?: string
   cidade?: string
   uf?: string
+  /** Nome na base de RH; ausente = sem mudança (na edição, `''` limpa o valor). */
+  alias_rh?: string
 }
 
 /**

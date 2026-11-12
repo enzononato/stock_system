@@ -35,6 +35,13 @@ export interface Item {
   date_registered?: string
   date_issued?: string
   peripheral_count?: number
+  colaborador_id?: number | null
+  local_id?: number | null
+  local_nome?: string | null
+  colaborador_nome?: string | null
+  colaborador_setor?: string | null
+  colaborador_cargo?: string | null
+  superior_nome?: string | null
 }
 
 export interface ListItemsParams {
@@ -42,6 +49,8 @@ export interface ListItemsParams {
   status?: string
   revenda?: string
   search?: string
+  /** Só equipamentos com este colaborador. */
+  colaborador_id?: number
   limit?: number
   offset?: number
 }

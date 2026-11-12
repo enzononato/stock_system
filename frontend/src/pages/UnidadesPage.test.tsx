@@ -381,3 +381,86 @@ describe('UnidadesPage — mostrar inativas e reativação', () => {
     )
   })
 })
+
+describe('UnidadesPage — nome na base de RH (alias_rh)', () => {
+  it('envia alias_rh ao criar uma unidade', async () => {
+    mockListUnidades()
+    let corpo: Record<string, unknown> = {}
+    server.use(
+      http.post('/api/unidades', async ({ request }) => {
+        corpo = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json({ detail: 'Unidade criada com sucesso.' })
+      })
+    )
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Petrolina')
+
+    await user.type(screen.getByLabelText('Nome *'), 'Salvador')
+    await user.type(screen.getByLabelText('Razão Social *'), 'Revalle Salvador Ltda')
+    await user.type(screen.getByLabelText('CNPJ *'), '19131243000197')
+    await user.type(screen.getByLabelText('Nome na base de RH'), 'REVALLE SALVADOR')
+    await user.click(screen.getByRole('button', { name: 'Criar Unidade' }))
+
+    await waitFor(() => expect(corpo.alias_rh).toBe('REVALLE SALVADOR'))
+    expect(corpo.nome).toBe('Salvador')
+  })
+
+  it('carrega o alias_rh na edição e envia o valor alterado', async () => {
+    mockListUnidades([{ ...unidadeJuazeiro, alias_rh: 'JUAZEIRO MATRIZ' }, unidadePetrolina])
+    let corpo: Record<string, unknown> = {}
+    server.use(
+      http.put('/api/unidades/1', async ({ request }) => {
+        corpo = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json({ detail: 'Unidade atualizada com sucesso.' })
+      })
+    )
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByLabelText('Editar unidade Juazeiro'))
+    const campo = screen.getByLabelText('Nome na base de RH')
+    expect(campo).toHaveValue('JUAZEIRO MATRIZ')
+    await user.clear(campo)
+    await user.type(campo, 'JUAZEIRO CENTRO')
+    await user.click(screen.getByRole('button', { name: 'Salvar Alterações' }))
+
+    await waitFor(() => expect(corpo.alias_rh).toBe('JUAZEIRO CENTRO'))
+  })
+
+  it('não envia alias_rh quando o campo fica vazio na criação', async () => {
+    mockListUnidades()
+    let corpo: Record<string, unknown> | null = null
+    server.use(
+      http.post('/api/unidades', async ({ request }) => {
+        corpo = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json({ detail: 'ok' })
+      })
+    )
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Petrolina')
+
+    await user.type(screen.getByLabelText('Nome *'), 'Salvador')
+    await user.type(screen.getByLabelText('Razão Social *'), 'Revalle Salvador Ltda')
+    await user.type(screen.getByLabelText('CNPJ *'), '19131243000197')
+    await user.click(screen.getByRole('button', { name: 'Criar Unidade' }))
+
+    await waitFor(() => expect(corpo).not.toBeNull())
+    expect(corpo).not.toHaveProperty('alias_rh')
+  })
+})
+
+describe('UnidadesPage — locais', () => {
+  it('abre o diálogo de locais da unidade pela ação "Locais"', async () => {
+    mockListUnidades()
+    server.use(http.get('/api/locais', () => HttpResponse.json([])))
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByLabelText('Locais da unidade Juazeiro'))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(/Locais — JUAZEIRO/)).toBeInTheDocument()
+  })
+})

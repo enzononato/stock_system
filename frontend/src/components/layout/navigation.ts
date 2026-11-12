@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react'
-import type { LucideIcon } from 'lucide-react'
+import { Contact, MapPin, ScrollText, type LucideIcon } from 'lucide-react'
 import {
   DashboardIcon,
   EstoqueIcon,
@@ -66,6 +66,7 @@ export const navGroups: NavGroup[] = [
       { to: '/stock', label: 'Estoque', icon: EstoqueIcon },
       { to: '/register', label: 'Cadastro', icon: PatrimoniosIcon, roles: ['Gestor', 'Técnico'] },
       { to: '/history', label: 'Histórico', icon: MovimentacoesIcon, roles: ['Gestor', 'Técnico'] },
+      { to: '/locais', label: 'Locais', icon: MapPin, roles: ['Gestor', 'Técnico'] },
     ],
   },
   {
@@ -82,10 +83,12 @@ export const navGroups: NavGroup[] = [
     items: [
       { to: '/users', label: 'Usuários', icon: UsuariosIcon, roles: ['Gestor'] },
       { to: '/unidades', label: 'Unidades', icon: EmpresasIcon, roles: ['Gestor'] },
+      { to: '/colaboradores', label: 'Colaboradores', icon: Contact, roles: ['Gestor', 'Técnico'] },
       { to: '/terms', label: 'Termos de Resp.', icon: TermosIcon, roles: ['Gestor', 'Técnico'] },
       { to: '/report', label: 'Relatórios', icon: RelatoriosIcon, roles: ['Gestor', 'Técnico'] },
       { to: '/charts', label: 'Indicadores', icon: DashboardIcon },
       { to: '/remove', label: 'Baixa de Ativos', icon: LixeiraIcon, roles: ['Gestor'] },
+      { to: '/auditoria', label: 'Auditoria', icon: ScrollText, roles: ['Gestor'] },
     ],
   },
 ]

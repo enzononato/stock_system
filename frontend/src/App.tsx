@@ -5,6 +5,7 @@ import { RestrictedAccess } from '@/components/layout/RestrictedAccess'
 import LoginPage from '@/pages/LoginPage'
 import DashboardPage from '@/pages/DashboardPage'
 import StockPage from '@/pages/StockPage'
+import ItemDetailPage from '@/pages/ItemDetailPage'
 import RegisterItemPage from '@/pages/RegisterItemPage'
 import PeripheralsPage from '@/pages/PeripheralsPage'
 import LinkPeripheralPage from '@/pages/LinkPeripheralPage'
@@ -17,6 +18,10 @@ import ChartsPage from '@/pages/ChartsPage'
 import TermsPage from '@/pages/TermsPage'
 import UsersPage from '@/pages/UsersPage'
 import UnidadesPage from '@/pages/UnidadesPage'
+import ColaboradoresPage from '@/pages/ColaboradoresPage'
+import ColaboradorDetailPage from '@/pages/ColaboradorDetailPage'
+import AuditPage from '@/pages/AuditPage'
+import LocaisPage from '@/pages/LocaisPage'
 import { ToastContainer } from '@/components/ui/toast'
 
 /**
@@ -46,6 +51,7 @@ export default function App() {
               o estoque, que ocupava "/", mudou para "/stock". */}
           <Route index element={<DashboardPage />} />
           <Route path="stock" element={<StockPage />} />
+          <Route path="items/:id" element={<ItemDetailPage />} />
           <Route path="charts" element={<ChartsPage />} />
 
           {/* Gestor + Técnico */}
@@ -122,6 +128,32 @@ export default function App() {
             }
           />
 
+          <Route
+            path="colaboradores"
+            element={
+              <RequireRole roles={['Gestor', 'Técnico']}>
+                <ColaboradoresPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="colaboradores/:id"
+            element={
+              <RequireRole roles={['Gestor', 'Técnico']}>
+                <ColaboradorDetailPage />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="locais"
+            element={
+              <RequireRole roles={['Gestor', 'Técnico']}>
+                <LocaisPage />
+              </RequireRole>
+            }
+          />
+
           {/* Somente Gestor */}
           <Route
             path="remove"
@@ -144,6 +176,15 @@ export default function App() {
             element={
               <RequireRole roles={['Gestor']}>
                 <UnidadesPage />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="auditoria"
+            element={
+              <RequireRole roles={['Gestor']}>
+                <AuditPage />
               </RequireRole>
             }
           />
