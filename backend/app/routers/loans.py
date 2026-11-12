@@ -4,7 +4,9 @@ from datetime import datetime
 
 from app.schemas.loans import LoanRequest
 from app.db.inventory_manager_db import InventoryDBManager
-from app.dependencies import gestor_or_tecnico, get_inventory_db, CurrentUser
+from app.dependencies import gestor_or_tecnico, get_inventory_db, get_audit_context, CurrentUser
+from app.services import audit
+from app.services.audit import AuditContext
 from app.core.storage import storage
 
 router = APIRouter(prefix="/api/loans", tags=["loans"])
@@ -21,12 +23,26 @@ def _check_size(content: bytes) -> None:
         raise HTTPException(status_code=413, detail="Arquivo excede o tamanho máximo de 20MB.")
 
 
+def _auditar_etapa(
+    ctx: AuditContext, inv: InventoryDBManager, entidade: str, acao: str,
+    item_id: int, antes_item: "dict | None", extra: "dict | None" = None,
+) -> None:
+    """Grava a mudança do item (só os campos alterados) numa etapa do fluxo de
+    empréstimo/devolução. `extra` entra só no lado "depois"."""
+    antes, depois = audit.diff(antes_item or {}, inv.find(item_id) or {})
+    if extra:
+        depois = {**(depois or {}), **extra}
+    audit.record(ctx, entidade, item_id, acao, antes=antes, depois=depois)
+
+
 @router.post("", response_model=dict)
 def initiate_loan(
     body: LoanRequest,
     current_user: CurrentUser = Depends(gestor_or_tecnico),
     inv: InventoryDBManager = Depends(get_inventory_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
+    antes_item = inv.find(body.item_id)
     ok, msg = inv.issue(
         body.item_id,
         body.usuario,
@@ -41,6 +57,10 @@ def initiate_loan(
     )
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
+    _auditar_etapa(
+        ctx, inv, "emprestimo", "criar", body.item_id, antes_item,
+        extra={"cargo": body.cargo, "center_cost": body.center_cost, "setor": body.setor},
+    )
     return {"detail": msg}
 
 
@@ -50,6 +70,7 @@ async def confirm_loan(
     signed_pdf: UploadFile = File(...),
     current_user: CurrentUser = Depends(gestor_or_tecnico),
     inv: InventoryDBManager = Depends(get_inventory_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
     content = await signed_pdf.read()
     _check_size(content)
@@ -57,9 +78,14 @@ async def confirm_loan(
     filename = f"termo_{item_id}_{timestamp}_{_safe_filename(signed_pdf.filename)}"
     storage_key = storage.save("termos_assinados", filename, content)
 
+    antes_item = inv.find(item_id)
     ok, msg = inv.confirm_loan(item_id, current_user.username, storage_key)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
+    _auditar_etapa(
+        ctx, inv, "emprestimo", "confirmar", item_id, antes_item,
+        extra={"termo_assinado": storage_key},
+    )
     return {"detail": msg}
 
 
@@ -87,10 +113,13 @@ def initiate_return(
     item_id: int,
     current_user: CurrentUser = Depends(gestor_or_tecnico),
     inv: InventoryDBManager = Depends(get_inventory_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
+    antes_item = inv.find(item_id)
     ok, result, filename = inv.generate_return_term_bytes(item_id, current_user.username)
     if not ok:
         raise HTTPException(status_code=400, detail=result)
+    _auditar_etapa(ctx, inv, "devolucao", "criar", item_id, antes_item)
 
     # Salva o DOCX gerado no storage
     storage_key = storage.save("termos_devolucao", filename, result)
@@ -105,6 +134,7 @@ async def confirm_return(
     signed_pdf: UploadFile = File(...),
     current_user: CurrentUser = Depends(gestor_or_tecnico),
     inv: InventoryDBManager = Depends(get_inventory_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
     content = await signed_pdf.read()
     _check_size(content)
@@ -112,7 +142,12 @@ async def confirm_return(
     filename = f"termo_devolucao_{item_id}_{timestamp}_{_safe_filename(signed_pdf.filename)}"
     storage_key = storage.save("termos_devolucao_assinados", filename, content)
 
+    antes_item = inv.find(item_id)
     ok, msg = inv.confirm_return(item_id, current_user.username, storage_key)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
+    _auditar_etapa(
+        ctx, inv, "devolucao", "confirmar", item_id, antes_item,
+        extra={"termo_assinado": storage_key},
+    )
     return {"detail": msg}

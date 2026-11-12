@@ -1,10 +1,15 @@
 import os
+import re
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 from typing import Optional
 
 from app.schemas.peripherals import PeripheralCreate, PeripheralResponse
 from app.db.inventory_manager_db import InventoryDBManager
-from app.dependencies import get_current_user, gestor_or_tecnico, get_inventory_db, CurrentUser
+from app.dependencies import (
+    get_current_user, gestor_or_tecnico, get_inventory_db, get_audit_context, CurrentUser,
+)
+from app.services import audit
+from app.services.audit import AuditContext
 from app.core.storage import storage
 
 router = APIRouter(tags=["peripherals"])
@@ -36,11 +41,19 @@ def create_peripheral(
     body: PeripheralCreate,
     current_user: CurrentUser = Depends(gestor_or_tecnico),
     inv: InventoryDBManager = Depends(get_inventory_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
     data = body.model_dump(exclude_none=True)
     ok, msg = inv.add_peripheral(data, current_user.username)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
+    # add_peripheral só devolve o id dentro da mensagem ("... cadastrado com ID 12.").
+    achado = re.search(r"ID (\d+)\.?$", msg)
+    perif_id = int(achado.group(1)) if achado else None
+    audit.record(
+        ctx, "periferico", perif_id, "criar",
+        depois=inv.get_peripheral(perif_id) if perif_id is not None else data,
+    )
     return {"detail": msg}
 
 
@@ -49,12 +62,16 @@ def deactivate_peripheral(
     peripheral_id: int,
     current_user: CurrentUser = Depends(gestor_or_tecnico),
     inv: InventoryDBManager = Depends(get_inventory_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
     """T9: inativa um periférico (Gestor ou Técnico). A camada de dados
     recusa (400) caso o periférico esteja em uso/vinculado."""
+    antes_perif = inv.get_peripheral(peripheral_id)
     ok, msg = inv.deactivate_peripheral(peripheral_id, current_user.username)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
+    antes, depois = audit.diff(antes_perif or {}, inv.get_peripheral(peripheral_id) or {})
+    audit.record(ctx, "periferico", peripheral_id, "excluir", antes=antes, depois=depois)
     return {"detail": msg}
 
 
@@ -73,10 +90,17 @@ def link_peripheral(
     peripheral_id: int,
     current_user: CurrentUser = Depends(gestor_or_tecnico),
     inv: InventoryDBManager = Depends(get_inventory_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
+    antes_perif = inv.get_peripheral(peripheral_id) or {}
     ok, msg = inv.link_peripheral_to_equipment(item_id, peripheral_id, current_user.username)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
+    antes, depois = audit.diff(
+        {**antes_perif, "equipamento_id": None},
+        {**(inv.get_peripheral(peripheral_id) or {}), "equipamento_id": item_id},
+    )
+    audit.record(ctx, "periferico", peripheral_id, "vincular", antes=antes, depois=depois)
     return {"detail": msg}
 
 
@@ -85,10 +109,21 @@ def unlink_peripheral(
     link_id: int,
     current_user: CurrentUser = Depends(gestor_or_tecnico),
     inv: InventoryDBManager = Depends(get_inventory_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
+    vinculo = inv.get_peripheral_link(link_id)
+    antes_perif = (inv.get_peripheral(vinculo["peripheral_id"]) if vinculo else None) or {}
     ok, msg = inv.unlink_peripheral_from_equipment(link_id, current_user.username)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
+    if vinculo:
+        antes, depois = audit.diff(
+            {**antes_perif, "equipamento_id": vinculo["equipment_id"]},
+            {**(inv.get_peripheral(vinculo["peripheral_id"]) or {}), "equipamento_id": None},
+        )
+        audit.record(
+            ctx, "periferico", vinculo["peripheral_id"], "desvincular", antes=antes, depois=depois
+        )
     return {"detail": msg}
 
 
@@ -101,6 +136,7 @@ async def replace_peripheral(
     attachment: Optional[UploadFile] = File(default=None),
     current_user: CurrentUser = Depends(gestor_or_tecnico),
     inv: InventoryDBManager = Depends(get_inventory_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
     if not reason or not reason.strip():
         raise HTTPException(status_code=400, detail="Informe o motivo da substituição.")
@@ -115,9 +151,19 @@ async def replace_peripheral(
             f"substituicao_{old_peripheral_id}_{_safe_filename(attachment.filename)}",
             content,
         )
+    antes_perif = inv.get_peripheral(old_peripheral_id) or {}
     ok, msg = inv.replace_peripheral(
         item_id, old_peripheral_id, new_peripheral_id, reason, current_user.username, storage_key
     )
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
+    antes, depois = audit.diff(
+        {**antes_perif, "equipamento_id": item_id, "substituido_por": None},
+        {
+            **(inv.get_peripheral(old_peripheral_id) or {}),
+            "equipamento_id": None,
+            "substituido_por": new_peripheral_id,
+        },
+    )
+    audit.record(ctx, "periferico", old_peripheral_id, "substituir", antes=antes, depois=depois)
     return {"detail": msg}

@@ -404,6 +404,18 @@ class InventoryDBManager:
             logger.exception("Erro de banco de dados")
             return False, "Erro ao processar a operação. Tente novamente."
 
+    def get_peripheral(self, peripheral_id: int):
+        """Periférico por id, ativo ou não (usado para o "antes/depois" da auditoria)."""
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT * FROM peripherals WHERE id=%s", (peripheral_id,))
+            return cur.fetchone()
+
+    def get_peripheral_link(self, link_id: int):
+        """Vínculo equipamento↔periférico (id, equipment_id, peripheral_id) ou None."""
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT * FROM equipment_peripherals WHERE id=%s", (link_id,))
+            return cur.fetchone()
+
     def list_peripherals(self, status_filter="", type_filter="", include_inactive=False):
         where = []
         params = []
@@ -892,13 +904,16 @@ class InventoryDBManager:
     # ── History ────────────────────────────────────────────────────────────────
 
     def list_history(
-        self, *, search: str | None = None, limit: int | None = None, offset: int = 0
+        self, *, search: str | None = None, limit: int | None = None, offset: int = 0,
+        item_id: int | None = None,
     ) -> tuple[list[dict], int]:
         """Retorna (linhas, total_sem_paginacao).
 
         A busca é feita no banco, e não na página já carregada: com paginação
         server-side, filtrar no cliente só varreria as linhas visíveis e daria a
         impressão falsa de que o histórico inteiro foi pesquisado.
+
+        `item_id` (opcional) restringe às linhas desse item; combina com `search` (AND).
         """
         # As colunas exibidas vêm de COALESCE entre history, items e peripherals,
         # e o MySQL não aceita alias de SELECT no WHERE — por isso as expressões
@@ -916,6 +931,9 @@ class InventoryDBManager:
 
         condicoes = ["h.is_reversed = 0"]
         filtro_params: list = []
+        if item_id is not None:
+            condicoes.append("h.item_id = %s")
+            filtro_params.append(item_id)
         if search and search.strip():
             termo = f"%{search.strip()}%"
             condicoes.append("(" + " OR ".join(f"{c} LIKE %s" for c in campos_busca) + ")")
@@ -993,6 +1011,12 @@ class InventoryDBManager:
         with get_cursor(commit=False) as cur:
             cur.execute(sql, (ano, mes, ano, mes, ano, mes, ano, mes))
             return cur.fetchall()
+
+    def get_history_entry(self, history_id: int):
+        """Linha crua de `history` por id, ou None."""
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT * FROM history WHERE id=%s", (history_id,))
+            return cur.fetchone()
 
     def reverse_history_entry(self, history_id: int, logged_user: str):
         try:

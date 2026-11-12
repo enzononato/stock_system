@@ -6,7 +6,11 @@ from datetime import datetime
 from app.schemas.items import ItemCreate, ItemUpdate, ItemResponse
 from app.schemas.common import Paginated
 from app.db.inventory_manager_db import InventoryDBManager
-from app.dependencies import get_current_user, gestor_or_tecnico, gestor_only, get_inventory_db, CurrentUser
+from app.dependencies import (
+    get_current_user, gestor_or_tecnico, gestor_only, get_inventory_db, get_audit_context, CurrentUser,
+)
+from app.services import audit
+from app.services.audit import AuditContext
 from app.core.storage import storage
 from app.core.config import settings
 
@@ -55,6 +59,7 @@ def create_item(
     body: ItemCreate,
     current_user: CurrentUser = Depends(gestor_or_tecnico),
     inv: InventoryDBManager = Depends(get_inventory_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
     # O schema (ItemCreate) já validou o formato dd/mm/yyyy antes de chegar
     # aqui (T7); o strptime abaixo não deve mais estourar em uso normal.
@@ -66,6 +71,7 @@ def create_item(
     ok, result = inv.add_item(item_data, current_user.username)
     if not ok:
         raise HTTPException(status_code=400, detail=result)
+    audit.record(ctx, "item", result, "criar", depois=inv.find(result))
     return {"detail": "Item cadastrado com sucesso.", "id": result}
 
 
@@ -75,6 +81,7 @@ def update_item(
     body: ItemUpdate,
     current_user: CurrentUser = Depends(gestor_or_tecnico),
     inv: InventoryDBManager = Depends(get_inventory_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
     existing = inv.find(item_id)
     if not existing:
@@ -87,6 +94,8 @@ def update_item(
     ok, msg = inv.update_item(item_id, item_data, current_user.username)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
+    antes, depois = audit.diff(existing, inv.find(item_id))
+    audit.record(ctx, "item", item_id, "editar", antes=antes, depois=depois)
     return {"detail": msg}
 
 
@@ -97,12 +106,14 @@ async def remove_item(
     attachment: Optional[UploadFile] = File(default=None),
     current_user: CurrentUser = Depends(gestor_only),
     inv: InventoryDBManager = Depends(get_inventory_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
     # Checagem de existência antes de gravar o anexo, por dois motivos: manter o
     # 404 coerente com GET e PUT do mesmo recurso (a remoção respondia 400 "ID não
     # encontrado", vindo da camada de dados), e não deixar comprovante órfão no
     # storage para um item que nunca existiu.
-    if not inv.find(item_id):
+    existing = inv.find(item_id)
+    if not existing:
         raise HTTPException(status_code=404, detail="Item não encontrado.")
 
     storage_key = None
@@ -117,4 +128,8 @@ async def remove_item(
     ok, msg = inv.remove(item_id, current_user.username, reason, storage_key)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
+    audit.record(
+        ctx, "item", item_id, "excluir",
+        antes=existing, depois={"is_active": 0, "motivo": reason},
+    )
     return {"detail": msg}

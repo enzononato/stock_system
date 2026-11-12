@@ -317,3 +317,18 @@ def test_get_audit_periodo_invalido_retorna_422(client_gestor):
         resp = client_gestor.get("/api/audit", params=params)
         assert resp.status_code == 422, params
         assert resp.json()["detail"] == "Período inválido."
+
+
+def test_mascarar_estrutura_sob_chave_cpf():
+    from app.services.audit import mascarar
+
+    resultado = mascarar({
+        "cpfs": ["12345678909", "123", 5],
+        "cpf_titular": {"numero": "98765432100", "extra": {"x": "abc"}},
+        "nome": "Fulano",
+    })
+    assert resultado == {
+        "cpfs": ["***.456.789-**", "***", "***"],
+        "cpf_titular": {"numero": "***.654.321-**", "extra": {"x": "***"}},
+        "nome": "Fulano",
+    }

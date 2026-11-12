@@ -9,11 +9,14 @@ from app.schemas.unidades import (
     IndicadoresResponse,
 )
 from app.db.unidade_db import UnidadeDBManager
+from app.services import audit
+from app.services.audit import AuditContext
 from app.dependencies import (
     get_current_user,
     gestor_only,
     gestor_or_tecnico,
     get_unidade_db,
+    get_audit_context,
     CurrentUser,
 )
 
@@ -60,13 +63,22 @@ def create_unidade(
     body: UnidadeCreate,
     current_user: CurrentUser = Depends(gestor_only),
     db: UnidadeDBManager = Depends(get_unidade_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
     data = body.model_dump(exclude_none=True)
     ok, msg = db.add_unidade(data)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
     criada = db.get_unidade_por_nome(data["nome"])
+    audit.record(ctx, "unidade", criada["id"] if criada else None, "criar", depois=criada or data)
     return {"detail": msg, "id": criada["id"] if criada else None}
+
+
+def _auditar_mudanca(
+    ctx: AuditContext, db: UnidadeDBManager, unidade_id: int, acao: str, antes_unidade: dict
+) -> None:
+    antes, depois = audit.diff(antes_unidade, db.get_unidade(unidade_id) or {})
+    audit.record(ctx, "unidade", unidade_id, acao, antes=antes, depois=depois)
 
 
 @router.put("/{unidade_id}", response_model=dict)
@@ -75,6 +87,7 @@ def update_unidade(
     body: UnidadeUpdate,
     current_user: CurrentUser = Depends(gestor_only),
     db: UnidadeDBManager = Depends(get_unidade_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
     existente = db.get_unidade(unidade_id)
     if not existente:
@@ -87,6 +100,7 @@ def update_unidade(
     ok, msg = db.update_unidade(unidade_id, data)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
+    _auditar_mudanca(ctx, db, unidade_id, "editar", existente)
     return {"detail": msg}
 
 
@@ -95,6 +109,7 @@ def deactivate_unidade(
     unidade_id: int,
     current_user: CurrentUser = Depends(gestor_only),
     db: UnidadeDBManager = Depends(get_unidade_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
     """Inativa (nunca apaga) uma unidade. A camada de dados recusa (400)
     caso ainda existam itens ativos associados."""
@@ -105,6 +120,7 @@ def deactivate_unidade(
     ok, msg = db.deactivate_unidade(unidade_id)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
+    _auditar_mudanca(ctx, db, unidade_id, "desativar", existente)
     return {"detail": msg}
 
 
@@ -113,6 +129,7 @@ def reactivate_unidade(
     unidade_id: int,
     current_user: CurrentUser = Depends(gestor_only),
     db: UnidadeDBManager = Depends(get_unidade_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
     """Reverte a inativação de uma unidade. Depois de reativada, o nome volta
     a aparecer em /api/constants automaticamente (a consulta lá já filtra só
@@ -124,4 +141,5 @@ def reactivate_unidade(
     ok, msg = db.reactivate_unidade(unidade_id)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
+    _auditar_mudanca(ctx, db, unidade_id, "reativar", existente)
     return {"detail": msg}

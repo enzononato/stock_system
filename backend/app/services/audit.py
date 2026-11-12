@@ -42,12 +42,22 @@ def _mascarar_cpf(valor: Any) -> Any:
     return f"***.{digitos[3:6]}.{digitos[6:9]}-**"
 
 
+def _mascarar_folhas_cpf(valor: Any) -> Any:
+    """Sob uma chave `cpf`: mascara toda folha escalar, mesmo dentro de
+    dict/lista/tupla (`{"cpfs": ["12345678909"]}`)."""
+    if isinstance(valor, dict):
+        return {chave: _mascarar_folhas_cpf(v) for chave, v in valor.items()}
+    if isinstance(valor, (list, tuple)):
+        return [_mascarar_folhas_cpf(v) for v in valor]
+    return _mascarar_cpf(valor)
+
+
 def _mascarar_valor(valor: Any) -> Any:
     if isinstance(valor, dict):
         return {
             chave: (
-                _mascarar_cpf(v)
-                if "cpf" in str(chave).lower() and not isinstance(v, (dict, list, tuple))
+                _mascarar_folhas_cpf(v)
+                if "cpf" in str(chave).lower()
                 else _mascarar_valor(v)
             )
             for chave, v in valor.items()
