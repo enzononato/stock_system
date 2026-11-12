@@ -73,6 +73,11 @@ export default function ColaboradoresPage() {
   // a busca aplicada muda, volta para a 1 na mesma renderização, sem disparar
   // uma requisição extra com o termo novo e a página antiga.
   const [paginaDaBusca, setPaginaDaBusca] = useState({ page: 1, busca: '' })
+  // Ajuste de estado na renderização: qualquer mudança do termo aplicado zera a
+  // página guardada, para que voltar a um termo anterior (ex.: limpar a busca)
+  // não "ressuscite" uma página antiga. O React refaz a renderização antes de
+  // efeitos/queries, então não sai requisição com a página velha.
+  if (paginaDaBusca.busca !== busca) setPaginaDaBusca({ page: 1, busca })
   const page = paginaDaBusca.busca === busca ? paginaDaBusca.page : 1
   const setPage = (p: number) => setPaginaDaBusca({ page: p, busca })
 

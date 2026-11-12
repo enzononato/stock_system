@@ -150,6 +150,31 @@ describe('ColaboradoresPage', () => {
     expect(depois.every((p) => p.get('offset') === '0')).toBe(true)
   })
 
+  it('limpar a busca volta para a primeira página, sem ressuscitar a página anterior', async () => {
+    const pedidos = mockBase({ items: [maria], total: 60 })
+    renderPage()
+    await screen.findByText('MARIA SILVA')
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Próxima' }))
+    await waitFor(() => expect(pedidos.some((p) => p.get('offset') === '25')).toBe(true))
+
+    const campo = screen.getByPlaceholderText(/buscar colaborador/i)
+    await user.type(campo, 'mar')
+    await waitFor(() =>
+      expect(pedidos.some((p) => p.get('busca') === 'mar' && p.get('offset') === '0')).toBe(true)
+    )
+    expect(pedidos.some((p) => p.get('busca') === 'mar' && p.get('offset') !== '0')).toBe(false)
+
+    const antes = pedidos.length
+    await user.clear(campo)
+    await waitFor(() => expect(pedidos.length).toBeGreaterThan(antes))
+    // aguarda assentar: nenhuma requisição posterior pode usar a página antiga
+    await screen.findByText('Mostrando 1–25 de 60')
+    const depois = pedidos.slice(antes)
+    expect(depois.every((p) => !p.has('busca'))).toBe(true)
+    expect(depois.every((p) => p.get('offset') === '0')).toBe(true)
+  })
+
   it('Gestor vê "Sincronizar agora" e o resumo vai para o toast', async () => {
     mockBase()
     server.use(
