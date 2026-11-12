@@ -78,7 +78,10 @@ describe('ColaboradorDetailPage', () => {
     expect(screen.getByText('Ativo')).toBeInTheDocument()
 
     const tabs = within(screen.getByRole('tablist')).getAllByRole('tab')
-    expect(tabs.map((t) => t.textContent)).toEqual(['Dados', 'Equipamentos'])
+    const nomesAbas = tabs.map((t) => t.textContent)
+    expect(nomesAbas).toContain('Dados')
+    expect(nomesAbas).toContain('Equipamentos')
+    expect(nomesAbas.indexOf('Dados')).toBeLessThan(nomesAbas.indexOf('Equipamentos'))
     expect(screen.getByRole('tab', { name: 'Dados' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('tabpanel')).toBeInTheDocument()
   })

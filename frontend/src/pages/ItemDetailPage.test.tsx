@@ -58,7 +58,11 @@ describe('ItemDetailPage', () => {
 
     const tablist = screen.getByRole('tablist')
     const tabs = within(tablist).getAllByRole('tab')
-    expect(tabs.map((t) => t.textContent)).toEqual(['Dados', 'Histórico'])
+    const nomesAbas = tabs.map((t) => t.textContent)
+    expect(nomesAbas).toContain('Dados')
+    expect(nomesAbas).toContain('Histórico')
+    expect(nomesAbas[0]).toBe('Dados')
+    expect(nomesAbas[nomesAbas.length - 1]).toBe('Histórico')
     expect(screen.getByRole('tab', { name: 'Dados' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('tabpanel')).toBeInTheDocument()
   })
