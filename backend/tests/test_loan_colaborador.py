@@ -327,6 +327,11 @@ def test_estorno_da_devolucao_restaura_colaborador_id_pelo_cpf(
     assert client_gestor.post(f"/api/loans/{item_id}/return/confirm", files=ARQUIVO_PDF).status_code == 200
     assert _item(client_gestor, item_id)["colaborador_id"] is None
 
+    # Desfaz em ordem: primeiro a confirmação (item volta a Pendente Devolução), depois a
+    # devolução -- o estorno só vale enquanto o item está na situação que o lançamento produziu.
+    confirmacao_id = inv_manager.ultimo_history_id(item_id, "Confirmação Devolução")
+    resp = client_gestor.post(f"/api/history/{confirmacao_id}/reverse", json={"password": "SenhaForte#123"})
+    assert resp.status_code == 200, resp.text
     devolucao_id = inv_manager.ultimo_history_id(item_id, "Devolução")
     resp = client_gestor.post(f"/api/history/{devolucao_id}/reverse", json={"password": "SenhaForte#123"})
     assert resp.status_code == 200, resp.text
@@ -395,6 +400,11 @@ def test_estorno_da_devolucao_normaliza_o_cpf_do_historico(
         "UPDATE history SET cpf=%s WHERE item_id=%s AND operation='Empréstimo'", ("529.982.247-25", item_id)
     )
 
+    # Desfaz em ordem: primeiro a confirmação (item volta a Pendente Devolução), depois a
+    # devolução -- o estorno só vale enquanto o item está na situação que o lançamento produziu.
+    confirmacao_id = inv_manager.ultimo_history_id(item_id, "Confirmação Devolução")
+    resp = client_gestor.post(f"/api/history/{confirmacao_id}/reverse", json={"password": "SenhaForte#123"})
+    assert resp.status_code == 200, resp.text
     devolucao_id = inv_manager.ultimo_history_id(item_id, "Devolução")
     resp = client_gestor.post(f"/api/history/{devolucao_id}/reverse", json={"password": "SenhaForte#123"})
     assert resp.status_code == 200, resp.text

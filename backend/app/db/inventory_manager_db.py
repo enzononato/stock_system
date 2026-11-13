@@ -35,6 +35,17 @@ MSG_DEVOLUCAO_JA_CONFIRMADA = "A devolução já foi confirmada."
 # Motivo gravado em `transferencias` quando o empréstimo muda a unidade do equipamento (F7).
 MOTIVO_TRANSFERENCIA_EMPRESTIMO = "Empréstimo para colaborador de outra unidade"
 
+# Estorno: situação (items.status, com is_active=1) que cada operação estornável deixa
+# no equipamento. O estorno só é aceito enquanto o item continua nela.
+_SITUACAO_PRODUZIDA_POR = {
+    "Empréstimo": "Pendente",
+    "Confirmação Empréstimo": "Indisponível",
+    "Devolução": "Pendente Devolução",
+    "Confirmação Devolução": "Disponível",
+    "Cadastro": "Disponível",
+}
+MSG_ESTORNO_SITUACAO_MUDOU = "O equipamento mudou de situação depois deste lançamento."
+
 # ── Geração de termos (.docx) — utilitários compartilhados ─────────────────────
 #
 # Nomes dos meses em português para "{{data_hoje_extenso}}". Propositalmente NÃO
@@ -707,12 +718,17 @@ class InventoryDBManager:
 
         try:
             with get_cursor(dict_cursor=False) as cur:
+                # `AND status='Disponível'`: o `find` acima leu o item sem trava; se outro
+                # fluxo (manutenção, outro empréstimo) mudou o status nesse meio tempo, o
+                # UPDATE não casa e nada é gravado (nem histórico, nem transferência).
                 cur.execute(
                     "UPDATE items SET status='Pendente', assigned_to=%s, cpf=%s, date_issued=%s, revenda=%s, pessoa_juridica=%s, colaborador_id=%s"
                     + (", local_id=NULL" if muda_unidade else "")
-                    + " WHERE id=%s",
+                    + " WHERE id=%s AND status='Disponível'",
                     (user, cpf, dt_issue, revenda, pessoa_juridica, colaborador_id, pid),
                 )
+                if cur.rowcount == 0:
+                    return False, "Este item não está disponível para empréstimo."
                 if muda_unidade:
                     cur.execute(
                         "INSERT INTO transferencias (item_id, de_unidade, para_unidade, de_local_id, "
@@ -1204,9 +1220,11 @@ class InventoryDBManager:
             cur.execute("UPDATE items SET colaborador_id=%s WHERE id=%s", (colaborador_id, item_id))
 
     def reverse_history_entry(self, history_id: int, logged_user: str):
+        """Estorna um lançamento de `history`. Recusa (sem alterar nada) quando o
+        equipamento não está mais na situação que o lançamento produziu."""
         try:
             with get_cursor() as cur:
-                cur.execute("SELECT * FROM history WHERE id=%s", (history_id,))
+                cur.execute("SELECT * FROM history WHERE id=%s FOR UPDATE", (history_id,))
                 entry = cur.fetchone()
                 if not entry:
                     return False, "Lançamento não encontrado."
@@ -1215,6 +1233,30 @@ class InventoryDBManager:
 
                 op = entry["operation"]
                 item_id = entry["item_id"]
+
+                if op not in _SITUACAO_PRODUZIDA_POR:
+                    return False, f"Não é possível estornar uma operação do tipo '{op}'."
+                # Só desfaz se o equipamento ainda está na situação que este
+                # lançamento produziu: um estorno antigo não pode atropelar o que
+                # aconteceu depois (novo empréstimo, manutenção, baixa...).
+                cur.execute(
+                    "SELECT status, is_active FROM items WHERE id=%s FOR UPDATE", (item_id,)
+                )
+                atual = cur.fetchone()
+                if (
+                    not atual
+                    or not atual["is_active"]
+                    or atual["status"] != _SITUACAO_PRODUZIDA_POR[op]
+                ):
+                    return False, MSG_ESTORNO_SITUACAO_MUDOU
+                if op == "Confirmação Devolução":
+                    cur.execute(
+                        "SELECT COUNT(*) AS total FROM manutencoes "
+                        "WHERE item_id=%s AND status IN ('aberta','enviada','em_reparo')",
+                        (item_id,),
+                    )
+                    if cur.fetchone()["total"] > 0:
+                        return False, MSG_ESTORNO_SITUACAO_MUDOU
 
                 if op == "Confirmação Empréstimo":
                     cur.execute("UPDATE items SET status='Pendente' WHERE id=%s", (item_id,))
@@ -1249,8 +1291,6 @@ class InventoryDBManager:
                     )
                 elif op == "Cadastro":
                     cur.execute("UPDATE items SET is_active=0 WHERE id=%s", (item_id,))
-                else:
-                    return False, f"Não é possível estornar uma operação do tipo '{op}'."
 
                 cur.execute("UPDATE history SET is_reversed=1 WHERE id=%s", (history_id,))
                 cur.execute(

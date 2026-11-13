@@ -105,25 +105,24 @@ class TestEstornoDevolucao:
         assert item["cpf"] == "11122233344"
 
     def test_estornar_devolucao_sem_emprestimo_anterior_no_historico(
-        self, client_gestor, inv_manager, item_indisponivel, forcar_devolucao_iniciada
+        self, client_gestor, inv_manager, item_indisponivel, forcar_devolucao_iniciada, executar_sql
     ):
         """
         Caso extremo: se as entradas de Empréstimo/Confirmação Empréstimo anteriores já
         tiverem sido apagadas/estornadas antes da Devolução, reverse_history_entry não
         encontra o empréstimo original e recusa o estorno com uma mensagem própria.
-        Aqui simulamos isso estornando primeiro a Confirmação Empréstimo e o Empréstimo,
-        e só então tentando estornar a Devolução.
+        Aqui simulamos isso marcando como estornados a Confirmação Empréstimo e o
+        Empréstimo direto no banco (pela API o estorno deles é recusado enquanto o item
+        está em Pendente Devolução), e só então tentando estornar a Devolução.
         """
         item_id = item_indisponivel["id"]
         forcar_devolucao_iniciada(item_id)
-        hid_confirmacao = _history_id(inv_manager, item_id, "Confirmação Empréstimo")
-        hid_emprestimo = _history_id(inv_manager, item_id, "Empréstimo")
         hid_devolucao = _history_id(inv_manager, item_id, "Devolução")
-
-        ok, msg = inv_manager.reverse_history_entry(hid_confirmacao, "teste")
-        assert ok, msg
-        ok, msg = inv_manager.reverse_history_entry(hid_emprestimo, "teste")
-        assert ok, msg
+        executar_sql(
+            "UPDATE history SET is_reversed=1 WHERE item_id=%s "
+            "AND operation IN ('Empréstimo','Confirmação Empréstimo')",
+            (item_id,),
+        )
 
         ok, msg = inv_manager.reverse_history_entry(hid_devolucao, "teste")
         assert not ok
@@ -223,3 +222,140 @@ class TestSenhaDoEstorno:
         # O item precisa continuar disponível: senha errada não pode ter efeito colateral.
         item = inv_manager.find(item_disponivel["id"])
         assert item is not None, "O item foi removido apesar de a senha estar errada."
+
+
+MSG_MUDOU = "O equipamento mudou de situação depois deste lançamento."
+
+
+class TestEstornoConfereSituacaoAtual:
+    """O estorno só desfaz um lançamento se o equipamento ainda está na situação que
+    aquele lançamento produziu; senão recusa (400) sem mexer em nada."""
+
+    def _ciclo_devolvido(self, inv_manager, item_id, forcar_devolucao_iniciada):
+        forcar_devolucao_iniciada(item_id)
+        ok, msg = inv_manager.confirm_return(item_id, "teste", "termos_devolucao_assinados/fake.pdf")
+        assert ok, msg
+        return _history_id(inv_manager, item_id, "Confirmação Devolução")
+
+    def test_confirmacao_devolucao_antiga_com_manutencao_aberta_400_e_ordem_segue(
+        self, client_gestor, senha_padrao_teste, inv_manager, item_indisponivel, forcar_devolucao_iniciada
+    ):
+        item_id = item_indisponivel["id"]
+        hid = self._ciclo_devolvido(inv_manager, item_id, forcar_devolucao_iniciada)
+        resp = client_gestor.post("/api/manutencoes", json={"item_id": item_id, "defeito": "Tela"})
+        assert resp.status_code == 200, resp.text
+        mid = resp.json()["id"]
+
+        resp = client_gestor.post(f"/api/history/{hid}/reverse", json={"password": senha_padrao_teste})
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == MSG_MUDOU
+        assert inv_manager.get_history_entry(hid)["is_reversed"] == 0
+        assert inv_manager.find(item_id)["status"] == "Em Manutenção"
+
+        resp = client_gestor.post(f"/api/manutencoes/{mid}/retorno", data={"resultado": "retornada"})
+        assert resp.status_code == 200, resp.text
+        assert inv_manager.find(item_id)["status"] == "Disponível"
+
+    def test_confirmacao_devolucao_antiga_permite_cancelar_a_ordem(
+        self, client_gestor, inv_manager, item_indisponivel, forcar_devolucao_iniciada
+    ):
+        item_id = item_indisponivel["id"]
+        hid = self._ciclo_devolvido(inv_manager, item_id, forcar_devolucao_iniciada)
+        mid = client_gestor.post("/api/manutencoes", json={"item_id": item_id, "defeito": "Tela"}).json()["id"]
+
+        assert inv_manager.reverse_history_entry(hid, "teste") == (False, MSG_MUDOU)
+        resp = client_gestor.post(f"/api/manutencoes/{mid}/cancelar", json={"motivo": "Engano"})
+        assert resp.status_code == 200, resp.text
+        assert inv_manager.find(item_id)["status"] == "Disponível"
+
+    def test_confirmacao_devolucao_com_ordem_em_andamento_e_item_disponivel_recusa(
+        self, inv_manager, item_indisponivel, forcar_devolucao_iniciada, executar_sql
+    ):
+        item_id = item_indisponivel["id"]
+        hid = self._ciclo_devolvido(inv_manager, item_id, forcar_devolucao_iniciada)
+        executar_sql(
+            "INSERT INTO manutencoes (item_id, status, defeito, aberta_por, aberta_em) "
+            "VALUES (%s,'aberta','x','teste',NOW())",
+            (item_id,),
+        )
+        assert inv_manager.reverse_history_entry(hid, "teste") == (False, MSG_MUDOU)
+
+    def test_cadastro_de_item_baixado_400(
+        self, client_gestor, senha_padrao_teste, inv_manager, item_disponivel
+    ):
+        item_id = item_disponivel["id"]
+        hid = _history_id(inv_manager, item_id, "Cadastro")
+        ok, msg = inv_manager.remove(item_id, "teste", "Obsolescência")
+        assert ok, msg
+
+        resp = client_gestor.post(f"/api/history/{hid}/reverse", json={"password": senha_padrao_teste})
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == MSG_MUDOU
+        assert inv_manager.get_history_entry(hid)["is_reversed"] == 0
+
+    def test_confirmacao_devolucao_de_item_baixado_400(
+        self, inv_manager, item_indisponivel, forcar_devolucao_iniciada
+    ):
+        item_id = item_indisponivel["id"]
+        hid = self._ciclo_devolvido(inv_manager, item_id, forcar_devolucao_iniciada)
+        ok, msg = inv_manager.remove(item_id, "teste", "Obsolescência")
+        assert ok, msg
+        assert inv_manager.reverse_history_entry(hid, "teste") == (False, MSG_MUDOU)
+        assert inv_manager.get_history_entry(hid)["is_reversed"] == 0
+
+    def test_cadastro_de_item_emprestado_400(self, inv_manager, item_pendente):
+        hid = _history_id(inv_manager, item_pendente["id"], "Cadastro")
+        assert inv_manager.reverse_history_entry(hid, "teste") == (False, MSG_MUDOU)
+        assert inv_manager.find(item_pendente["id"])["status"] == "Pendente"
+
+    def test_emprestimo_ja_confirmado_400(self, inv_manager, item_indisponivel):
+        hid = _history_id(inv_manager, item_indisponivel["id"], "Empréstimo")
+        assert inv_manager.reverse_history_entry(hid, "teste") == (False, MSG_MUDOU)
+        item = inv_manager.find(item_indisponivel["id"])
+        assert item["status"] == "Indisponível"
+        assert item["assigned_to"] == "Fulano de Tal"
+
+    def test_confirmacao_emprestimo_com_devolucao_iniciada_400(
+        self, inv_manager, item_indisponivel, forcar_devolucao_iniciada
+    ):
+        item_id = item_indisponivel["id"]
+        forcar_devolucao_iniciada(item_id)
+        hid = _history_id(inv_manager, item_id, "Confirmação Empréstimo")
+        assert inv_manager.reverse_history_entry(hid, "teste") == (False, MSG_MUDOU)
+        assert inv_manager.find(item_id)["status"] == "Pendente Devolução"
+
+    def test_devolucao_ja_confirmada_400(self, inv_manager, item_indisponivel, forcar_devolucao_iniciada):
+        item_id = item_indisponivel["id"]
+        self._ciclo_devolvido(inv_manager, item_id, forcar_devolucao_iniciada)
+        hid = _history_id(inv_manager, item_id, "Devolução")
+        assert inv_manager.reverse_history_entry(hid, "teste") == (False, MSG_MUDOU)
+        assert inv_manager.find(item_id)["status"] == "Disponível"
+
+
+class TestEmprestimoSoDeItemDisponivel:
+    def test_issue_recusa_quando_o_status_mudou_depois_da_leitura(
+        self, inv_manager, item_disponivel, executar_sql, monkeypatch
+    ):
+        """`issue()` lê o item antes de gravar; se outro fluxo mudou o status nesse
+        meio tempo, o UPDATE condicional não casa e nada é gravado."""
+        from datetime import datetime
+
+        item_id = item_disponivel["id"]
+        lido = inv_manager.find(item_id)
+        executar_sql("UPDATE items SET status='Em Manutenção' WHERE id=%s", (item_id,))
+        monkeypatch.setattr(inv_manager, "find", lambda _id: dict(lido))
+
+        ok, msg = inv_manager.issue(
+            item_id, "Fulano de Tal", "11122233344", "101 - Puxada", "Analista", "TI",
+            "Outra Unidade", datetime.now().strftime("%d/%m/%Y"), "teste",
+        )
+        assert (ok, msg) == (False, "Este item não está disponível para empréstimo.")
+        from app.db.database_mysql import get_cursor
+
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT status, assigned_to FROM items WHERE id=%s", (item_id,))
+            assert cur.fetchone() == {"status": "Em Manutenção", "assigned_to": None}
+            cur.execute("SELECT COUNT(*) AS n FROM history WHERE item_id=%s AND operation='Empréstimo'", (item_id,))
+            assert cur.fetchone()["n"] == 0
+            cur.execute("SELECT COUNT(*) AS n FROM transferencias WHERE item_id=%s", (item_id,))
+            assert cur.fetchone()["n"] == 0
