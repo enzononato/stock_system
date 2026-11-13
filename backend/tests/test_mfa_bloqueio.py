@@ -238,34 +238,101 @@ def _em_paralelo(funcoes):
         return list(ex.map(_rodar, funcoes))
 
 
-def test_10_codigos_errados_simultaneos_sao_todos_contados(_fastapi_app, client, tecnico_2fa):
+def test_codigos_errados_simultaneos_respeitam_os_limites(_fastapi_app, client, tecnico_2fa, monkeypatch):
+    """12 códigos errados ao mesmo tempo, 6 em cada um de 2 tokens. Invariantes (não dependem
+    da ordem de chegada): nenhum 500; toda resposta é uma das mensagens previstas; no máximo
+    5 códigos verificados por token; 10 falhas gravadas no total => bloqueio do usuário; tokens revogados."""
     from fastapi.testclient import TestClient
+
+    import app.routers.auth as auth_router
 
     usuario, dados = tecnico_2fa
     errado = _errado(dados.segredo)
-    mfa_token = _novo_token(client)
+    tokens = [_novo_token(client), _novo_token(client)]
 
-    def tentar():
-        return TestClient(_fastapi_app).post(
-            "/api/auth/mfa/verificar", json={"mfa_token": mfa_token, "codigo": errado}
+    verificados = []
+    original = auth_router.verificar_segundo_fator
+
+    def _espiao(db, usuario_, codigo, ctx):
+        verificados.append(codigo)
+        return original(db, usuario_, codigo, ctx)
+
+    monkeypatch.setattr(auth_router, "verificar_segundo_fator", _espiao)
+
+    def tentar(token):
+        return lambda: TestClient(_fastapi_app).post(
+            "/api/auth/mfa/verificar", json={"mfa_token": token, "codigo": errado}
         )
 
-    respostas = _em_paralelo([tentar] * 10)
+    respostas = _em_paralelo([tentar(t) for t in tokens for _ in range(6)])
 
+    esperadas = {"Código inválido.", MSG_TOKEN_ESGOTADO, MSG_BLOQUEADO, MSG_ETAPA_EXPIRADA}
     assert all(r.status_code in (400, 429) for r in respostas), [r.status_code for r in respostas]
-    detalhes = [r.json()["detail"] for r in respostas]
-    assert detalhes.count("Código inválido.") == 4
-    assert detalhes.count(MSG_TOKEN_ESGOTADO) == 5
-    assert detalhes.count(MSG_BLOQUEADO) == 1
-    # Todas as falhas foram gravadas e auditadas (nenhuma perdida por deadlock).
-    assert len(_linhas("SELECT 1 FROM mfa_falhas WHERE usuario_id = %s", (usuario["id"],))) == 10
+    assert {r.json()["detail"] for r in respostas} <= esperadas
+
+    linhas = _linhas("SELECT jti FROM mfa_falhas WHERE usuario_id = %s", (usuario["id"],))
+    por_token = {}
+    for l in linhas:
+        por_token[l["jti"]] = por_token.get(l["jti"], 0) + 1
+    assert all(n <= 5 for n in por_token.values()), por_token  # limite estrito por token
+    assert len(verificados) == len(linhas) <= 10  # só se verifica o que cabe no limite
+    assert len(linhas) == 10  # 2 tokens x 5: o usuário chegou a 10 falhas gravadas
     assert len(linhas_auditoria("usuario", "falha_2fa")) == 10
-    # Token revogado, e o usuário ficou bloqueado.
-    assert _verificar(client, mfa_token, codigo_totp(dados.segredo)).json()["detail"] == MSG_ETAPA_EXPIRADA
+
     bloqueio = _linhas("SELECT mfa_bloqueado_ate FROM usuarios WHERE id = %s", (usuario["id"],))[0]
     assert bloqueio["mfa_bloqueado_ate"] is not None
-    novo = _verificar(client, _novo_token(client), codigo_totp(dados.segredo))
-    assert novo.status_code == 429
+    for token in tokens:  # revogados: nem o código certo entra
+        assert _verificar(client, token, codigo_totp(dados.segredo)).json()["detail"] == MSG_ETAPA_EXPIRADA
+    assert _verificar(client, _novo_token(client), codigo_totp(dados.segredo)).status_code == 429
+
+
+def test_token_com_5_falhas_gravadas_nao_verifica_nem_o_codigo_certo(client, tecnico_2fa):
+    """Limite estrito: sob a trava do usuário, o token que já tem 5 falhas é recusado sem
+    conferir o código (cobre o pedido em voo que chegou antes da revogação)."""
+    from jose import jwt as jose_jwt
+
+    from app.db.mfa_db import MfaDBManager
+
+    usuario, dados = tecnico_2fa
+    mfa_token = _novo_token(client)
+    jti = jose_jwt.get_unverified_claims(mfa_token)["jti"]
+    db = MfaDBManager()
+    agora = datetime.now(timezone.utc).replace(tzinfo=None)
+    for _ in range(5):
+        db.registrar_falha(usuario["id"], jti, agora, agora - timedelta(minutes=15))
+
+    resp = _verificar(client, mfa_token, codigo_totp(dados.segredo))
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == MSG_TOKEN_ESGOTADO
+    # ...e o token fica revogado.
+    assert _verificar(client, mfa_token, codigo_totp(dados.segredo)).json()["detail"] == MSG_ETAPA_EXPIRADA
+    assert len(_linhas("SELECT 1 FROM mfa_falhas WHERE usuario_id = %s", (usuario["id"],))) == 5
+
+
+def test_substituir_codigos_e_consumo_simultaneos_nao_dao_deadlock(tecnico_2fa):
+    """Todo caminho trava `usuarios` primeiro: trocar os códigos (perfil) ao mesmo tempo que
+    o login consome um código (transação do usuário) não pode gerar espera cruzada pela FK."""
+    from app.db.mfa_db import MfaDBManager
+    from app.services.mfa import hash_codigo_recuperacao
+
+    usuario, dados = tecnico_2fa
+    uid = usuario["id"]
+    db = MfaDBManager()
+    codigo = hash_codigo_recuperacao(dados.codigos[0])
+
+    def trocar():
+        db.substituir_codigos(uid, [hash_codigo_recuperacao(c) for c in dados.codigos])
+        return "trocou"
+
+    def consumir():
+        with db.transacao_do_usuario(uid):
+            db.consumir_codigo(uid, codigo)
+            db.contar_codigos_restantes(uid)
+        return "consumiu"
+
+    for _ in range(5):
+        resultados = _em_paralelo([trocar, consumir, trocar, consumir, trocar, consumir])
+        assert sorted(set(resultados)) == ["consumiu", "trocou"]
 
 
 def test_falhas_simultaneas_de_usuarios_diferentes_sao_ambas_gravadas(

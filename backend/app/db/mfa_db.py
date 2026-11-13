@@ -135,6 +135,11 @@ class MfaDBManager:
             )
         return do_token, do_usuario
 
+    def contar_falhas_do_token(self, usuario_id: int, jti: str) -> int:
+        with self._cursor(commit=False) as cur:
+            cur.execute("SELECT COUNT(*) AS n FROM mfa_falhas WHERE usuario_id = %s AND jti = %s", (usuario_id, jti))
+            return cur.fetchone()["n"]
+
     def bloquear(self, usuario_id: int, ate: datetime) -> None:
         with self._cursor(dict_cursor=False) as cur:
             cur.execute("UPDATE usuarios SET mfa_bloqueado_ate = %s WHERE id = %s", (ate, usuario_id))
@@ -146,8 +151,13 @@ class MfaDBManager:
             cur.execute("UPDATE usuarios SET mfa_bloqueado_ate = NULL WHERE id = %s", (usuario_id,))
 
     def substituir_codigos(self, usuario_id: int, hashes: list[str]) -> None:
-        """Troca todos os códigos de recuperação (os antigos deixam de valer)."""
+        """Troca todos os códigos de recuperação (os antigos deixam de valer).
+
+        Trava a linha do usuário ANTES de mexer nos códigos: todo caminho trava `usuarios`
+        primeiro (como a verificação do login), então a FK `mfa_recovery_codes -> usuarios`
+        não cria espera cruzada (deadlock) com quem consome um código."""
         with self._cursor(dict_cursor=False) as cur:
+            cur.execute("SELECT id FROM usuarios WHERE id = %s FOR UPDATE", (usuario_id,))
             self._trocar_codigos(cur, usuario_id, hashes)
 
     def desativar(self, usuario_id: int) -> None:

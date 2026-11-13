@@ -117,6 +117,14 @@ def exigir_verificacao_liberada(db: MfaDBManager, usuario: dict) -> None:
         raise MfaBloqueado()
 
 
+def exigir_token_nao_esgotado(db: MfaDBManager, usuario: dict, jti: str) -> None:
+    """Limite estrito por token: com a linha do usuário travada, se o token já tem
+    5 falhas (`MAX_FALHAS_POR_TOKEN`) gravadas, levanta `TokenEsgotado` SEM verificar o código
+    (pedidos em voo que chegaram antes da revogação não ganham tentativas extras)."""
+    if db.contar_falhas_do_token(usuario["id"], jti) >= MAX_FALHAS_POR_TOKEN:
+        raise TokenEsgotado()
+
+
 def registrar_falha_segundo_fator(db: MfaDBManager, usuario: dict, jti: str, ctx: AuditContext) -> None:
     """Contabiliza um código errado da 2ª etapa e audita `falha_2fa` (sem código nem token).
 

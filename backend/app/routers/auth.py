@@ -38,9 +38,10 @@ from app.dependencies import (
     get_user_db,
     limiter,
 )
-from app.services.mfa import CodigoInvalido, MfaErro
+from app.services.mfa import CodigoInvalido, MfaErro, TokenEsgotado
 from app.services.segundo_fator import (
     confirmar_cadastro,
+    exigir_token_nao_esgotado,
     exigir_verificacao_liberada,
     iniciar_cadastro,
     registrar_falha_segundo_fator,
@@ -169,6 +170,7 @@ def verificar_mfa(
         with mfa_db.transacao_do_usuario(usuario["id"]):
             try:
                 exigir_verificacao_liberada(mfa_db, usuario)
+                exigir_token_nao_esgotado(mfa_db, usuario, payload["jti"])
                 restantes = verificar_segundo_fator(mfa_db, usuario, body.codigo, ctx)
                 mfa_db.limpar_falhas(usuario["id"])
             except CodigoInvalido as exc:
@@ -181,6 +183,7 @@ def verificar_mfa(
                     erro, revogar_token = limite, True
             except MfaErro as exc:
                 erro = exc
+                revogar_token = isinstance(exc, TokenEsgotado)  # garante a revogação do token esgotado
     except pymysql.MySQLError as exc:
         if exc.args and exc.args[0] in (1205, 1213):  # espera de trava / deadlock: nunca 500
             raise HTTPException(

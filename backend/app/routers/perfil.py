@@ -1,4 +1,5 @@
 """Perfil do usuário logado e 2FA opcional (para quem não é obrigado a tê-lo)."""
+import pymysql
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.core.config import settings
@@ -27,6 +28,13 @@ def _usuario(user_db: UserDBManager, atual: CurrentUser) -> dict:
     if usuario is None:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
     return usuario
+
+
+def _erro_de_banco(exc: pymysql.MySQLError) -> HTTPException:
+    """Deadlock (1213) ou espera de trava (1205): 409 para tentar de novo, nunca 500."""
+    if exc.args and exc.args[0] in (1205, 1213):
+        return HTTPException(status_code=409, detail="Não foi possível concluir agora. Tente novamente.")
+    raise exc
 
 
 def _erro(exc: MfaErro) -> HTTPException:
@@ -75,6 +83,8 @@ def iniciar_2fa(
         segredo, uri = segundo_fator.iniciar_cadastro(mfa_db, _usuario(user_db, atual))
     except MfaErro as exc:
         raise _erro(exc)
+    except pymysql.MySQLError as exc:
+        raise _erro_de_banco(exc)
     return CadastroTotpResponse(segredo=segredo, otpauth_uri=uri)
 
 
@@ -92,6 +102,8 @@ def confirmar_2fa(
         codigos = segundo_fator.confirmar_cadastro(mfa_db, _usuario(user_db, atual), body.codigo, ctx)
     except MfaErro as exc:
         raise _erro(exc)
+    except pymysql.MySQLError as exc:
+        raise _erro_de_banco(exc)
     return CodigosRecuperacaoResponse(codigos_recuperacao=codigos)
 
 
@@ -110,6 +122,8 @@ def desativar_2fa(
         segundo_fator.desativar_2fa(mfa_db, _usuario(user_db, atual), ctx)
     except MfaErro as exc:
         raise _erro(exc)
+    except pymysql.MySQLError as exc:
+        raise _erro_de_banco(exc)
     return MensagemResponse(detail="Verificação em duas etapas desativada.")
 
 
@@ -128,4 +142,6 @@ def regenerar_codigos(
         codigos = segundo_fator.regenerar_codigos(mfa_db, _usuario(user_db, atual), ctx)
     except MfaErro as exc:
         raise _erro(exc)
+    except pymysql.MySQLError as exc:
+        raise _erro_de_banco(exc)
     return CodigosRecuperacaoResponse(codigos_recuperacao=codigos)

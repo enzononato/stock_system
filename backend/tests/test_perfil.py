@@ -208,3 +208,22 @@ def test_iniciar_exige_a_senha_atual(_fastapi_app, client, chave_totp, usuario_t
 
     certa = c.post("/api/perfil/2fa/iniciar", json={"senha": senha_padrao_teste})
     assert certa.status_code == 200
+
+
+def test_deadlock_ao_regenerar_codigos_vira_409_nunca_500(
+    _fastapi_app, client, chave_totp, usuario_tecnico, senha_padrao_teste, monkeypatch
+):
+    import pymysql
+
+    from app.db.mfa_db import MfaDBManager
+
+    c = _cliente_logado(_fastapi_app, client, "tecnico.teste", senha_padrao_teste)
+    _ativar_pelo_perfil(c)
+
+    def _estoura(self, *a, **k):
+        raise pymysql.err.OperationalError(1213, "Deadlock found when trying to get lock")
+
+    monkeypatch.setattr(MfaDBManager, "substituir_codigos", _estoura)
+    resp = c.post("/api/perfil/2fa/codigos", json={"senha": senha_padrao_teste})
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "Não foi possível concluir agora. Tente novamente."
