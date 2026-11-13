@@ -16,6 +16,7 @@ from app.db.token_db import TokenDBManager
 from app.db.unidade_db import UnidadeDBManager
 from app.db.colaborador_db import ColaboradorDBManager
 from app.db.audit_db import AuditDBManager
+from app.db.local_db import LocalDBManager
 from app.services.audit import AuditContext
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -107,6 +108,11 @@ def get_unidade_db() -> UnidadeDBManager:
 @lru_cache
 def get_audit_db() -> AuditDBManager:
     return AuditDBManager()
+
+
+@lru_cache
+def get_local_db() -> LocalDBManager:
+    return LocalDBManager()
 
 
 @lru_cache

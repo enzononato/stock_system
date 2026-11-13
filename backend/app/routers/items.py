@@ -29,6 +29,7 @@ def list_items(
     status: Optional[str] = None,
     revenda: Optional[str] = None,
     search: Optional[str] = None,
+    colaborador_id: Optional[int] = None,
     limit: int = Query(default=settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_PAGE_SIZE),
     offset: int = Query(default=0, ge=0),
     _: CurrentUser = Depends(get_current_user),
@@ -37,7 +38,8 @@ def list_items(
     # T10: os filtros são repassados para a camada de dados (SQL), em vez de
     # filtrar em Python depois de carregar a tabela inteira em memória.
     items, total = inv.list_items(
-        tipo=tipo, status=status, revenda=revenda, search=search, limit=limit, offset=offset,
+        tipo=tipo, status=status, revenda=revenda, search=search,
+        colaborador_id=colaborador_id, limit=limit, offset=offset,
     )
     return {"items": items, "total": total}
 
@@ -48,7 +50,7 @@ def get_item(
     _: CurrentUser = Depends(get_current_user),
     inv: InventoryDBManager = Depends(get_inventory_db),
 ):
-    item = inv.find(item_id)
+    item = inv.get_item(item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Item não encontrado.")
     return item

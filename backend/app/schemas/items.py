@@ -132,6 +132,14 @@ class ItemResponse(BaseModel):
     date_registered: Optional[datetime]
     date_issued: Optional[datetime]
     peripheral_count: Optional[int] = 0
+    # Vínculos (migração 0004); nome/setor/cargo/superior vêm de JOINs em colaboradores.
+    colaborador_id: Optional[int] = None
+    local_id: Optional[int] = None
+    local_nome: Optional[str] = None
+    colaborador_nome: Optional[str] = None
+    colaborador_setor: Optional[str] = None
+    colaborador_cargo: Optional[str] = None
+    superior_nome: Optional[str] = None
 
     class Config:
         from_attributes = True

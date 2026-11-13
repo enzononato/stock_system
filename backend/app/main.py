@@ -13,7 +13,7 @@ from app.core.config import settings
 from app.db.migrations import aplicar_pendentes, garantir_baseline
 from app.dependencies import limiter, get_inventory_db
 from app.services import scheduler
-from app.routers import auth, users, items, peripherals, loans, documents, history, reports, constants, unidades, audit, colaboradores
+from app.routers import auth, users, items, peripherals, loans, documents, history, reports, constants, unidades, audit, colaboradores, locais
 
 logger = logging.getLogger(__name__)
 
@@ -69,11 +69,17 @@ _ROTULOS_DE_CAMPO = {
     "superior_id": "Superior",
     "unidade_id": "Unidade",
     "situacao": "Situação",
+    # Campos de Local e vínculos do item
+    "descricao": "Descrição",
+    "ativo": "Ativo",
+    "colaborador_id": "Colaborador",
+    "local_id": "Local",
 }
 
-# "nome" vale "Nome da unidade" nas unidades; nas rotas de colaboradores é só "Nome".
+# "nome" vale "Nome da unidade" nas unidades; nas rotas de colaboradores e locais é só "Nome".
 _ROTULOS_POR_ROTA = {
     "/api/colaboradores": {"nome": "Nome"},
+    "/api/locais": {"nome": "Nome"},
 }
 
 
@@ -142,6 +148,7 @@ app.include_router(constants.router)
 app.include_router(unidades.router)
 app.include_router(audit.router)
 app.include_router(colaboradores.router)
+app.include_router(locais.router)
 
 
 @app.on_event("startup")
