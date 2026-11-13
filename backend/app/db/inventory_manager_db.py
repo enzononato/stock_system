@@ -181,6 +181,38 @@ _JOINS_VINCULOS = (
 )
 
 
+# Ordenação da listagem de itens: chave pública -> expressões SQL. O ORDER BY é montado
+# só a partir desta tabela (nunca do texto recebido).
+ORDENACOES_ITEMS: dict[str, tuple[str, ...]] = {
+    "id": ("i.id",),
+    "tipo": ("i.tipo",),
+    "equipamento": ("i.brand", "i.model"),
+    "status": ("CAST(i.status AS CHAR)",),
+    "colaborador": ("i.assigned_to",),
+    "setor": ("c.setor",),
+    "cargo": ("c.cargo",),
+    "unidade": ("i.revenda",),
+    "cadastro": ("i.date_registered",),
+}
+
+
+def montar_order_by_items(sort: str, direcao: str) -> str:
+    """Monta o ORDER BY de list_items. Vazio/NULL fica no fim nas duas direções; desempate i.id DESC."""
+    if sort not in ORDENACOES_ITEMS:
+        raise ValueError("Ordenação inválida.")
+    if direcao not in ("asc", "desc"):
+        raise ValueError("Direção da ordenação inválida: use asc ou desc.")
+    d = direcao.upper()
+    expressoes = ORDENACOES_ITEMS[sort]
+    termos: list[str] = []
+    if sort not in ("id", "cadastro"):
+        termos.append(f"NULLIF({expressoes[0]}, '') IS NULL")
+    termos.extend(f"{e} {d}" for e in expressoes)
+    if sort != "id":
+        termos.append("i.id DESC")
+    return ", ".join(termos)
+
+
 class InventoryDBManager:
     def __init__(self):
         self._create_tables()
@@ -337,6 +369,8 @@ class InventoryDBManager:
         revenda: str | None = None,
         search: str | None = None,
         colaborador_id: int | None = None,
+        sort: str = "id",
+        direcao: str = "desc",
         limit: int | None = None,
         offset: int = 0,
     ) -> tuple[list[dict], int]:
@@ -370,6 +404,7 @@ class InventoryDBManager:
             )
             params.extend([like, like, like, like, like])
         where_sql = " AND ".join(where)
+        order_by = montar_order_by_items(sort, direcao)
 
         with get_cursor(commit=False) as cur:
             cur.execute(f"SELECT COUNT(*) as total FROM items i WHERE {where_sql}", params)
@@ -387,7 +422,7 @@ class InventoryDBManager:
                 FROM items i
                 {_JOINS_VINCULOS}
                 WHERE {where_sql}
-                ORDER BY i.id DESC
+                ORDER BY {order_by}
             """
             query_params = list(params)
             if limit is not None:
