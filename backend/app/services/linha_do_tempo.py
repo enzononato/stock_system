@@ -4,7 +4,7 @@ Cada fonte é uma função `(item_id) -> list[Evento]` que lê UMA tabela e devo
 eventos dela. `montar_linha_do_tempo` junta todas e ordena. A F4 implementa as
 fontes de histórico, manutenções, transferências e baixa
 (`app.services.linha_do_tempo_fontes`); termos, linha telefônica e inventário
-entram depois, acrescentando o módulo delas em `MODULOS_DE_FONTES` (a F7 faz isso).
+entram pelo módulo `linha_do_tempo_fontes_f7`, acrescentado por último em `MODULOS_DE_FONTES`.
 """
 import importlib
 import logging
@@ -33,8 +33,11 @@ FonteLinhaDoTempo = Callable[[int], list[Evento]]
 # Ordem de registro preservada; a chave é o nome da função.
 _FONTES: dict[str, FonteLinhaDoTempo] = {}
 
-# A F7 acrescenta aqui o módulo das fontes de termos, linha telefônica e inventário.
-MODULOS_DE_FONTES: tuple[str, ...] = ("app.services.linha_do_tempo_fontes",)
+# A F7 já acrescentou aqui o seu módulo (termos, linha telefônica e inventário).
+MODULOS_DE_FONTES: tuple[str, ...] = (
+    "app.services.linha_do_tempo_fontes",
+    "app.services.linha_do_tempo_fontes_f7",
+)
 
 
 def registrar_fonte(func: FonteLinhaDoTempo) -> FonteLinhaDoTempo:
