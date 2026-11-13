@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Request, Query
@@ -15,10 +16,12 @@ from app.dependencies import (
     limiter,
     CurrentUser,
 )
-from app.services import audit
+from app.services import audit, termos
 from app.services.audit import AuditContext
 from app.core.security import verify_password
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/history", tags=["history"])
 
@@ -80,4 +83,8 @@ def reverse_entry(
         ctx, "historico", history_id, "estornar",
         antes={"is_reversed": 0, **base}, depois={"is_reversed": 1, **base},
     )
+    try:
+        termos.cancelar_por_estorno(history_id, ctx)
+    except Exception:
+        logger.exception("Falha ao cancelar as solicitações de termo do lançamento %s.", history_id)
     return {"detail": msg}

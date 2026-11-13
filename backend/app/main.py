@@ -74,6 +74,7 @@ _ROTULOS_DE_CAMPO = {
     "ativo": "Ativo",
     "colaborador_id": "Colaborador",
     "local_id": "Local",
+    "agendado_para": "Data agendada",
 }
 
 # "nome" vale "Nome da unidade" nas unidades; nas rotas de colaboradores e locais é só "Nome".
