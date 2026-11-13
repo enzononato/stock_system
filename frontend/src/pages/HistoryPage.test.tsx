@@ -245,3 +245,36 @@ describe('HistoryPage — listagem', () => {
     expect(pedidos.filter((p) => p.get('search') === 'ana').every((p) => p.get('offset') === '0')).toBe(true)
   })
 })
+
+describe('HistoryPage — exportação (F7)', () => {
+  it('exporta Excel/PDF com a busca da tela e mantém o CSV', async () => {
+    const buscas: (string | null)[] = []
+    server.use(
+      http.get('/api/history', ({ request }) => {
+        buscas.push(new URL(request.url).searchParams.get('search'))
+        return HttpResponse.json({ items: [entradaCadastro], total: 1 })
+      })
+    )
+    const urls: URL[] = []
+    URL.createObjectURL = vi.fn(() => 'blob:teste')
+    URL.revokeObjectURL = vi.fn()
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    server.use(
+      http.get('/api/exportacoes/historico', ({ request }) => {
+        urls.push(new URL(request.url))
+        return new HttpResponse(new Blob(['x']))
+      })
+    )
+    const user = userEvent.setup()
+    renderWithClient(<HistoryPage />)
+    await screen.findByRole('button', { name: /Estornar/i })
+    expect(screen.getByRole('button', { name: /Exportar CSV/ })).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('Busca geral'), 'SN-1')
+    await waitFor(() => expect(buscas).toContain('SN-1')) // a busca já passou pelo debounce
+    await user.click(screen.getByRole('button', { name: 'Exportar em PDF' }))
+
+    await waitFor(() => expect(urls).toHaveLength(1))
+    expect(urls[0].search).toBe('?search=SN-1&formato=pdf')
+  })
+})

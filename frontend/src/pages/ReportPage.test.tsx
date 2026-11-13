@@ -6,13 +6,15 @@ import { server } from '@/test/server'
 import { renderWithClient } from '@/test/render'
 import ReportPage from '@/pages/ReportPage'
 
+const papel = vi.hoisted(() => ({ atual: 'Gestor' }))
+
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({
-    user: { id: 1, username: 'gestor.teste', role: 'Gestor' },
+    user: { id: 1, username: 'gestor.teste', role: papel.atual },
     isLoading: false,
     login: vi.fn(),
     logout: vi.fn(),
-    hasRole: (...roles: string[]) => roles.includes('Gestor'),
+    hasRole: (...roles: string[]) => roles.includes(papel.atual),
   }),
 }))
 
@@ -43,7 +45,10 @@ function renderPage() {
 }
 
 describe('ReportPage', () => {
-  beforeEach(() => localStorage.clear())
+  beforeEach(() => {
+    localStorage.clear()
+    papel.atual = 'Gestor'
+  })
 
   it('pagina no cliente com 25 por padrão', async () => {
     renderPage()
@@ -84,5 +89,38 @@ describe('ReportPage', () => {
     expect(await screen.findAllByRole('option', { name: 'REVALLE JUAZEIRO' })).toHaveLength(1)
     await user.click(screen.getByRole('option', { name: 'REVALLE JUAZEIRO' }))
     expect(await screen.findByText('Mostrando 1–2 de 2')).toBeInTheDocument()
+  })
+
+  it('o Gestor exporta o mês gerado em PDF e o CSV continua lá', async () => {
+    const urls: URL[] = []
+    URL.createObjectURL = vi.fn(() => 'blob:teste')
+    URL.revokeObjectURL = vi.fn()
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    server.use(
+      http.get('/api/exportacoes/relatorio-mensal', ({ request }) => {
+        urls.push(new URL(request.url))
+        return new HttpResponse(new Blob(['x']))
+      })
+    )
+    renderPage()
+    const user = userEvent.setup()
+    await screen.findByText('Mostrando 1–25 de 30')
+    expect(screen.getByRole('button', { name: 'CSV' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Exportar em PDF' }))
+
+    await vi.waitFor(() => expect(urls).toHaveLength(1))
+    const agora = new Date()
+    expect(urls[0].searchParams.get('year')).toBe(String(agora.getFullYear()))
+    expect(urls[0].searchParams.get('month')).toBe(String(agora.getMonth() + 1))
+    expect(urls[0].searchParams.get('formato')).toBe('pdf')
+  })
+
+  it('o Técnico não vê os botões Excel/PDF do relatório', async () => {
+    papel.atual = 'Técnico'
+    renderPage()
+    await screen.findByText('Mostrando 1–25 de 30')
+    expect(screen.queryByRole('group', { name: 'Exportar' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'CSV' })).toBeInTheDocument()
   })
 })

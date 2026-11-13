@@ -7,13 +7,15 @@ import { server } from '@/test/server'
 import { renderWithClient } from '@/test/render'
 import StockPage from '@/pages/StockPage'
 
+const papel = vi.hoisted(() => ({ atual: 'Gestor' }))
+
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({
-    user: { id: 1, username: 'gestor.teste', role: 'Gestor' },
+    user: { id: 1, username: 'gestor.teste', role: papel.atual },
     isLoading: false,
     login: vi.fn(),
     logout: vi.fn(),
-    hasRole: (...roles: string[]) => roles.includes('Gestor'),
+    hasRole: (...roles: string[]) => roles.includes(papel.atual),
   }),
 }))
 
@@ -109,6 +111,7 @@ describe('StockPage', () => {
   beforeEach(() => {
     localStorage.clear()
     colaboradoresPedidos = []
+    papel.atual = 'Gestor'
   })
 
   it('mostra Setor e Cargo do colaborador, unidade em CAIXA ALTA e "—" sem colaborador', async () => {
@@ -251,5 +254,52 @@ describe('StockPage', () => {
     const link = await screen.findByRole('link', { name: /#10/ })
     expect(link).toHaveAttribute('href', '/items/10')
     expect(screen.getByRole('table').parentElement).toHaveClass('overflow-x-auto')
+  })
+
+  describe('exportação (F7)', () => {
+    function mockExportacao() {
+      const urls: URL[] = []
+      URL.createObjectURL = vi.fn(() => 'blob:teste')
+      URL.revokeObjectURL = vi.fn()
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+      server.use(
+        http.get('/api/exportacoes/estoque', ({ request }) => {
+          urls.push(new URL(request.url))
+          return new HttpResponse(new Blob(['x']))
+        })
+      )
+      return urls
+    }
+
+    it('exporta com os filtros e a ordenação da tela', async () => {
+      const urls = mockExportacao()
+      mockServidor()
+      renderPage()
+      const user = userEvent.setup()
+      await screen.findByRole('link', { name: /#10/ })
+      await user.click(screen.getByRole('combobox', { name: 'Status' }))
+      await user.click(await screen.findByRole('option', { name: 'Disponível' }))
+      await waitFor(() => expect(ultimo().get('status')).toBe('Disponível'))
+      await user.click(screen.getByRole('button', { name: 'Colaborador' }))
+      await waitFor(() => expect(ultimo().get('sort')).toBe('colaborador'))
+
+      await user.click(screen.getByRole('button', { name: 'Exportar em Excel' }))
+
+      await waitFor(() => expect(urls).toHaveLength(1))
+      const p = urls[0].searchParams
+      expect(p.get('status')).toBe('Disponível')
+      expect(p.get('sort')).toBe('colaborador')
+      expect(p.get('dir')).toBe('asc')
+      expect(p.get('formato')).toBe('xlsx')
+      expect(p.has('revenda')).toBe(false)
+    })
+
+    it('Jovem Aprendiz não vê os botões de exportar', async () => {
+      papel.atual = 'Jovem Aprendiz'
+      mockServidor()
+      renderPage()
+      await screen.findByRole('link', { name: /#10/ })
+      expect(screen.queryByRole('group', { name: 'Exportar' })).not.toBeInTheDocument()
+    })
   })
 })

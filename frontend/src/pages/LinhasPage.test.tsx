@@ -255,3 +255,44 @@ describe('navegação', () => {
     expect(getVisibleNavItems('Gestor').map((i) => i.to)).toContain('/linhas')
   })
 })
+
+describe('LinhasPage — exportação (F7)', () => {
+  function mockExportacao() {
+    const urls: URL[] = []
+    URL.createObjectURL = vi.fn(() => 'blob:teste')
+    URL.revokeObjectURL = vi.fn()
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    server.use(
+      http.get('/api/exportacoes/linhas', ({ request }) => {
+        urls.push(new URL(request.url))
+        return new HttpResponse(new Blob(['x']))
+      })
+    )
+    return urls
+  }
+
+  it('exporta com o status escolhido na tela', async () => {
+    const urls = mockExportacao()
+    const pedidos = mockBase()
+    renderPage()
+    const user = userEvent.setup()
+    await screen.findByText('(74) 99999-0001')
+    await user.selectOptions(screen.getByLabelText('Status'), 'ativa')
+    await waitFor(() => expect(pedidos.some((p) => p.get('status') === 'ativa')).toBe(true))
+
+    await user.click(screen.getByRole('button', { name: 'Exportar em Excel' }))
+
+    await waitFor(() => expect(urls).toHaveLength(1))
+    expect(urls[0].searchParams.get('status')).toBe('ativa')
+    expect(urls[0].searchParams.get('formato')).toBe('xlsx')
+    expect(urls[0].searchParams.has('limit')).toBe(false)
+  })
+
+  it('Jovem Aprendiz não vê os botões de exportar', async () => {
+    role = 'Jovem Aprendiz'
+    mockBase()
+    renderPage()
+    await screen.findByText('(74) 99999-0001')
+    expect(screen.queryByRole('group', { name: 'Exportar' })).not.toBeInTheDocument()
+  })
+})

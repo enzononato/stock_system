@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -100,5 +100,28 @@ describe('TermsPage', () => {
     await user.click(await screen.findByText('Maria Souza'))
 
     expect(await screen.findByText('Não foi possível carregar a assinatura.')).toBeInTheDocument()
+  })
+
+  it('exporta os termos pendentes em Excel', async () => {
+    mockItens()
+    const urls: URL[] = []
+    URL.createObjectURL = vi.fn(() => 'blob:teste')
+    URL.revokeObjectURL = vi.fn()
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    server.use(
+      http.get('/api/exportacoes/termos-pendentes', ({ request }) => {
+        urls.push(new URL(request.url))
+        return new HttpResponse(new Blob(['x']))
+      })
+    )
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Maria Souza')
+
+    await user.click(screen.getByRole('button', { name: 'Exportar termos pendentes em Excel' }))
+
+    await waitFor(() => expect(urls).toHaveLength(1))
+    expect(urls[0].pathname).toBe('/api/exportacoes/termos-pendentes')
+    expect(urls[0].search).toBe('?formato=xlsx')
   })
 })

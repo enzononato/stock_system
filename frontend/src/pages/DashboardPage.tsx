@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import {
   AreaChart,
@@ -11,25 +11,26 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import {
-  AlertCircle,
   ArrowRight,
   Boxes,
-  Clock,
-  ExternalLink,
   FileSignature,
   Loader2,
   PackageCheck,
   RefreshCw,
   TrendingUp,
   Undo2,
+  Wrench,
 } from 'lucide-react'
 
-import { listItemsPaginated } from '@/api/items'
+import { getAlertasPainel, getResumoPainel } from '@/api/painel'
 import { getLoansChart } from '@/api/reports'
-import { listHistoryPaginated } from '@/api/history'
-import { StatBlock } from '@/components/ui/StatBlock'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/button'
+import { ErrorState, LoadingState } from '@/components/ui/StateBlocks'
 import { useAuth } from '@/contexts/AuthContext'
+import { EquipamentosPorUnidade } from '@/features/painel/EquipamentosPorUnidade'
+import { IndicadoresPainel } from '@/features/painel/IndicadoresPainel'
+import { ListaAlertas } from '@/features/painel/ListaAlertas'
 import { useTheme } from '@/lib/theme'
 import { formatDateTime } from '@/lib/utils'
 
@@ -101,6 +102,13 @@ const LINKS_RAPIDOS: LinkRapido[] = [
     icon: FileSignature,
     roles: ['Gestor', 'Técnico'],
   },
+  {
+    to: '/manutencoes',
+    label: 'Manutenções',
+    description: 'Ordens abertas e custo',
+    icon: Wrench,
+    roles: ['Gestor', 'Técnico'],
+  },
 ]
 
 export default function DashboardPage() {
@@ -111,75 +119,33 @@ export default function DashboardPage() {
   useTheme()
 
   const { hasRole } = useAuth()
-  // "Atenção Operacional" (botões para /terms e /return) e "Últimas
-  // Movimentações" (GET /history) exigem Gestor ou Técnico no backend —
-  // Jovem Aprendiz não acessa nem as rotas de destino (App.tsx) nem o
-  // endpoint de histórico (history.py, gestor_or_tecnico), que devolveria
-  // 403. Em vez de um link morto ou uma requisição fadada a falhar, as duas
-  // seções somem inteiras para esse papel — os quatro totais do topo
-  // continuam visíveis para todos, pois vêm de GET /items (liberado a
-  // qualquer usuário autenticado).
-  const podeVerOperacoes = hasRole('Gestor', 'Técnico')
+  // Os alertas são pendências que só Gestor e Técnico resolvem (e trazem nome de
+  // colaborador desligado): o endpoint é restrito a eles, então o Jovem Aprendiz nem
+  // dispara a consulta (sem 403 previsível) e vê só os indicadores.
+  const podeVerAlertas = hasRole('Gestor', 'Técnico')
+
+  const queryClient = useQueryClient()
+  const atualizando = useIsFetching({ queryKey: ['painel'] }) > 0
 
   const now = new Date()
   const currentYear = now.getFullYear()
   const currentMonth = now.getMonth() + 1
 
-  // Quatro totais do topo: cada um lê só o `total` de uma consulta dedicada
-  // com `limit` mínimo — nunca soma um array carregado no cliente. Mesmo
-  // padrão de StockPage (ver comentário lá): antes, telas como esta
-  // agregavam sobre `listItemsPaginated({ limit: 500 })`, e acima de 500
-  // itens ativos os números ficavam errados em silêncio.
-  const { data: totalGeralData, isLoading: totalGeralLoading } = useQuery({
-    queryKey: ['dashboard', 'items', 'count', 'total'],
-    queryFn: () => listItemsPaginated({ limit: 1 }),
+  // Todos os números vêm do servidor (sem o limite de 500 itens do cliente).
+  const resumoQuery = useQuery({
+    queryKey: ['painel', 'resumo'],
+    queryFn: getResumoPainel,
   })
-  const { data: disponiveisData, isLoading: disponiveisLoading } = useQuery({
-    queryKey: ['dashboard', 'items', 'count', 'Disponível'],
-    queryFn: () => listItemsPaginated({ status: 'Disponível', limit: 1 }),
-  })
-  const { data: indisponiveisData, isLoading: indisponiveisLoading } = useQuery({
-    queryKey: ['dashboard', 'items', 'count', 'Indisponível'],
-    queryFn: () => listItemsPaginated({ status: 'Indisponível', limit: 1 }),
-  })
-  // A lista "Atenção Operacional" mostra só os primeiros pendentes de cada
-  // tipo; o `total` desta mesma consulta paginada também alimenta o quarto
-  // bloco do topo ("Pendências Operacionais") — uma única requisição por
-  // status cobre as duas necessidades, sem buscar a lista inteira.
-  const { data: pendenteData, isLoading: pendenteLoading } = useQuery({
-    queryKey: ['dashboard', 'items', 'count', 'Pendente'],
-    queryFn: () => listItemsPaginated({ status: 'Pendente', limit: 4 }),
-  })
-  const { data: pendenteDevolucaoData, isLoading: pendenteDevolucaoLoading } = useQuery({
-    queryKey: ['dashboard', 'items', 'count', 'Pendente Devolução'],
-    queryFn: () => listItemsPaginated({ status: 'Pendente Devolução', limit: 3 }),
+  const alertasQuery = useQuery({
+    queryKey: ['painel', 'alertas'],
+    queryFn: getAlertasPainel,
+    enabled: podeVerAlertas,
   })
 
   const loansChartQuery = useQuery({
     queryKey: ['dashboard', 'chart-loans', currentYear, currentMonth],
     queryFn: () => getLoansChart(currentYear, currentMonth),
   })
-
-  const historyQuery = useQuery({
-    queryKey: ['dashboard', 'recent-history'],
-    queryFn: () => listHistoryPaginated({ limit: 6, offset: 0 }),
-    // Jovem Aprendiz não vê esta seção (ver `podeVerOperacoes`) — desabilitar
-    // a consulta evita um 403 previsível contra o backend só para descartar
-    // a resposta.
-    enabled: podeVerOperacoes,
-  })
-
-  const totalGeral = totalGeralData?.total ?? 0
-  const disponiveisCount = disponiveisData?.total ?? 0
-  const indisponiveisCount = indisponiveisData?.total ?? 0
-  const pendentesConfirmacao = pendenteData?.items ?? []
-  const pendentesDevolucao = pendenteDevolucaoData?.items ?? []
-  const totalAtencao = (pendenteData?.total ?? 0) + (pendenteDevolucaoData?.total ?? 0)
-
-  const totaisCarregando =
-    totalGeralLoading || disponiveisLoading || indisponiveisLoading || pendenteLoading || pendenteDevolucaoLoading
-
-  const percentualDisponivel = totalGeral > 0 ? Math.round((disponiveisCount / totalGeral) * 100) : 0
 
   // Últimos 15 dias do gráfico mensal de empréstimos x devoluções. O
   // endpoint (`/reports/charts/loans`) devolve o mês inteiro; o recorte para
@@ -208,67 +174,75 @@ export default function DashboardPage() {
     return completo.slice(-15)
   }, [loansChartQuery.data])
 
-  const recentEvents = historyQuery.data?.items ?? []
-
   const linksVisiveis = LINKS_RAPIDOS.filter((link) => !link.roles || hasRole(...link.roles))
 
   const classePainel = 'bg-surface border border-border rounded-md p-5 space-y-4'
+  const resumo = resumoQuery.data
 
   return (
     <div className="space-y-8">
-      {/* Cabeçalho editorial com contexto e horário */}
-      <div className="border-b border-border pb-5">
-        <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2">
-          <div>
-            <span className="text-caption text-muted-foreground font-mono">
-              SISTEMA DE GESTÃO PATRIMONIAL
-            </span>
-            <h1 className="text-heading-lg font-semibold tracking-tight text-foreground mt-0.5">
-              Panorama Operacional
-            </h1>
-          </div>
-          <div className="flex items-center gap-3 text-xs text-muted-foreground font-mono">
-            <span>
-              Mês Atual: {String(currentMonth).padStart(2, '0')}/{currentYear}
-            </span>
-            <span>·</span>
-            <span className="flex items-center gap-1.5">
-              <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Sincronizado
-            </span>
-          </div>
-        </div>
+      <PageHeader
+        eyebrow="SISTEMA DE GESTÃO PATRIMONIAL"
+        title="Painel"
+        description={resumo ? `Atualizado em ${formatDateTime(resumo.gerado_em)}` : undefined}
+        actions={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            loading={atualizando}
+            onClick={() => queryClient.refetchQueries({ queryKey: ['painel'] })}
+          >
+            {!atualizando && <RefreshCw />}
+            Atualizar
+          </Button>
+        }
+      />
 
-        {/* Faixa superior de totais — cada um lê só o `total` de uma consulta dedicada. */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 pt-6 mt-4 border-t border-border">
-          <StatBlock
-            label="Total de Patrimônios"
-            value={totaisCarregando ? '...' : totalGeral}
-            hint="Ativos cadastrados"
-          />
-          <StatBlock
-            label="Disponíveis para Alocação"
-            value={totaisCarregando ? '...' : disponiveisCount}
-            hint={`${percentualDisponivel}% da frota`}
-          />
-          <StatBlock
-            label="Empréstimos Ativos"
-            value={totaisCarregando ? '...' : indisponiveisCount}
-            hint="Em uso com colaboradores"
-          />
-          <StatBlock
-            label="Pendências Operacionais"
-            value={totaisCarregando ? '...' : totalAtencao}
-            hint={totalAtencao > 0 ? '! Atenção requerida' : '✓ Nenhuma pendência'}
-          />
-        </div>
-      </div>
+      {resumoQuery.isLoading ? (
+        <LoadingState label="Carregando indicadores..." />
+      ) : resumoQuery.isError || !resumo ? (
+        <ErrorState
+          error={resumoQuery.error}
+          title="Não foi possível carregar o painel"
+          onRetry={() => resumoQuery.refetch()}
+        />
+      ) : (
+        <>
+          <IndicadoresPainel resumo={resumo} />
 
-      {/* Bloco assimétrico principal: tendência em ondas + atenção operacional */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Tendência de movimentações (7 colunas; ocupa a linha toda quando
-            "Atenção Operacional" não aparece para o papel do usuário) */}
-        <div className={`${podeVerOperacoes ? 'lg:col-span-7' : 'lg:col-span-12'} ${classePainel}`}>
+          <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
+            {podeVerAlertas && (
+              <div className={`lg:col-span-7 ${classePainel}`}>
+                {alertasQuery.isLoading ? (
+                  <LoadingState label="Carregando alertas..." className="py-8" />
+                ) : alertasQuery.isError || !alertasQuery.data ? (
+                  <ErrorState
+                    error={alertasQuery.error}
+                    title="Não foi possível carregar os alertas"
+                    onRetry={() => alertasQuery.refetch()}
+                    className="py-8"
+                  />
+                ) : (
+                  <ListaAlertas dados={alertasQuery.data} />
+                )}
+              </div>
+            )}
+
+            <div className={`${podeVerAlertas ? 'lg:col-span-5' : 'lg:col-span-12'} ${classePainel}`}>
+              <div className="border-b border-border pb-3">
+                <h2 className="text-body font-semibold text-foreground">Equipamentos por unidade</h2>
+                <p className="text-body-sm text-muted-foreground">Ativos cadastrados e situação atual</p>
+              </div>
+              <EquipamentosPorUnidade unidades={resumo.equipamentos.por_unidade} />
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Seção inferior: movimentação e acesso rápido */}
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
+        <div className={`lg:col-span-8 ${classePainel}`}>
           <div className="flex items-center justify-between border-b border-border pb-3">
             <div>
               <h2 className="text-body font-semibold text-foreground flex items-center gap-2">
@@ -373,166 +347,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Atenção Operacional (5 colunas) — some para quem não acessa /terms nem /return. */}
-        {podeVerOperacoes && (
-          <div className={`lg:col-span-5 ${classePainel}`}>
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <div>
-                <h2 className="text-body font-semibold text-foreground flex items-center gap-2">
-                  <AlertCircle className="size-4 text-foreground" />
-                  Atenção Operacional
-                </h2>
-                <p className="text-body-sm text-muted-foreground">
-                  Ações imediatas e termos aguardando validação
-                </p>
-              </div>
-              <span className="text-caption font-mono px-2 py-0.5 rounded-sm border border-border text-foreground font-bold">
-                {totalAtencao}
-              </span>
-            </div>
-
-            {totalAtencao === 0 ? (
-              <div className="py-8 text-center text-body-sm text-muted-foreground space-y-1">
-                <p className="font-medium text-foreground">Operação em dia</p>
-                <p>Não há termos ou devoluções pendentes no momento.</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-border">
-                {pendentesConfirmacao.map((p) => (
-                  <div key={`confirmacao-${p.id}`} className="py-2.5 flex items-start justify-between gap-3 text-xs">
-                    <div className="space-y-0.5 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-semibold text-foreground">#{p.id}</span>
-                        <span className="text-[11px] px-1.5 py-0.5 rounded-sm border border-border font-mono text-foreground font-medium">
-                          Termo Pendente
-                        </span>
-                      </div>
-                      <p className="font-medium text-foreground truncate">
-                        {p.brand} {p.model} {p.tipo ? `(${p.tipo})` : ''}
-                      </p>
-                      <p className="text-muted-foreground truncate">
-                        Responsável: {p.assigned_to || 'Não informado'}
-                      </p>
-                    </div>
-                    <Button asChild variant="outline" size="sm" className="h-7 px-2.5 text-xs shrink-0">
-                      <Link to="/terms">Conferir</Link>
-                    </Button>
-                  </div>
-                ))}
-
-                {pendentesDevolucao.map((p) => (
-                  <div key={`devolucao-${p.id}`} className="py-2.5 flex items-start justify-between gap-3 text-xs">
-                    <div className="space-y-0.5 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-semibold text-foreground">#{p.id}</span>
-                        <span className="text-[11px] px-1.5 py-0.5 rounded-sm border border-border font-mono text-foreground font-medium">
-                          Devolução Pendente
-                        </span>
-                      </div>
-                      <p className="font-medium text-foreground truncate">
-                        {p.brand} {p.model}
-                      </p>
-                      <p className="text-muted-foreground truncate">{p.revenda}</p>
-                    </div>
-                    <Button asChild variant="outline" size="sm" className="h-7 px-2.5 text-xs shrink-0">
-                      <Link to="/return">Devolver</Link>
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="pt-2 border-t border-border flex justify-between items-center text-xs">
-              <Link to="/terms" className="text-muted-foreground hover:text-foreground">
-                Ver todos os termos →
-              </Link>
-              <Link to="/return" className="text-muted-foreground hover:text-foreground">
-                Ver devoluções →
-              </Link>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Seção inferior: atividade recente e acesso rápido */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Linha do tempo compacta de eventos recentes (8 colunas) */}
-        {podeVerOperacoes && (
-          <div className={`lg:col-span-8 ${classePainel}`}>
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <div>
-                <h2 className="text-body font-semibold text-foreground flex items-center gap-2">
-                  <Clock className="size-4 text-muted-foreground" />
-                  Últimas Movimentações no Sistema
-                </h2>
-                <p className="text-body-sm text-muted-foreground">
-                  Auditoria cronológica das ações mais recentes
-                </p>
-              </div>
-              <Link
-                to="/history"
-                className="text-xs text-foreground hover:underline flex items-center gap-1 font-medium"
-              >
-                Histórico completo <ExternalLink className="size-3" />
-              </Link>
-            </div>
-
-            {historyQuery.isLoading ? (
-              <div className="py-6 flex items-center justify-center gap-2 text-body-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Carregando movimentações...
-              </div>
-            ) : historyQuery.isError ? (
-              <div className="py-6 flex flex-col items-center justify-center gap-3 text-body-sm text-muted-foreground">
-                <p>Não foi possível carregar as últimas movimentações.</p>
-                <Button variant="outline" size="sm" onClick={() => historyQuery.refetch()}>
-                  <RefreshCw size={14} />
-                  Tentar novamente
-                </Button>
-              </div>
-            ) : recentEvents.length === 0 ? (
-              <p className="text-body-sm text-muted-foreground py-6 text-center">
-                Nenhuma movimentação registrada recentemente.
-              </p>
-            ) : (
-              <div className="divide-y divide-border">
-                {recentEvents.map((evt) => (
-                  <div key={evt.id} className="py-2.5 flex items-center justify-between gap-4 text-xs">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="font-mono text-muted-foreground text-[11px] shrink-0">
-                        {formatDateTime(evt.data_operacao)}
-                      </span>
-                      <span className="text-[11px] font-mono px-1.5 py-0.5 rounded-sm border border-border text-foreground shrink-0 font-medium">
-                        {evt.operation}
-                      </span>
-                      <span className="truncate text-foreground font-medium">
-                        {evt.tipo ? `${evt.tipo} · ` : ''}
-                        {evt.marca || evt.modelo
-                          ? `${evt.marca ?? ''} ${evt.modelo ?? ''}`.trim()
-                          : `Item #${evt.item_id ?? evt.id}`}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-4 shrink-0 text-muted-foreground">
-                      <span className="hidden sm:inline truncate max-w-[140px]">
-                        Operador:{' '}
-                        <strong className="text-foreground font-medium">{evt.operador}</strong>
-                      </span>
-                      {evt.usuario && (
-                        <span className="hidden md:inline truncate max-w-[140px]">
-                          Usuário: <span className="text-foreground">{evt.usuario}</span>
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Acesso operacional rápido (4 colunas; linha toda sem o histórico) */}
-        <div className={`${podeVerOperacoes ? 'lg:col-span-4' : 'lg:col-span-12'} ${classePainel}`}>
+        {/* Acesso operacional rápido (4 colunas) */}
+        <div className={`lg:col-span-4 ${classePainel}`}>
           <div className="border-b border-border pb-3">
             <h2 className="text-body font-semibold text-foreground">Fluxos Rápidos de TI</h2>
             <p className="text-body-sm text-muted-foreground">

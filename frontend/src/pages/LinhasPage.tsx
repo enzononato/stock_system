@@ -4,6 +4,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { BarChart3, Plus, Search } from 'lucide-react'
 import { listLinhas, OPERADORAS, type Linha, type StatusLinha } from '@/api/linhas'
 import { listUnidades } from '@/api/unidades'
+import { BotoesExportar } from '@/components/exportacao/BotoesExportar'
 import { LinhaFormDialog } from '@/components/linhas/LinhaFormDialog'
 import { LinhaHistoricoDialog } from '@/components/linhas/LinhaHistoricoDialog'
 import { LinhaStatusDialog } from '@/components/linhas/LinhaStatusDialog'
@@ -16,6 +17,7 @@ import { StatusPill } from '@/components/ui/StatusPill'
 import { useAuth } from '@/contexts/AuthContext'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { usePageSize } from '@/hooks/usePageSize'
+import { exportarLinhas } from '@/features/exportacoes/api'
 import { descreverAparelho } from '@/features/linhas/format'
 import {
   acoesDisponiveis,
@@ -108,6 +110,20 @@ export default function LinhasPage() {
         actions={
           podeEscrever && (
             <>
+              <BotoesExportar
+                disabled={total === 0}
+                onExportar={(f) =>
+                  exportarLinhas(
+                    {
+                      busca: busca || undefined,
+                      status: status || undefined,
+                      unidade_id: unidadeId ? Number(unidadeId) : undefined,
+                      operadora: operadora || undefined,
+                    },
+                    f
+                  )
+                }
+              />
               <Button asChild variant="outline">
                 <Link to="/linhas/relatorio">
                   <BarChart3 aria-hidden="true" />

@@ -4,8 +4,11 @@ import { Download, RefreshCw, Search } from 'lucide-react'
 
 import { getMonthlyReport, exportMonthlyReportCsv } from '@/api/reports'
 import { listUnidades } from '@/api/unidades'
+import { useAuth } from '@/contexts/AuthContext'
+import { exportarRelatorioMensal } from '@/features/exportacoes/api'
 import { useConstants } from '@/hooks/useConstants'
 import { usePageSize } from '@/hooks/usePageSize'
+import { BotoesExportar } from '@/components/exportacao/BotoesExportar'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Pagination } from '@/components/ui/Pagination'
 import { Button } from '@/components/ui/button'
@@ -44,6 +47,7 @@ const ALL = 'all'
 // unidade/operação e a busca também são locais.
 
 export default function ReportPage() {
+  const { hasRole } = useAuth()
   const currentDate = new Date()
   const [year, setYear] = useState(String(currentDate.getFullYear()))
   const [month, setMonth] = useState(String(currentDate.getMonth() + 1))
@@ -255,6 +259,13 @@ export default function ReportPage() {
               {!isExporting && <Download />}
               CSV
             </Button>
+
+            {hasRole('Gestor') && (
+              <BotoesExportar
+                disabled={report.length === 0}
+                onExportar={(f) => exportarRelatorioMensal(queryParams.year, queryParams.month, f)}
+              />
+            )}
           </div>
         </div>
 

@@ -189,4 +189,50 @@ describe('ManutencoesPage', () => {
     expect(await screen.findByText('Nenhuma manutenção encontrada')).toBeInTheDocument()
     expect(screen.getByText(/Custo total: R\$\s0,00/)).toBeInTheDocument()
   })
+
+  describe('exportação (F7)', () => {
+    function mockExportacao() {
+      const urls: URL[] = []
+      URL.createObjectURL = vi.fn(() => 'blob:teste')
+      URL.revokeObjectURL = vi.fn()
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+      server.use(
+        http.get('/api/exportacoes/manutencoes', ({ request }) => {
+          urls.push(new URL(request.url))
+          return new HttpResponse(new Blob(['x']))
+        })
+      )
+      return urls
+    }
+
+    it('exporta com o status escolhido na tela', async () => {
+      const urls = mockExportacao()
+      const chamadas = mockServidor()
+      renderPage()
+      const user = userEvent.setup()
+      await screen.findByText('Tela quebrada')
+      await user.selectOptions(screen.getByLabelText('Status'), 'Em andamento')
+      await waitFor(() => expect(chamadas.some((c) => c.get('status') === 'em_andamento')).toBe(true))
+
+      await user.click(screen.getByRole('button', { name: 'Exportar em Excel' }))
+
+      await waitFor(() => expect(urls).toHaveLength(1))
+      expect(urls[0].searchParams.get('status')).toBe('em_andamento')
+      expect(urls[0].searchParams.get('formato')).toBe('xlsx')
+      expect(urls[0].searchParams.has('limit')).toBe(false)
+      expect(urls[0].searchParams.has('offset')).toBe(false)
+    })
+
+    it('com ?item_id=7 exporta só o equipamento', async () => {
+      const urls = mockExportacao()
+      mockServidor()
+      renderPage('/manutencoes?item_id=7')
+      const user = userEvent.setup()
+      await screen.findByText('Tela quebrada')
+      await user.click(screen.getByRole('button', { name: 'Exportar em PDF' }))
+      await waitFor(() => expect(urls).toHaveLength(1))
+      expect(urls[0].searchParams.get('item_id')).toBe('7')
+      expect(urls[0].searchParams.get('formato')).toBe('pdf')
+    })
+  })
 })

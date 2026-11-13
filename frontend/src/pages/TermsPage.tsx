@@ -6,11 +6,13 @@ import { listItemsPaginated } from '@/api/items'
 import type { Item } from '@/api/items'
 import { downloadSignedTerm } from '@/api/loans'
 import { getTermosDoItem } from '@/api/termos'
+import { exportarTermosPendentes } from '@/features/exportacoes/api'
 import { usePageSize } from '@/hooks/usePageSize'
 import { getErrorMessage } from '@/lib/api-error'
 import { upper } from '@/lib/format'
 import { formatDate } from '@/lib/utils'
 import { ConfirmacaoTermo, generateAndDownloadLoanTerm } from '@/components/equipment/ConfirmacaoTermo'
+import { BotoesExportar } from '@/components/exportacao/BotoesExportar'
 import { TermoVigenteCard } from '@/components/termos/TermoVigenteCard'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -165,6 +167,10 @@ export default function TermsPage() {
             <span className="text-muted-foreground">Vigentes / Assinados:</span>
             <span className="num font-semibold text-foreground">{ativosTotal}</span>
           </div>
+          <BotoesExportar
+            rotulo="Exportar termos pendentes"
+            onExportar={(f) => exportarTermosPendentes({ busca: searchAplicado || undefined }, f)}
+          />
         </div>
       </div>
 

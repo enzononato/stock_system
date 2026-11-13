@@ -250,3 +250,12 @@ def get_acesso_evento_db():
     from app.db.acesso_evento_db import AcessoEventoDBManager
 
     return AcessoEventoDBManager(get_acesso_db())
+
+
+# ── F7: Painel ──────────────────────────────────────────────────────────────
+
+@lru_cache
+def get_painel_db():
+    from app.db.painel_db import PainelDBManager
+
+    return PainelDBManager()
