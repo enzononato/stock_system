@@ -1,0 +1,72 @@
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { ThemeProvider } from '@/lib/theme'
+import AppLayout from './AppLayout'
+
+let liberarLogout!: () => void
+const pendente = new Promise<void>((r) => {
+  liberarLogout = r
+})
+const logout = vi.fn(() => pendente)
+
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({
+    user: { id: 1, username: 'gestor.teste', role: 'Gestor' },
+    isLoading: false,
+    login: vi.fn(),
+    logout,
+    hasRole: (...roles: string[]) => roles.includes('Gestor'),
+  }),
+}))
+
+function renderLayout() {
+  return render(
+    <ThemeProvider>
+      <MemoryRouter initialEntries={['/stock']}>
+        <Routes>
+          <Route element={<AppLayout />}>
+            <Route path="/stock" element={<p>conteúdo</p>} />
+          </Route>
+          <Route path="/login" element={<p>login</p>} />
+        </Routes>
+      </MemoryRouter>
+    </ThemeProvider>
+  )
+}
+
+describe('AppLayout', () => {
+  afterEach(() => {
+    liberarLogout()
+  })
+
+  it('item ativo da navegação usa o destaque verde-limão', () => {
+    renderLayout()
+    // O nome acessível do link inclui o título do ícone animado ("Estoque Estoque"): casa por regex.
+    const link = screen.getAllByRole('link', { name: /Estoque/ }).find((a) => a.getAttribute('href') === '/stock')
+    expect(link).toHaveClass('bg-lime', 'text-lime-foreground')
+  })
+
+  it('gaveta abre como diálogo e fecha pelo botão', () => {
+    renderLayout()
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir menu de navegação' }))
+    expect(screen.getByRole('dialog', { name: 'Menu de navegação' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar menu' }))
+    expect(screen.queryByRole('dialog', { name: 'Menu de navegação' })).not.toBeInTheDocument()
+  })
+
+  it('botão de busca abre a paleta de comandos', () => {
+    renderLayout()
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar tela (Ctrl+K)' }))
+    expect(screen.getByRole('dialog', { name: 'Paleta de comandos' })).toBeInTheDocument()
+  })
+
+  it('sair com duplo clique chama logout uma vez', () => {
+    renderLayout()
+    const sair = screen.getByRole('button', { name: 'Sair do sistema' })
+    fireEvent.click(sair)
+    fireEvent.click(sair)
+    expect(logout).toHaveBeenCalledTimes(1)
+    expect(sair).toHaveAttribute('aria-busy', 'true')
+  })
+})

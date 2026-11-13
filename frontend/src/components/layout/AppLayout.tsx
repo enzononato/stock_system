@@ -4,7 +4,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 import { CommandPalette } from './CommandPalette'
-import { Loader2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Loader2, X } from 'lucide-react'
 
 export default function AppLayout() {
   const { user, isLoading } = useAuth()
@@ -74,15 +75,32 @@ export default function AppLayout() {
             aria-hidden="true"
             onClick={() => setMobileNavOpen(false)}
           />
-          <div className="relative h-full">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Menu de navegação"
+            className="relative h-full"
+          >
             <Sidebar onNavigate={() => setMobileNavOpen(false)} />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setMobileNavOpen(false)}
+              aria-label="Fechar menu"
+              className="absolute right-2 top-2 text-muted-foreground hover:text-foreground"
+            >
+              <X size={18} />
+            </Button>
           </div>
         </div>
       )}
 
       <div className="flex flex-col flex-1 min-w-0">
-        <TopBar onOpenMobileNav={() => setMobileNavOpen(true)} />
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+        <TopBar
+          onOpenMobileNav={() => setMobileNavOpen(true)}
+          onOpenCommandPalette={() => setCommandPaletteOpen(true)}
+        />
+        <main className="min-w-0 flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <div className="page-container-dense">
             <Outlet />
           </div>

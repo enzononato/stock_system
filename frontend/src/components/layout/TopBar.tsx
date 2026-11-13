@@ -1,12 +1,15 @@
+import { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { LogOut, Menu, Moon, Sun } from 'lucide-react'
+import { LogOut, Menu, Moon, Search, Sun } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useTheme } from '@/lib/theme'
 
 interface TopBarProps {
   /** Abre a gaveta de navegação mobile (abaixo do breakpoint `lg`). */
   onOpenMobileNav: () => void
+  /** Abre a paleta de comandos (também acessível por Ctrl+K); é a única forma de busca no toque. */
+  onOpenCommandPalette: () => void
 }
 
 /**
@@ -14,14 +17,21 @@ interface TopBarProps {
  * só o perfil (nome e papel), a troca de tema e o botão de sair, alinhados à
  * direita. É o ÚNICO lugar que mostra o perfil — a Sidebar não repete.
  */
-export default function TopBar({ onOpenMobileNav }: TopBarProps) {
+export default function TopBar({ onOpenMobileNav, onOpenCommandPalette }: TopBarProps) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const { theme, toggle } = useTheme()
+  const [saindo, setSaindo] = useState(false)
 
   async function handleLogout() {
-    await logout()
-    navigate('/login')
+    if (saindo) return
+    setSaindo(true)
+    try {
+      await logout()
+      navigate('/login')
+    } finally {
+      setSaindo(false)
+    }
   }
 
   return (
@@ -38,13 +48,24 @@ export default function TopBar({ onOpenMobileNav }: TopBarProps) {
       </Button>
 
       {user && (
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-body-sm text-foreground">{user.username}</span>
-            <span className="text-[11px] text-muted-foreground font-mono uppercase">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate max-w-[40vw] text-body-sm text-foreground">{user.username}</span>
+            <span className="hidden sm:inline text-[11px] text-muted-foreground font-mono uppercase">
               {user.role}
             </span>
           </div>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onOpenCommandPalette}
+            aria-label="Buscar tela (Ctrl+K)"
+            title="Buscar tela (Ctrl+K)"
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <Search size={16} />
+          </Button>
 
           <Button
             variant="ghost"
@@ -61,11 +82,12 @@ export default function TopBar({ onOpenMobileNav }: TopBarProps) {
             variant="ghost"
             size="icon"
             onClick={handleLogout}
+            loading={saindo}
             aria-label="Sair do sistema"
             title="Sair do sistema"
             className="text-muted-foreground hover:text-destructive"
           >
-            <LogOut size={16} />
+            {!saindo && <LogOut size={16} />}
           </Button>
         </div>
       )}
