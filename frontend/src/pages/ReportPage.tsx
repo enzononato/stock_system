@@ -5,13 +5,16 @@ import { Download, RefreshCw, Search } from 'lucide-react'
 import { getMonthlyReport, exportMonthlyReportCsv } from '@/api/reports'
 import { listUnidades } from '@/api/unidades'
 import { useConstants } from '@/hooks/useConstants'
+import { usePageSize } from '@/hooks/usePageSize'
+import { PageHeader } from '@/components/layout/PageHeader'
+import { Pagination } from '@/components/ui/Pagination'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatDateTime } from '@/lib/utils'
 import { getErrorMessage } from '@/lib/api-error'
+import { upper } from '@/lib/format'
 import { toast } from '@/components/ui/toast'
 
 const MONTHS = [
@@ -34,8 +37,8 @@ const ALL = 'all'
 
 // O endpoint /reports/monthly devolve o mês inteiro numa única resposta, sem
 // limit/offset — a paginação abaixo é feita no cliente, sobre o array já
-// carregado. Os filtros de unidade/operação e a busca também são locais.
-const PAGE_SIZE = 7
+// carregado (tamanho 25/50/100 por `usePageSize('relatorio')`). Os filtros de
+// unidade/operação e a busca também são locais.
 
 export default function ReportPage() {
   const currentDate = new Date()
@@ -49,7 +52,8 @@ export default function ReportPage() {
   const [filterRevenda, setFilterRevenda] = useState(ALL)
   const [filterOp, setFilterOp] = useState(ALL)
   const [search, setSearch] = useState('')
-  const [currentPage, setCurrentPage] = useState(0)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = usePageSize('relatorio')
 
   // Revendas oficiais (constantes) e unidades cadastradas enriquecem as opções
   // do filtro, para que unidades sem movimentação no mês também apareçam.
@@ -62,6 +66,7 @@ export default function ReportPage() {
   const {
     data: report = [],
     isLoading,
+    isFetching,
     refetch,
   } = useQuery({
     queryKey: ['report', queryParams.year, queryParams.month],
@@ -92,31 +97,31 @@ export default function ReportPage() {
     })
   }, [report, filterRevenda, filterOp, search])
 
-  const totalPages = Math.ceil(filteredReport.length / PAGE_SIZE)
+  const lastPage = Math.max(1, Math.ceil(filteredReport.length / pageSize))
   // Nunca aponta para uma página que deixou de existir após filtrar.
-  const safePage = Math.min(currentPage, Math.max(0, totalPages - 1))
-  const paginatedReport = filteredReport.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE)
+  const safePage = Math.min(currentPage, lastPage)
+  const paginatedReport = filteredReport.slice((safePage - 1) * pageSize, safePage * pageSize)
 
   const hasActiveFilters = filterRevenda !== ALL || filterOp !== ALL || search.trim() !== ''
 
   // Toda mudança de filtro/busca volta para a primeira página.
   function changeRevenda(v: string) {
     setFilterRevenda(v)
-    setCurrentPage(0)
+    setCurrentPage(1)
   }
   function changeOp(v: string) {
     setFilterOp(v)
-    setCurrentPage(0)
+    setCurrentPage(1)
   }
   function changeSearch(v: string) {
     setSearch(v)
-    setCurrentPage(0)
+    setCurrentPage(1)
   }
   function handleClearFilters() {
     setFilterRevenda(ALL)
     setFilterOp(ALL)
     setSearch('')
-    setCurrentPage(0)
+    setCurrentPage(1)
   }
 
   function handleGenerate() {
@@ -159,29 +164,21 @@ export default function ReportPage() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Barra superior de configuração */}
-      <div className="rounded border border-border bg-surface p-5 space-y-3">
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
-                Relatórios Corporativos
-              </span>
-            </div>
-            <h1 className="text-heading-lg font-semibold tracking-tight text-foreground">
-              Relatório Mensal de Operações
-            </h1>
-            <p className="text-body-sm text-muted-foreground mt-0.5">
-              Consolidação de movimentações, ativos alocados e histórico do período.
-            </p>
-          </div>
+      <PageHeader
+        eyebrow="Relatórios Corporativos"
+        title="Relatório Mensal de Operações"
+        description="Consolidação de movimentações, ativos alocados e histórico do período."
+      />
 
-          <div className="flex flex-wrap items-end gap-3">
+      <div className="rounded-md border border-border bg-surface p-5 space-y-3">
+        <div>
+          <div className="grid grid-cols-1 gap-3 sm:flex sm:flex-wrap sm:items-end">
             <div className="space-y-1">
               <Label className="text-caption font-medium">Ano</Label>
               <Input
                 value={year}
                 onChange={(e) => setYear(e.target.value)}
-                className="w-20 h-8 num text-body-sm"
+                className="w-full sm:w-20 h-8 num text-body-sm"
                 maxLength={4}
               />
             </div>
@@ -189,7 +186,7 @@ export default function ReportPage() {
             <div className="space-y-1">
               <Label className="text-caption font-medium">Mês</Label>
               <Select value={month} onValueChange={setMonth}>
-                <SelectTrigger className="w-36 h-8 text-body-sm">
+                <SelectTrigger aria-label="Mês" className="w-full sm:w-44 h-8 text-body-sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -205,14 +202,14 @@ export default function ReportPage() {
             <div className="space-y-1">
               <Label className="text-caption font-medium">Revenda / Filial</Label>
               <Select value={filterRevenda} onValueChange={changeRevenda} disabled={report.length === 0}>
-                <SelectTrigger className="w-44 h-8 text-body-sm">
+                <SelectTrigger aria-label="Revenda" className="w-full sm:w-44 h-8 text-body-sm">
                   <SelectValue placeholder="Todas" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={ALL}>Todas as revendas</SelectItem>
                   {revendaOptions.map((r) => (
                     <SelectItem key={r} value={r}>
-                      {r}
+                      {upper(r)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -222,7 +219,7 @@ export default function ReportPage() {
             <div className="space-y-1">
               <Label className="text-caption font-medium">Operação</Label>
               <Select value={filterOp} onValueChange={changeOp} disabled={report.length === 0}>
-                <SelectTrigger className="w-36 h-8 text-body-sm">
+                <SelectTrigger aria-label="Operação" className="w-full sm:w-44 h-8 text-body-sm">
                   <SelectValue placeholder="Todas" />
                 </SelectTrigger>
                 <SelectContent>
@@ -236,8 +233,8 @@ export default function ReportPage() {
               </Select>
             </div>
 
-            <Button size="sm" onClick={handleGenerate} className="h-8">
-              <RefreshCw className="mr-1.5 size-3.5" />
+            <Button size="sm" onClick={handleGenerate} loading={isFetching}>
+              {!isFetching && <RefreshCw />}
               Gerar
             </Button>
 
@@ -245,11 +242,11 @@ export default function ReportPage() {
               size="sm"
               variant="outline"
               onClick={handleExport}
-              disabled={isExporting || report.length === 0}
-              className="h-8"
+              loading={isExporting}
+              disabled={report.length === 0}
             >
-              <Download className="mr-1.5 size-3.5" />
-              {isExporting ? 'Exportando…' : 'CSV'}
+              {!isExporting && <Download />}
+              CSV
             </Button>
           </div>
         </div>
@@ -267,7 +264,7 @@ export default function ReportPage() {
             unidade esconde essas operações. Não dá para corrigir sem mexer no
             backend — só sinalizar. */}
         {filterRevenda !== ALL && (
-          <p className="border border-border-strong bg-surface-alt p-3 rounded text-body-sm">
+          <p className="rounded-md bg-brand-soft p-3 text-body-sm text-brand-soft-foreground">
             Operações de periférico (Cadastro Periférico, Vínculo, Desvínculo, Substituição Periférico) não têm
             unidade registrada nesta consulta e por isso somem da lista ao filtrar por revenda — isso não significa
             que não houve movimentação de periféricos no mês.
@@ -284,31 +281,31 @@ export default function ReportPage() {
             { label: 'Empréstimos já devolvidos', value: devolvidos, symbol: '←', hint: 'dos emitidos no período' },
             { label: 'Colaboradores Únicos', value: uniqueUsers, symbol: '◯' },
           ].map((stat) => (
-            <div key={stat.label} className="rounded border border-border bg-surface p-4">
-              <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground block">
+            <div key={stat.label} className="rounded-md bg-brand-soft p-4">
+              <span className="text-caption font-semibold uppercase tracking-wider text-brand-soft-foreground block">
                 {stat.label}
               </span>
               <div className="flex items-baseline gap-2 mt-1">
-                <span className="num text-heading font-bold text-foreground">{stat.value}</span>
-                <span className="num text-body-lg text-muted-foreground">{stat.symbol}</span>
+                <span className="num text-heading font-bold text-brand-soft-foreground">{stat.value}</span>
+                <span className="num text-body-lg text-brand-soft-foreground">{stat.symbol}</span>
               </div>
-              {stat.hint && <span className="text-body-sm text-muted-foreground block mt-0.5">{stat.hint}</span>}
+              {stat.hint && <span className="text-body-sm text-brand-soft-foreground block mt-0.5">{stat.hint}</span>}
             </div>
           ))}
         </div>
       )}
 
       {/* Preview de dados denso */}
-      <div className="rounded border border-border bg-surface overflow-hidden">
+      <div className="rounded-md border border-border bg-surface overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-b border-border">
           <div>
-            <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
+            <span className="text-caption font-semibold uppercase tracking-wider text-brand-text">
               Preview do Relatório
             </span>
             <p className="text-body-sm font-medium text-foreground mt-0.5">
               {MONTHS[queryParams.month - 1]} {queryParams.year} — {filteredReport.length} registro
               {filteredReport.length !== 1 ? 's' : ''}
-              {filterRevenda !== ALL && ` • ${filterRevenda}`}
+              {filterRevenda !== ALL && ` • ${upper(filterRevenda)}`}
               {filterOp !== ALL && ` • ${filterOp}`}
             </p>
           </div>
@@ -319,13 +316,11 @@ export default function ReportPage() {
                 value={search}
                 onChange={(e) => changeSearch(e.target.value)}
                 placeholder="Buscar no relatório…"
-                className="pl-8 h-8 w-56 text-body-sm"
+                aria-label="Buscar no relatório"
+                className="pl-8 h-8 w-full sm:w-56 text-body-sm"
                 disabled={report.length === 0}
               />
             </div>
-            <Badge variant="default" className="num text-[11px] border-border">
-              {totalPages > 0 ? `Pág ${safePage + 1}/${totalPages}` : 'VAZIO'}
-            </Badge>
           </div>
         </div>
 
@@ -348,7 +343,7 @@ export default function ReportPage() {
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-body-sm min-w-[900px]">
-                <thead className="border-b border-border text-caption uppercase tracking-wider text-muted-foreground bg-surface-alt">
+                <thead className="bg-brand-soft text-brand-soft-foreground text-caption uppercase tracking-wider">
                   <tr>
                     <th className="py-2.5 px-3 font-semibold">ID</th>
                     <th className="py-2.5 px-3 font-semibold">Operador</th>
@@ -384,7 +379,7 @@ export default function ReportPage() {
                       <td className="py-2 px-3 num text-caption text-foreground">{row.nota_fiscal || '—'}</td>
                       <td className="py-2 px-3 font-medium">{row.usuario || '—'}</td>
                       <td className="py-2 px-3 text-muted-foreground">{row.setor || '—'}</td>
-                      <td className="py-2 px-3 text-muted-foreground">{row.revenda || '—'}</td>
+                      <td className="py-2 px-3 text-muted-foreground">{upper(row.revenda) || '—'}</td>
                       <td className="py-2 px-3 num text-caption text-muted-foreground">
                         {formatDateTime(row.data_emprestimo || row.data_confirmacao || row.data_devolucao)}
                       </td>
@@ -394,31 +389,19 @@ export default function ReportPage() {
               </table>
             </div>
 
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between px-5 py-3 border-t border-border">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={safePage === 0}
-                  onClick={() => setCurrentPage(Math.max(0, safePage - 1))}
-                  className="text-xs h-7 px-3"
-                >
-                  ← Anterior
-                </Button>
-                <span className="num text-caption text-muted-foreground">
-                  {safePage + 1} de {totalPages} — {filteredReport.length} registros
-                </span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={safePage >= totalPages - 1}
-                  onClick={() => setCurrentPage(safePage + 1)}
-                  className="text-xs h-7 px-3"
-                >
-                  Próxima →
-                </Button>
-              </div>
-            )}
+            <div className="px-5 py-3 border-t border-border">
+              <Pagination
+                page={safePage}
+                pageSize={pageSize}
+                total={filteredReport.length}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={(n) => {
+                  setPageSize(n)
+                  setCurrentPage(1)
+                }}
+                isFetching={isFetching}
+              />
+            </div>
           </>
         )}
       </div>
