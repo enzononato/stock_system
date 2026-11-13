@@ -27,6 +27,7 @@ from typing import Iterator, Optional
 
 import pymysql
 
+from app.core import config as _config
 from app.db.database_mysql import get_cursor
 from app.schemas.validators import normalizar_telefone, validar_email
 from app.services import audit
@@ -46,8 +47,15 @@ MSG_SUPERIOR_DE_SI = "O colaborador não pode ser superior de si mesmo."
 MSG_CPF_DUPLICADO = "Já existe um colaborador com este CPF."
 MSG_SYNC_EM_ANDAMENTO = "Sincronização já em andamento."
 
-NOME_DO_LOCK = "patrimonio_colaboradores_sync"
+_PREFIXO_DO_LOCK = "patrimonio_colaboradores_sync"
 _TAMANHO_DO_LOTE = 500
+
+
+def nome_do_lock() -> str:
+    """Nome do `GET_LOCK` da sincronização. Os nomes valem para o servidor MySQL inteiro,
+    então leva o nome do database (vários ambientes/suítes podem dividir o servidor).
+    Limite do MySQL: 64 caracteres."""
+    return f"{_PREFIXO_DO_LOCK}:{_config.settings.DB_NAME}"[:64]
 
 
 class CpfDuplicado(ValueError):
@@ -66,10 +74,6 @@ class SincronizacaoEmAndamento(Exception):
 
 # Campos que, em colaborador vindo do RH, só a sincronização altera.
 _CAMPOS_DO_RH = ("nome", "cargo", "setor", "unidade_id", "situacao")
-# Campos do RH que, ao adotar um colaborador manual, só valem quando o RH tem valor.
-_CAMPOS_PRESERVADOS_NA_ADOCAO = (
-    "nome", "matricula", "cargo", "setor", "unidade_rh", "unidade_id", "gestor_nome_rh",
-)
 _CAMPOS_DATA = ("sincronizado_em", "criado_em", "atualizado_em")
 _LIMITES = {
     "nome": 200, "matricula": 50, "cargo": 150, "setor": 150,
@@ -205,14 +209,15 @@ class ColaboradorDBManager:
         se o bloqueio já está com outra sincronização.
         """
         with get_cursor(commit=False) as cur:
-            cur.execute("SELECT GET_LOCK(%s, 0) AS ok", (NOME_DO_LOCK,))
+            nome = nome_do_lock()
+            cur.execute("SELECT GET_LOCK(%s, 0) AS ok", (nome,))
             if cur.fetchone()["ok"] != 1:
                 raise SincronizacaoEmAndamento()
             try:
                 yield
             finally:
                 try:
-                    cur.execute("SELECT RELEASE_LOCK(%s)", (NOME_DO_LOCK,))
+                    cur.execute("SELECT RELEASE_LOCK(%s)", (nome,))
                 except Exception:
                     logger.exception("Falha ao liberar o bloqueio da sincronização de colaboradores.")
 
@@ -267,11 +272,14 @@ class ColaboradorDBManager:
                     continue
 
                 vistos.append(atual["id"])
-                if atual["origem"] == "manual":
-                    # Adoção: o RH só vence onde tem valor; o resto continua como foi preenchido.
-                    for campo in _CAMPOS_PRESERVADOS_NA_ADOCAO:
-                        if novo[campo] is None:
-                            novo[campo] = atual[campo]
+                # Regra para toda linha (do RH ou adotada de cadastro manual): valor vazio do RH não apaga
+                # o que já está gravado em cargo/setor/matrícula, e unidade do RH que não resolve não
+                # apaga `unidade_id` (o texto `unidade_rh` segue o RH). `nome` e `situacao` seguem sempre o RH.
+                for campo in ("cargo", "setor", "matricula"):
+                    if novo[campo] is None:
+                        novo[campo] = atual[campo]
+                if novo["unidade_id"] is None:
+                    novo["unidade_id"] = atual["unidade_id"]
                 mudou = {k: v for k, v in novo.items() if atual[k] != v}
                 if mudou:
                     sets = ", ".join(f"{k}=%s" for k in mudou)

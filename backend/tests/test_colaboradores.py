@@ -692,6 +692,47 @@ def test_adocao_preserva_valores_manuais_onde_o_rh_nao_tem(colab_db, base_rh, cr
     assert maria["unidade_id"] == unidade["id"]  # unidade do RH não resolveu: fica a manual
     assert maria["unidade_rh"] == "Unidade Inexistente"
 
+    # Segunda sincronização: a proteção não vale só uma vez (a linha já é do RH).
+    _sincronizar(colab_db)
+    maria = colab_db.obter(manual_id)
+    assert maria["cargo"] == "Cargo Manual"
+    assert maria["unidade_id"] == unidade["id"]
+    assert maria["setor"] == "TI"
+
+
+@pytest.mark.integration
+def test_linha_do_rh_mantem_valor_gravado_quando_o_rh_manda_vazio_ou_unidade_desconhecida(
+    colab_db, base_rh, criar_unidade
+):
+    unidade = criar_unidade(nome="Matriz BA", alias_rh="Revalle Juazeiro")
+    _sincronizar(colab_db)
+    maria = _por_cpf(colab_db, CPF_ATIVO)
+    assert maria["unidade_id"] == unidade["id"]
+    assert (maria["cargo"], maria["setor"], maria["matricula"]) == ("Analista", "TI", "1001")
+
+    base_rh(
+        'UPDATE "colaboradores-revalle" SET "Cargo" = NULL, "Setor" = %s, "Matrícula" = NULL, "Unidade" = %s '
+        'WHERE "CPF" = %s',
+        ("  ", "Unidade Que Nao Existe", CPF_ATIVO),
+    )
+    _sincronizar(colab_db)
+
+    maria = _por_cpf(colab_db, CPF_ATIVO)
+    assert (maria["cargo"], maria["setor"], maria["matricula"]) == ("Analista", "TI", "1001")
+    assert maria["unidade_id"] == unidade["id"]  # não resolve: mantém a unidade
+    assert maria["unidade_rh"] == "Unidade Que Nao Existe"  # o texto do RH acompanha
+
+
+@pytest.mark.unit
+def test_nome_do_lock_leva_o_database_e_cabe_no_limite():
+    from app.core import config as _config
+    from app.db.colaborador_db import nome_do_lock
+
+    nome = nome_do_lock()
+    assert nome.startswith("patrimonio_colaboradores_sync:")
+    assert _config.settings.DB_NAME[:30] in nome
+    assert len(nome) <= 64
+
 
 # ── Superior: dono é a sincronização enquanto ninguém mexe à mão ────────────
 
@@ -787,7 +828,7 @@ def test_sincronizacao_simultanea_responde_409(client_gestor, colab_db, base_rh)
     import pymysql
 
     from app.core import config as _config
-    from app.db.colaborador_db import NOME_DO_LOCK
+    from app.db.colaborador_db import nome_do_lock
 
     s = _config.settings
     outra = pymysql.connect(
@@ -795,7 +836,7 @@ def test_sincronizacao_simultanea_responde_409(client_gestor, colab_db, base_rh)
     )
     try:
         with outra.cursor() as cur:
-            cur.execute("SELECT GET_LOCK(%s, 0)", (NOME_DO_LOCK,))
+            cur.execute("SELECT GET_LOCK(%s, 0)", (nome_do_lock(),))
             assert cur.fetchone()[0] == 1
 
         resp = client_gestor.post("/api/colaboradores/sincronizar")

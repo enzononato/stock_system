@@ -92,6 +92,8 @@ def erro_de_validacao(request: Request, exc: RequestValidationError) -> JSONResp
     `errors` para quem estiver depurando ou consumindo a API programaticamente.
     """
     mensagens: list[str] = []
+    # Caminho da ROTA (ex.: "/api/colaboradores/{colaborador_id}") quando conhecido; senão o da requisição.
+    caminho = getattr(request.scope.get("route"), "path", None) or request.url.path
     for erro in exc.errors():
         # `loc` costuma ser ("body", "campo"); o último elemento textual é o campo.
         campo = next(
@@ -103,7 +105,7 @@ def erro_de_validacao(request: Request, exc: RequestValidationError) -> JSONResp
         msg = msg.removeprefix("Value error, ")
         rotulos = _ROTULOS_DE_CAMPO
         for prefixo, especificos in _ROTULOS_POR_ROTA.items():
-            if request.url.path.startswith(prefixo):
+            if caminho == prefixo or caminho.startswith(prefixo + "/"):
                 rotulos = {**_ROTULOS_DE_CAMPO, **especificos}
         rotulo = rotulos.get(campo, campo)
         mensagens.append(f"{rotulo}: {msg}" if rotulo else msg)
