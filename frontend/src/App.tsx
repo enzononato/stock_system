@@ -22,6 +22,7 @@ import ColaboradoresPage from '@/pages/ColaboradoresPage'
 import ColaboradorDetailPage from '@/pages/ColaboradorDetailPage'
 import AuditPage from '@/pages/AuditPage'
 import LocaisPage from '@/pages/LocaisPage'
+import LinhasPage from '@/pages/LinhasPage'
 import { ToastContainer } from '@/components/ui/toast'
 
 /**
@@ -153,6 +154,8 @@ export default function App() {
               </RequireRole>
             }
           />
+
+          <Route path="linhas" element={<LinhasPage />} />
 
           {/* Somente Gestor */}
           <Route
