@@ -24,6 +24,7 @@ from app.services.mfa import mfa_configurado
 from app.routers import auth_senha
 from app.routers import perfil
 from app.routers import painel
+from app.routers import exportacoes
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +125,8 @@ _ROTULOS_DE_CAMPO = {
     "token": "Link",
     "senha": "Senha",
     "mfa_token": "Etapa de verificação",
+    # Exportações (F7)
+    "formato": "Formato",
 }
 
 # "nome" vale "Nome da unidade" nas unidades; nas rotas de colaboradores e locais é só "Nome".
@@ -213,6 +216,7 @@ app.include_router(manutencoes.router)
 app.include_router(termos.router)
 app.include_router(integracoes_revsign.router)
 app.include_router(painel.router)
+app.include_router(exportacoes.router)
 
 
 @app.on_event("startup")
