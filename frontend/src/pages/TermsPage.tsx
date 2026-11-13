@@ -5,11 +5,16 @@ import { FileDown, Search, Upload, Clock, Printer, ShieldCheck } from 'lucide-re
 import { listItemsPaginated } from '@/api/items'
 import type { Item } from '@/api/items'
 import { downloadSignedTerm } from '@/api/loans'
+import { getTermosDoItem } from '@/api/termos'
+import { usePageSize } from '@/hooks/usePageSize'
 import { getErrorMessage } from '@/lib/api-error'
+import { upper } from '@/lib/format'
 import { formatDate } from '@/lib/utils'
 import { ConfirmacaoTermo, generateAndDownloadLoanTerm } from '@/components/equipment/ConfirmacaoTermo'
+import { TermoVigenteCard } from '@/components/termos/TermoVigenteCard'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Pagination } from '@/components/ui/Pagination'
 import { toast } from '@/components/ui/toast'
 
 // Layout mestre/detalhe da FT_STC (lista lateral de cartões + visualizador do
@@ -19,7 +24,6 @@ import { toast } from '@/components/ui/toast'
 // tudo no cliente — o que trunca em silêncio quando o estoque passa disso.
 // As duas consultas ficam sempre ativas porque os contadores do cabeçalho e
 // das abas precisam do total de ambas; alternar de aba não dispara requisição.
-const PAGE_SIZE = 10
 
 type FilterTab = 'pendentes' | 'assinados'
 
@@ -46,25 +50,33 @@ export default function TermsPage() {
   // mesmo padrão de HistoryPage/StockPage). Trocar de aba não apaga o texto.
   const [search, setSearch] = useState('')
   const [searchAplicado, setSearchAplicado] = useState('')
-  const [pendentesPageIndex, setPendentesPageIndex] = useState(0)
-  const [ativosPageIndex, setAtivosPageIndex] = useState(0)
+  // Páginas 1-based, uma por aba; o tamanho (25/50/100) é lembrado entre sessões.
+  const [pageSize, setStoredPageSize] = usePageSize('termos')
+  const [pendentesPage, setPendentesPage] = useState(1)
+  const [ativosPage, setAtivosPage] = useState(1)
+  // Trocar o tamanho volta as duas abas para a primeira página no mesmo evento.
+  const setPageSize = (n: number) => {
+    setStoredPageSize(n)
+    setPendentesPage(1)
+    setAtivosPage(1)
+  }
   useEffect(() => {
     const timer = setTimeout(() => {
       setSearchAplicado(search.trim())
-      setPendentesPageIndex(0)
-      setAtivosPageIndex(0)
+      setPendentesPage(1)
+      setAtivosPage(1)
     }, 400)
     return () => clearTimeout(timer)
   }, [search])
 
   const pendentesQuery = useQuery({
-    queryKey: ['items', 'termos-pendentes', pendentesPageIndex, searchAplicado],
+    queryKey: ['items', 'termos-pendentes', pendentesPage, pageSize, searchAplicado],
     queryFn: () =>
       listItemsPaginated({
         status: 'Pendente',
         search: searchAplicado || undefined,
-        limit: PAGE_SIZE,
-        offset: pendentesPageIndex * PAGE_SIZE,
+        limit: pageSize,
+        offset: (pendentesPage - 1) * pageSize,
       }),
     placeholderData: keepPreviousData,
   })
@@ -72,13 +84,13 @@ export default function TermsPage() {
   const pendentesTotal = pendentesQuery.data?.total ?? 0
 
   const ativosQuery = useQuery({
-    queryKey: ['items', 'termos-ativos', ativosPageIndex, searchAplicado],
+    queryKey: ['items', 'termos-ativos', ativosPage, pageSize, searchAplicado],
     queryFn: () =>
       listItemsPaginated({
         status: 'Indisponível',
         search: searchAplicado || undefined,
-        limit: PAGE_SIZE,
-        offset: ativosPageIndex * PAGE_SIZE,
+        limit: pageSize,
+        offset: (ativosPage - 1) * pageSize,
       }),
     placeholderData: keepPreviousData,
   })
@@ -90,21 +102,29 @@ export default function TermsPage() {
   // Se o total encolher (ex.: o último termo da página foi confirmado e mudou
   // de aba), volta para a última página que ainda existe.
   useEffect(() => {
-    const max = Math.max(0, Math.ceil(pendentesTotal / PAGE_SIZE) - 1)
-    if (pendentesQuery.data && pendentesPageIndex > max) setPendentesPageIndex(max)
-  }, [pendentesQuery.data, pendentesTotal, pendentesPageIndex])
+    const ultima = Math.max(1, Math.ceil(pendentesTotal / pageSize))
+    if (pendentesQuery.data && pendentesPage > ultima) setPendentesPage(ultima)
+  }, [pendentesQuery.data, pendentesTotal, pendentesPage, pageSize])
   useEffect(() => {
-    const max = Math.max(0, Math.ceil(ativosTotal / PAGE_SIZE) - 1)
-    if (ativosQuery.data && ativosPageIndex > max) setAtivosPageIndex(max)
-  }, [ativosQuery.data, ativosTotal, ativosPageIndex])
+    const ultima = Math.max(1, Math.ceil(ativosTotal / pageSize))
+    if (ativosQuery.data && ativosPage > ultima) setAtivosPage(ultima)
+  }, [ativosQuery.data, ativosTotal, ativosPage, pageSize])
 
   const isPendentes = filterTab === 'pendentes'
   const currentList = isPendentes ? pendentes : ativos
   const currentTotal = isPendentes ? pendentesTotal : ativosTotal
-  const currentPageIndex = isPendentes ? pendentesPageIndex : ativosPageIndex
-  const setCurrentPageIndex = isPendentes ? setPendentesPageIndex : setAtivosPageIndex
+  const currentPage = isPendentes ? pendentesPage : ativosPage
+  const setCurrentPage = isPendentes ? setPendentesPage : setAtivosPage
   const currentLoading = isPendentes ? pendentesQuery.isLoading : ativosQuery.isLoading
-  const totalPages = Math.max(1, Math.ceil(currentTotal / PAGE_SIZE))
+  const currentFetching = isPendentes ? pendentesQuery.isFetching : ativosQuery.isFetching
+  const lastPage = Math.max(1, Math.ceil(currentTotal / pageSize))
+
+  // Situação da assinatura eletrônica do termo aberto no visualizador.
+  const vigenteQuery = useQuery({
+    queryKey: ['item-termos', selectedItem?.id, 'vigente'],
+    queryFn: () => getTermosDoItem(selectedItem?.id as number, { limit: 1, offset: 0 }),
+    enabled: selectedItem !== null,
+  })
 
   function handleTabChange(tab: FilterTab) {
     if (tab === filterTab) return
@@ -235,7 +255,7 @@ export default function TermsPage() {
                       <span className="truncate">
                         {[item.tipo, item.brand].filter(Boolean).join(' ')}
                       </span>
-                      <span>{item.revenda || '—'}</span>
+                      <span>{upper(item.revenda) || '—'}</span>
                     </div>
                   </button>
                 )
@@ -244,31 +264,14 @@ export default function TermsPage() {
           </div>
 
           {/* Paginação no servidor */}
-          {currentTotal > PAGE_SIZE && (
-            <div className="flex items-center justify-between border-t border-border pt-3">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={currentPageIndex === 0}
-                onClick={() => setCurrentPageIndex((p) => Math.max(0, p - 1))}
-                className="text-xs h-7 px-3"
-              >
-                ← Anterior
-              </Button>
-              <span className="num text-caption text-muted-foreground">
-                {currentPageIndex + 1} de {totalPages}
-              </span>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={currentPageIndex >= totalPages - 1}
-                onClick={() => setCurrentPageIndex((p) => p + 1)}
-                className="text-xs h-7 px-3"
-              >
-                Próxima →
-              </Button>
-            </div>
-          )}
+          <Pagination
+            page={Math.min(currentPage, lastPage)}
+            pageSize={pageSize}
+            total={currentTotal}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+            isFetching={currentFetching}
+          />
         </div>
 
         {/* Visualizador de documento corporativo */}
@@ -323,12 +326,31 @@ export default function TermsPage() {
                 </div>
                 <div>
                   <span className="text-caption text-muted-foreground block">Lotação e Unidade</span>
-                  <span className="font-medium text-foreground">{selectedItem.revenda || '—'}</span>
+                  <span className="font-medium text-foreground">{upper(selectedItem.revenda) || '—'}</span>
                   <span className="text-caption text-muted-foreground block mt-0.5">
                     Setor: {selectedItem.setor || '—'}
                   </span>
                 </div>
               </div>
+            </div>
+
+            {/* Assinatura eletrônica: situação do pedido de assinatura (RevSign ou manual) */}
+            <div className="space-y-3">
+              <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground block">
+                Assinatura eletrônica
+              </span>
+              {vigenteQuery.isLoading ? (
+                <p className="text-caption text-muted-foreground">Carregando assinatura…</p>
+              ) : vigenteQuery.isError || !vigenteQuery.data ? (
+                <p className="text-caption text-muted-foreground">Não foi possível carregar a assinatura.</p>
+              ) : (
+                <TermoVigenteCard
+                  itemId={selectedItem.id}
+                  itemStatus={selectedItem.status}
+                  vigente={vigenteQuery.data.vigente}
+                  revsignAtivo={vigenteQuery.data.revsign_ativo}
+                />
+              )}
             </div>
 
             {/* Cláusula 2: discriminação do ativo */}
