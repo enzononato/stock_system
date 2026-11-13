@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.db.migrations import aplicar_pendentes, garantir_baseline
 from app.dependencies import limiter, get_inventory_db
 from app.services import scheduler
+from app.routers import acessos, acesso_eventos
 from app.routers import auth, users, items, peripherals, loans, documents, history, reports, constants, unidades, audit, colaboradores, locais
 from app.routers import linhas
 from app.routers import inventarios
@@ -92,6 +93,13 @@ _ROTULOS_DE_CAMPO = {
     "colaborador_id_encontrado": "Colaborador",
     "usuario_conferido": "Usuário conferido",
     "item_ids": "Equipamentos",
+    # Campos do módulo de Acessos
+    "login": "Login",
+    "sistema_id": "Sistema",
+    "sistema_ids": "Sistemas",
+    "cargo_anterior": "Cargo anterior",
+    "cargo_novo": "Cargo novo",
+    "motivo_cancelamento": "Motivo do cancelamento",
 }
 
 # "nome" vale "Nome da unidade" nas unidades; nas rotas de colaboradores e locais é só "Nome".
@@ -170,6 +178,8 @@ app.include_router(locais.router)
 app.include_router(linhas.router)
 app.include_router(inventarios.router)
 app.include_router(etiquetas.router)
+app.include_router(acessos.router)
+app.include_router(acesso_eventos.router)
 
 
 @app.on_event("startup")

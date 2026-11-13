@@ -30,6 +30,10 @@ import InventariosPage from '@/pages/InventariosPage'
 import InventarioLeituraPage from '@/pages/InventarioLeituraPage'
 import InventarioRelatorioPage from '@/pages/InventarioRelatorioPage'
 import { PosLoginRedirect } from '@/features/etiquetas/PosLoginRedirect'
+import SistemasPage from '@/pages/acessos/SistemasPage'
+import PacotesPage from '@/pages/acessos/PacotesPage'
+import AcessoEventosPage from '@/pages/acessos/AcessoEventosPage'
+import AcessoEventoDetailPage from '@/pages/acessos/AcessoEventoDetailPage'
 import { ToastContainer } from '@/components/ui/toast'
 
 /**
@@ -236,6 +240,43 @@ export default function App() {
             element={
               <RequireRole roles={['Gestor']}>
                 <AuditPage />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="acessos/sistemas"
+            element={
+              <RequireRole roles={['Gestor']}>
+                <SistemasPage />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="acessos/pacotes"
+            element={
+              <RequireRole roles={['Gestor']}>
+                <PacotesPage />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="acessos/eventos"
+            element={
+              <RequireRole roles={['Gestor', 'Técnico']}>
+                <AcessoEventosPage />
+              </RequireRole>
+            }
+          />
+          <Route path="acessos" element={<Navigate to="/acessos/eventos" replace />} />
+
+          <Route
+            path="acessos/eventos/:id"
+            element={
+              <RequireRole roles={['Gestor', 'Técnico']}>
+                <AcessoEventoDetailPage />
               </RequireRole>
             }
           />
