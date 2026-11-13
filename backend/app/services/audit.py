@@ -42,6 +42,11 @@ def _mascarar_cpf(valor: Any) -> Any:
     return f"***.{digitos[3:6]}.{digitos[6:9]}-**"
 
 
+def mascarar_cpf(valor: Any) -> Any:
+    """CPF mascarado como `***.456.789-**` (formato inesperado vira `***`)."""
+    return _mascarar_cpf(valor)
+
+
 def _mascarar_folhas_cpf(valor: Any) -> Any:
     """Sob uma chave `cpf`: mascara toda folha escalar, mesmo dentro de
     dict/lista/tupla (`{"cpfs": ["12345678909"]}`)."""

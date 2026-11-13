@@ -79,6 +79,20 @@ describe('ColaboradorSelect', () => {
     expect(onChange).toHaveBeenCalledWith(null)
   })
 
+  it('mostra o CPF mascarado (listagem do Jovem Aprendiz) como veio', async () => {
+    server.use(
+      http.get('/api/colaboradores', () =>
+        HttpResponse.json({
+          items: [{ ...maria, cpf: '***.456.789-**', email: null, telefone: null }],
+          total: 1,
+        })
+      )
+    )
+    renderWithClient(<ColaboradorSelect value={null} onChange={vi.fn()} />)
+    await userEvent.setup().click(screen.getByRole('button', { name: /selecione/i }))
+    expect(await screen.findByText('***.456.789-** · Analista · JUAZEIRO')).toBeInTheDocument()
+  })
+
   it('sem resultados mostra a mensagem de colaborador', async () => {
     server.use(http.get('/api/colaboradores', () => HttpResponse.json({ items: [], total: 0 })))
     renderWithClient(<ColaboradorSelect value={null} onChange={vi.fn()} />)

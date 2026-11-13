@@ -10,6 +10,7 @@ export type SituacaoColaborador = 'ativo' | 'afastado' | 'desligado'
  */
 export interface Colaborador {
   id: number
+  /** Para o Jovem Aprendiz a listagem devolve o CPF mascarado (`***.456.789-**`) e sem e-mail/telefone. */
   cpf: string
   nome: string
   matricula?: string | null

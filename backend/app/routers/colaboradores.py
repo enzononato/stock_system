@@ -34,7 +34,7 @@ from app.schemas.colaboradores import (
 from app.schemas.common import Paginated
 from app.schemas.validators import normalizar_telefone, validar_email
 from app.services import audit
-from app.services.audit import AuditContext
+from app.services.audit import AuditContext, mascarar_cpf
 from app.services.colaboradores_source import (
     MSG_INDISPONIVEL,
     ColaboradoresSourceError,
@@ -61,7 +61,7 @@ def listar_colaboradores(
     unidade_id: Optional[int] = None,
     limit: int = Query(25, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    _: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(get_current_user),
     db: ColaboradorDBManager = Depends(get_colaborador_db),
 ):
     if situacao is not None and situacao not in SITUACOES:
@@ -69,6 +69,13 @@ def listar_colaboradores(
     itens, total = db.listar(
         busca=busca, situacao=situacao, unidade_id=unidade_id, limit=limit, offset=offset
     )
+    if user.role not in ("Gestor", "Técnico"):
+        # Jovem Aprendiz vê só o necessário para identificar a pessoa: CPF
+        # mascarado e nenhum dado de contato.
+        itens = [
+            {**i, "cpf": mascarar_cpf(i.get("cpf")), "email": None, "telefone": None}
+            for i in itens
+        ]
     return {"items": itens, "total": total}
 
 
@@ -106,7 +113,7 @@ def sincronizar_colaboradores(
 @router.get("/cpf/{cpf}", response_model=ColaboradorCpfResponse)
 def consultar_por_cpf(
     cpf: str,
-    _: CurrentUser = Depends(get_current_user),
+    _: CurrentUser = Depends(gestor_or_tecnico),
     db: ColaboradorDBManager = Depends(get_colaborador_db),
 ):
     """Cadastro local pelo CPF; se não houver, o que a base de RH tem (sem gravar)."""
@@ -148,7 +155,7 @@ def _ou_none(validar, valor):
 @router.get("/{colaborador_id}", response_model=ColaboradorResponse)
 def obter_colaborador(
     colaborador_id: int,
-    _: CurrentUser = Depends(get_current_user),
+    _: CurrentUser = Depends(gestor_or_tecnico),
     db: ColaboradorDBManager = Depends(get_colaborador_db),
 ):
     colaborador = db.obter(colaborador_id)

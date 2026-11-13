@@ -452,13 +452,59 @@ def test_listar_filtros_e_paginacao(client_gestor, base_rh, criar_unidade):
 
 
 @pytest.mark.integration
-def test_leitura_exige_autenticacao_e_aceita_qualquer_papel(client, client_aprendiz):
+def test_leitura_exige_autenticacao_e_lista_aceita_qualquer_papel(client, client_aprendiz):
     assert client.get("/api/colaboradores").status_code == 401
     assert client.get("/api/colaboradores/cargos").status_code == 401
     assert client.get("/api/colaboradores/sincronizacao").status_code == 401
+    assert client.get("/api/colaboradores/999999").status_code == 401
+    assert client.get(f"/api/colaboradores/cpf/{CPF_CARLOS}").status_code == 401
     assert client_aprendiz.get("/api/colaboradores").status_code == 200
     assert client_aprendiz.get("/api/colaboradores/cargos").status_code == 200
-    assert client_aprendiz.get("/api/colaboradores/999999").status_code == 404
+
+
+@pytest.mark.integration
+def test_detalhe_e_consulta_por_cpf_exigem_gestor_ou_tecnico(
+    client_gestor, client_tecnico, client_aprendiz, base_rh
+):
+    criado = client_gestor.post(
+        "/api/colaboradores", json={"cpf": CPF_CARLOS, "nome": "Carlos", "email": "c@x.com"}
+    ).json()
+
+    for cliente in (client_gestor, client_tecnico):
+        assert cliente.get(f"/api/colaboradores/{criado['id']}").json()["cpf"] == CPF_CARLOS
+        assert cliente.get(f"/api/colaboradores/cpf/{CPF_CARLOS}").status_code == 200
+        assert cliente.get(f"/api/colaboradores/cpf/{CPF_ATIVO}").status_code == 200
+
+    resp = client_aprendiz.get(f"/api/colaboradores/{criado['id']}")
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "Acesso restrito a Gestor ou Técnico."
+    assert client_aprendiz.get("/api/colaboradores/999999").status_code == 403
+    assert client_aprendiz.get(f"/api/colaboradores/cpf/{CPF_CARLOS}").status_code == 403
+    assert client_aprendiz.get(f"/api/colaboradores/cpf/{CPF_ATIVO}").status_code == 403
+
+
+@pytest.mark.integration
+def test_lista_para_jovem_aprendiz_mascara_cpf_e_omite_contatos(
+    client_gestor, client_tecnico, client_aprendiz
+):
+    client_gestor.post(
+        "/api/colaboradores",
+        json={"cpf": CPF_OUTRO, "nome": "Carlos", "email": "c@x.com", "telefone": "74999990000"},
+    )
+
+    for cliente in (client_gestor, client_tecnico):
+        item = cliente.get("/api/colaboradores").json()["items"][0]
+        assert item["cpf"] == CPF_OUTRO
+        assert item["email"] == "c@x.com"
+        assert item["telefone"] == "74999990000"
+
+    corpo = client_aprendiz.get("/api/colaboradores").json()
+    assert corpo["total"] == 1
+    item = corpo["items"][0]
+    assert item["cpf"] == "***.456.789-**"
+    assert item["email"] is None
+    assert item["telefone"] is None
+    assert item["nome"] == "Carlos"
 
 
 @pytest.mark.integration
