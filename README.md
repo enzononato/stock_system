@@ -150,7 +150,7 @@ segredo vai para o repositório: senhas, tokens e chaves só existem no `.env` d
 
 | Variável | Para que serve |
 |----------|----------------|
-| `APP_PUBLIC_URL` | URL pública do frontend; monta os links dos e-mails (redefinição de senha, termos). |
+| `APP_PUBLIC_URL` | URL pública do frontend (ex.: `https://patrimonio.revalle.com.br`, sem `/` no fim). Monta os links dos e-mails (redefinição de senha, termos) **e é a base do QR code das etiquetas** (`APP_PUBLIC_URL/e/{id}`): com valor errado, as etiquetas impressas apontam para lugar nenhum e precisam ser reimpressas. |
 | `MAIL_BACKEND` | `smtp` envia de verdade; `memory` só guarda em memória (testes). |
 | `SMTP_HOST`, `SMTP_PORT` | Servidor de e-mail (`mail.revalle.com.br`, porta `465`, SSL implícito). |
 | `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Conta que envia os e-mails; a senha só vai no `.env` do servidor. `SMTP_FROM` vazio usa `SMTP_USER`. |
@@ -231,12 +231,22 @@ No próximo login o Gestor cadastra um autenticador novo.
   `status` como `enum('Disponível','Indisponível','Pendente','Pendente Devolução') DEFAULT 'Disponível'`.
   A migração 0402 redefine a coluna com essa base mais `'Em Manutenção'`; se a definição for diferente
   (por exemplo `NOT NULL` ou outro padrão), ajuste a 0402 antes do deploy.
+  Confira também collation e engine das tabelas:
+  `SELECT @@collation_database, table_name, table_collation, engine FROM information_schema.tables WHERE table_schema = DATABASE();`
+  — `engine` precisa ser `InnoDB` em `usuarios`, `items`, `history` e `unidades` (as tabelas novas têm
+  chave estrangeira para elas; com MyISAM a migração falha). As tabelas novas são criadas com o padrão
+  do banco (`@@collation_database`), como as antigas.
 - [ ] **4. Janela de manutenção**: as migrações 0004 e 0401 adicionam colunas com chave estrangeira e
   reconstroem a tabela `items`, o que bloqueia escritas durante a cópia. Agende o horário.
 - [ ] **5. Preencher o `.env`** com as variáveis novas (tabela acima) e conferir `TZ` se não for usar este compose.
+  Confira com atenção o `APP_PUBLIC_URL`: é a base do QR code das etiquetas (`APP_PUBLIC_URL/e/{id}`).
+  Antes de imprimir etiquetas em lote, imprima uma, leia o QR com o celular e confirme que abre o equipamento.
 - [ ] **6. Confirmar a rede do EasyPanel** (host `agente_revalle_postgres`) e o HTTPS.
-- [ ] **7. Depois da subida**: `python -m scripts.migrate pendentes` deve responder "nenhuma";
-  sincronize os colaboradores pela tela e confira o painel inicial.
+- [ ] **7. Depois da subida (OBRIGATÓRIO)**: rode `python -m scripts.migrate pendentes` e confirme que
+  responde "nenhuma". A API sobe mesmo se uma migração falhar (o erro só vai para o log), então a
+  tela abrir não prova que o banco está atualizado. Se houver pendente, leia o log, corrija e rode
+  `python -m scripts.migrate` antes de liberar o uso. Depois sincronize os colaboradores pela tela e
+  confira o painel inicial.
 
 ---
 
@@ -244,9 +254,9 @@ No próximo login o Gestor cadastra um autenticador novo.
 
 | Role | Acesso |
 |------|--------|
-| **Gestor** | Tudo, incluindo Remover itens, Usuários, Estorno |
-| **Técnico** | Estoque, Cadastrar, Editar, Periféricos, Vincular, Emprestar, Devolver, Histórico, Relatório, Termos |
-| **Jovem Aprendiz** | Estoque, Gráficos (somente leitura) |
+| **Gestor** | Tudo o que o Técnico faz, mais: Baixa de ativos, Estorno de lançamentos, Usuários, Unidades, Auditoria, Sistemas e Pacotes por função (acessos), sincronização manual de colaboradores |
+| **Técnico** | Painel (indicadores e alertas), Estoque, Cadastrar/Editar, Periféricos, Vincular, Empréstimos, Devoluções, Termos, Histórico (e a aba Histórico do equipamento), Relatórios, Gráficos, Manutenções, Colaboradores, Locais, Etiquetas, Inventários, Linhas (com edição e relatório), Eventos de acesso |
+| **Jovem Aprendiz** | Somente leitura: indicadores do Painel, Estoque (e o detalhe do equipamento, sem a aba Histórico), Gráficos e Linhas. Na lista de colaboradores recebe o CPF mascarado (`***.456.789-**`) e sem e-mail/telefone; não abre o cadastro de colaborador |
 
 ---
 

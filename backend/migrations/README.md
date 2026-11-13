@@ -15,6 +15,8 @@ managers em `app/db/`; as migrações partem delas.
   criar índice. Nunca apagar nem renomear coluna ou tabela existente.
 - Dentro do arquivo, cada comando termina com `;` no fim da linha. Linhas que
   começam com `--` são comentários.
+- `CREATE TABLE` sem `CHARACTER SET`/`COLLATE`: a tabela nova herda o padrão do
+  banco, como as legadas (evita "Illegal mix of collations" em junções com elas).
 - Prefira `IF NOT EXISTS` / `IF EXISTS`: o MySQL faz commit implícito em DDL, então
   uma migração que falha no meio pode deixar parte aplicada, e reaplicá-la precisa
   funcionar.
@@ -23,13 +25,15 @@ managers em `app/db/`; as migrações partem delas.
 
 | Faixa | Fase |
 |-------|------|
-| 0001-0099 | Fase 0 (base: colaboradores, 2FA, auditoria, agendador) |
-| 0100-0199 | Fase 1 |
-| 0200-0299 | Fase 2 |
-| 0300-0399 | Fase 3 |
+| 0001-0099 | Fase 0 (base: colaboradores, locais, auditoria, agendador) |
+| 0100-0199 | Fase 1 (estoque e telas existentes; sem migração até agora) |
+| 0200-0299 | Fase 2 (usuários: e-mail, 2FA, redefinição de senha) |
+| 0300-0399 | Fase 3 (termos de responsabilidade) |
+| 0400-0499 | Fase 4 (compra, manutenções, transferências, baixa) |
 | 0500-0599 | Fase 5 (linhas telefônicas) |
 | 0600-0699 | Fase 6 (inventário físico) |
-| 0400-0499 | Fase 4 |
+| 0700-0799 | Fase 7 (painel, alertas e exportações; sem migração até agora) |
+| 0800-0899 | Fase 8 (acessos) |
 
 ## Como roda
 
