@@ -87,4 +87,8 @@ def reverse_entry(
         termos.cancelar_por_estorno(history_id, ctx)
     except Exception:
         logger.exception("Falha ao cancelar as solicitações de termo do lançamento %s.", history_id)
+    try:
+        termos.reabrir_por_estorno(entrada, ctx)
+    except Exception:
+        logger.exception("Falha ao reabrir a solicitação de termo do lançamento %s.", history_id)
     return {"detail": msg}

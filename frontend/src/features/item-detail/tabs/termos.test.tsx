@@ -159,10 +159,33 @@ describe('aba Termos do equipamento', () => {
     renderTab()
 
     await user.click(await screen.findByRole('button', { name: 'Cancelar' }))
+    expect(cancelou).toBe(false) // só depois de confirmar
+    expect(screen.getByText('O documento também será cancelado no RevSign e o colaborador não poderá mais assiná-lo.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Cancelar solicitação' }))
 
     await waitFor(() => expect(cancelou).toBe(true))
     await waitFor(() => expect(gets).toBeGreaterThanOrEqual(2))
     expect(await screen.findByText('Solicitação cancelada.')).toBeInTheDocument()
+  })
+
+  it('voltar no diálogo de cancelamento não cancela a solicitação', async () => {
+    const user = userEvent.setup()
+    const pendente = termo({ id: 31, status: 'enviado', tem_assinado: false, assinado_em: null })
+    let cancelou = false
+    server.use(
+      http.get('/api/items/12/termos', () => HttpResponse.json(resposta(pendente, [pendente], true))),
+      http.post('/api/termos/31/cancelar', () => {
+        cancelou = true
+        return HttpResponse.json(pendente)
+      })
+    )
+    renderTab()
+
+    await user.click(await screen.findByRole('button', { name: 'Cancelar' }))
+    await user.click(screen.getByRole('button', { name: 'Voltar' }))
+
+    expect(cancelou).toBe(false)
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })
 
   it('reenvia a solicitação enviada', async () => {

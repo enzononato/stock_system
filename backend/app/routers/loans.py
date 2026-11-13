@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Body, HTTPException, Depends, UploadFile, File
@@ -13,7 +14,8 @@ from app.services import audit, termos
 from app.services.audit import AuditContext
 from app.services.termos import DocumentoGerado
 from app.core.storage import storage
-from app.services.termos_confirmacao import confirmar_devolucao, confirmar_emprestimo
+from app.services.termos_confirmacao import MSG_JA_CONFIRMADO, confirmar_devolucao, confirmar_emprestimo
+from app.services.termos_trava import MSG_PROCESSANDO
 
 logger = logging.getLogger(__name__)
 
@@ -23,11 +25,17 @@ MAX_UPLOAD_SIZE = 20 * 1024 * 1024  # 20MB
 
 MSG_SEM_EMAIL = "O colaborador precisa ter e-mail cadastrado para receber o termo."
 MSG_NAO_ENCONTRADO = "Colaborador não encontrado."
+MSG_CPF_NAO_CONFERE = "O CPF do colaborador escolhido não confere com o do responsável pelo equipamento."
 
 
 def _check_size(content: bytes) -> None:
     if len(content) > MAX_UPLOAD_SIZE:
         raise HTTPException(status_code=413, detail="Arquivo excede o tamanho máximo de 20MB.")
+
+
+def _status_da_confirmacao(msg: str) -> int:
+    """409 quando outra confirmação ganhou a corrida (ou está em andamento); 400 nos demais casos."""
+    return 409 if msg in (*MSG_JA_CONFIRMADO.values(), MSG_PROCESSANDO) else 400
 
 
 def _solicitar_termo(item_id: int, tipo: str, ctx: AuditContext, **kwargs) -> Optional[dict]:
@@ -98,7 +106,7 @@ async def confirm_loan(
     _check_size(content)
     ok, msg, _ = confirmar_emprestimo(item_id, content, signed_pdf.filename, current_user.username, ctx)
     if not ok:
-        raise HTTPException(status_code=400, detail=msg)
+        raise HTTPException(status_code=_status_da_confirmacao(msg), detail=msg)
     return {"detail": msg}
 
 
@@ -143,6 +151,10 @@ def initiate_return(
         if vinculado is not None and vinculado != colaborador_id:
             raise HTTPException(status_code=400, detail="O equipamento está vinculado a outro colaborador.")
         vincular = vinculado is None
+        # O termo sai com o nome e o CPF registrados no equipamento: quem o recebe precisa ser essa pessoa.
+        cpf_do_item = re.sub(r"[^0-9]", "", (inv.find(item_id) or {}).get("cpf") or "")
+        if cpf_do_item and cpf_do_item != re.sub(r"[^0-9]", "", colaborador.get("cpf") or ""):
+            raise HTTPException(status_code=422, detail=MSG_CPF_NAO_CONFERE)
 
     antes_item = inv.find(item_id)
     ok, result, filename = inv.generate_return_term_bytes(item_id, current_user.username)
@@ -182,5 +194,5 @@ async def confirm_return(
     _check_size(content)
     ok, msg, _ = confirmar_devolucao(item_id, content, signed_pdf.filename, current_user.username, ctx)
     if not ok:
-        raise HTTPException(status_code=400, detail=msg)
+        raise HTTPException(status_code=_status_da_confirmacao(msg), detail=msg)
     return {"detail": msg}

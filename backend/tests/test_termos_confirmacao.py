@@ -148,3 +148,103 @@ def test_anexar_assinado_entrega_confirma_emprestimo(inv_manager, emprestimo):
     anexar_assinado(termo["id"], b"%PDF-1.4 x", "assinado.pdf", "tecnico.teste", CTX)
     assert inv_manager.find(emprestimo)["status"] == "Indisponível"
     assert len(_confirmacoes(emprestimo)) == 1
+
+
+# ── Corrida entre confirmações ────────────────────────────────────────────────
+
+
+def test_confirmacoes_simultaneas_geram_uma_so_confirmacao(item_pendente):
+    """Duas confirmações ao mesmo tempo (sem solicitação): só uma passa."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    from app.services.termos_confirmacao import confirmar_emprestimo
+    from tests.fixtures_termos import linhas_audit
+
+    item_id = item_pendente["id"]
+    largada = threading.Barrier(2)
+
+    def confirmar(i):
+        largada.wait()
+        return confirmar_emprestimo(item_id, b"%PDF-x", f"a{i}.pdf", "op", CTX)
+
+    with ThreadPoolExecutor(2) as pool:
+        resultados = list(pool.map(confirmar, range(2)))
+
+    assert sorted(ok for ok, _, _ in resultados) == [False, True]
+    recusada = next(msg for ok, msg, _ in resultados if not ok)
+    assert recusada in (
+        "O empréstimo já foi confirmado.",
+        "Apenas itens com status 'Pendente' podem ser confirmados.",
+    )
+    assert len(_confirmacoes(item_id)) == 1
+    assert len(linhas_audit("emprestimo", "confirmar")) == 1
+
+
+def test_confirm_loan_atomico_mesmo_com_leitura_desatualizada(inv_manager, item_pendente, monkeypatch):
+    """A transição é um UPDATE condicional: mesmo vendo o item ainda `Pendente` (leitura
+    desatualizada), a segunda confirmação não grava histórico nem muda o item."""
+    item_id = item_pendente["id"]
+    assert inv_manager.confirm_loan(item_id, "op", "termos_assinados/a.pdf")[0]
+    monkeypatch.setattr(inv_manager, "find", lambda _id: {**item_pendente, "status": "Pendente"})
+
+    ok, msg = inv_manager.confirm_loan(item_id, "op", "termos_assinados/b.pdf")
+    assert not ok and msg == "O empréstimo já foi confirmado."
+    assert len(_confirmacoes(item_id)) == 1
+
+
+def test_confirm_return_atomico_mesmo_com_leitura_desatualizada(
+    inv_manager, item_indisponivel, forcar_devolucao_iniciada, monkeypatch
+):
+    item_id = item_indisponivel["id"]
+    forcar_devolucao_iniciada(item_id)
+    assert inv_manager.confirm_return(item_id, "op", "termos_devolucao_assinados/a.pdf")[0]
+    monkeypatch.setattr(inv_manager, "find", lambda _id: {**item_indisponivel, "status": "Pendente Devolução"})
+
+    ok, msg = inv_manager.confirm_return(item_id, "op", "termos_devolucao_assinados/b.pdf")
+    assert not ok and msg == "A devolução já foi confirmada."
+    assert len(_confirmacoes(item_id, "Confirmação Devolução")) == 1
+
+
+def test_endpoint_responde_409_quando_a_outra_confirmacao_ganhou(client_gestor, item_pendente, monkeypatch):
+    from app.db.inventory_manager_db import InventoryDBManager
+
+    item_id = item_pendente["id"]
+    assert client_gestor.post(f"/api/loans/{item_id}/confirm", files=ARQUIVO_PDF).status_code == 200
+    monkeypatch.setattr(InventoryDBManager, "find", lambda self, _id: {**item_pendente, "status": "Pendente"})
+
+    resp = client_gestor.post(f"/api/loans/{item_id}/confirm", files=ARQUIVO_PDF)
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "O empréstimo já foi confirmado."
+    assert len(_confirmacoes(item_id)) == 1
+
+
+def test_upload_manual_respeita_a_trava_da_solicitacao_pendente(client_gestor, emprestimo):
+    from app.db.database_mysql import get_cursor
+    from app.services import termos
+    from app.services.termos_trava import nome_da_trava
+
+    termo = termos.solicitar(emprestimo, "entrega", CTX)
+    with get_cursor(commit=False) as cur:
+        cur.execute("SELECT GET_LOCK(%s, 0)", (nome_da_trava(termo["id"]),))
+        resp = client_gestor.post(f"/api/loans/{emprestimo}/confirm", files=ARQUIVO_PDF)
+        assert resp.status_code == 409
+        assert resp.json()["detail"] == "Esta solicitação está sendo processada. Tente novamente em instantes."
+        assert _confirmacoes(emprestimo) == []
+        cur.execute("SELECT RELEASE_LOCK(%s)", (nome_da_trava(termo["id"]),))
+    assert client_gestor.post(f"/api/loans/{emprestimo}/confirm", files=ARQUIVO_PDF).status_code == 200
+
+
+def test_cancelar_respeita_a_trava_da_solicitacao(emprestimo):
+    from app.db.database_mysql import get_cursor
+    from app.services import termos
+    from app.services.termos_trava import nome_da_trava
+
+    termo = termos.solicitar(emprestimo, "entrega", CTX)
+    with get_cursor(commit=False) as cur:
+        cur.execute("SELECT GET_LOCK(%s, 0)", (nome_da_trava(termo["id"]),))
+        with pytest.raises(termos.TermoErro, match="está sendo processada"):
+            termos.cancelar(termo["id"], CTX, "Teste")
+        assert termos.get_termo_db().obter(termo["id"])["status"] == "manual"
+        cur.execute("SELECT RELEASE_LOCK(%s)", (nome_da_trava(termo["id"]),))
+    assert termos.cancelar(termo["id"], CTX, "Teste")["status"] == "cancelado"

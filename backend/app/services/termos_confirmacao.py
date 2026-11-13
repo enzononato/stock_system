@@ -11,16 +11,24 @@ from typing import Literal, Optional
 
 from app.core.storage import storage
 from app.core.tempo import agora_local
+from app.db.inventory_manager_db import MSG_DEVOLUCAO_JA_CONFIRMADA, MSG_EMPRESTIMO_JA_CONFIRMADO
 from app.db.termo_db import PENDENTES
 from app.dependencies import get_inventory_db, get_termo_db
 from app.services import audit
 from app.services.audit import AuditContext
 from app.services.revsign_client import get_revsign_client
 from app.services.termos import TermoErro, revsign_ligado
+from app.services.termos_trava import MSG_PROCESSANDO, trava
 
 logger = logging.getLogger(__name__)
 
 Origem = Literal["manual", "revsign"]
+
+# Resposta de `confirmar_*` quando outra confirmação já concluiu a operação, por tipo de termo.
+MSG_JA_CONFIRMADO = {
+    "entrega": MSG_EMPRESTIMO_JA_CONFIRMADO,
+    "devolucao": MSG_DEVOLUCAO_JA_CONFIRMADA,
+}
 
 
 def nome_seguro(nome: str) -> str:
@@ -79,40 +87,68 @@ def _marcar_assinada(termo: Optional[dict], chave: str, origem: Origem, ctx: Aud
             )
 
 
+_CONFIRMACAO = {
+    "entrega": {
+        "categoria": "termos_assinados",
+        "prefixo": "termo_",
+        "entidade": "emprestimo",
+        "confirmar": "confirm_loan",
+    },
+    "devolucao": {
+        "categoria": "termos_devolucao_assinados",
+        "prefixo": "termo_devolucao_",
+        "entidade": "devolucao",
+        "confirmar": "confirm_return",
+    },
+}
+
+
+def _confirmar(
+    tipo: str, item_id: int, conteudo: bytes, nome_arquivo: str, operador: str, ctx: AuditContext,
+    termo_id: Optional[int], origem: Origem, travado: bool,
+) -> tuple[bool, str, str]:
+    cfg = _CONFIRMACAO[tipo]
+
+    def executar() -> tuple[bool, str, str]:
+        inv = get_inventory_db()
+        chave = storage.save(
+            cfg["categoria"], f"{cfg['prefixo']}{item_id}_{_carimbo()}_{nome_seguro(nome_arquivo)}", conteudo
+        )
+        antes_item = inv.find(item_id)
+        ok, msg = getattr(inv, cfg["confirmar"])(item_id, operador, chave)
+        if not ok:
+            return False, msg, chave
+        auditar_etapa(ctx, cfg["entidade"], "confirmar", item_id, antes_item, extra={"termo_assinado": chave})
+        _marcar_assinada(_termo_a_marcar(item_id, tipo, termo_id), chave, origem, ctx)
+        return True, msg, chave
+
+    if travado:
+        return executar()
+    # Chamada de fora de quem já segura a trava (upload manual direto): com solicitação pendente,
+    # serializa com o RevSign e com o anexo pela solicitação. Sem solicitação, quem garante uma
+    # única confirmação é a transição atômica do item (`confirm_loan`/`confirm_return`).
+    alvo = _termo_a_marcar(item_id, tipo, termo_id)
+    if alvo is None:
+        return executar()
+    with trava(alvo["id"]) as pegou:
+        if not pegou:
+            return False, MSG_PROCESSANDO, ""
+        return executar()
+
+
 def confirmar_emprestimo(
     item_id: int, conteudo: bytes, nome_arquivo: str, operador: str, ctx: AuditContext,
-    *, termo_id: Optional[int] = None, origem: Origem = "manual",
+    *, termo_id: Optional[int] = None, origem: Origem = "manual", travado: bool = False,
 ) -> tuple[bool, str, str]:
-    inv = get_inventory_db()
-    chave = storage.save(
-        "termos_assinados", f"termo_{item_id}_{_carimbo()}_{nome_seguro(nome_arquivo)}", conteudo
-    )
-    antes_item = inv.find(item_id)
-    ok, msg = inv.confirm_loan(item_id, operador, chave)
-    if not ok:
-        return False, msg, chave
-    auditar_etapa(ctx, "emprestimo", "confirmar", item_id, antes_item, extra={"termo_assinado": chave})
-    _marcar_assinada(_termo_a_marcar(item_id, "entrega", termo_id), chave, origem, ctx)
-    return True, msg, chave
+    """`travado=True`: o chamador já segura a trava da solicitação (ver `termos_trava`)."""
+    return _confirmar("entrega", item_id, conteudo, nome_arquivo, operador, ctx, termo_id, origem, travado)
 
 
 def confirmar_devolucao(
     item_id: int, conteudo: bytes, nome_arquivo: str, operador: str, ctx: AuditContext,
-    *, termo_id: Optional[int] = None, origem: Origem = "manual",
+    *, termo_id: Optional[int] = None, origem: Origem = "manual", travado: bool = False,
 ) -> tuple[bool, str, str]:
-    inv = get_inventory_db()
-    chave = storage.save(
-        "termos_devolucao_assinados",
-        f"termo_devolucao_{item_id}_{_carimbo()}_{nome_seguro(nome_arquivo)}",
-        conteudo,
-    )
-    antes_item = inv.find(item_id)
-    ok, msg = inv.confirm_return(item_id, operador, chave)
-    if not ok:
-        return False, msg, chave
-    auditar_etapa(ctx, "devolucao", "confirmar", item_id, antes_item, extra={"termo_assinado": chave})
-    _marcar_assinada(_termo_a_marcar(item_id, "devolucao", termo_id), chave, origem, ctx)
-    return True, msg, chave
+    return _confirmar("devolucao", item_id, conteudo, nome_arquivo, operador, ctx, termo_id, origem, travado)
 
 
 def registrar_uso_assinado(
@@ -134,16 +170,18 @@ def registrar_uso_assinado(
 
 def concluir_assinatura(
     termo: dict, conteudo: bytes, nome_arquivo: str, operador: str, ctx: AuditContext,
-    *, origem: Origem,
+    *, origem: Origem, travado: bool = False,
 ) -> tuple[bool, str, str]:
     tipo = termo["tipo"]
     if tipo == "entrega":
         return confirmar_emprestimo(
-            termo["item_id"], conteudo, nome_arquivo, operador, ctx, termo_id=termo["id"], origem=origem
+            termo["item_id"], conteudo, nome_arquivo, operador, ctx,
+            termo_id=termo["id"], origem=origem, travado=travado,
         )
     if tipo == "devolucao":
         return confirmar_devolucao(
-            termo["item_id"], conteudo, nome_arquivo, operador, ctx, termo_id=termo["id"], origem=origem
+            termo["item_id"], conteudo, nome_arquivo, operador, ctx,
+            termo_id=termo["id"], origem=origem, travado=travado,
         )
     return registrar_uso_assinado(termo["id"], conteudo, nome_arquivo, ctx, origem=origem)
 
@@ -156,18 +194,18 @@ def anexar_assinado(
     Serializado com o retorno do RevSign pela mesma trava por solicitação: assinatura manual e
     webhook ao mesmo tempo não confirmam o empréstimo duas vezes.
     """
-    from app.services.termos_retorno import trava  # import tardio: termos_retorno importa este módulo
-
     termos = get_termo_db()
     with trava(termo_id) as pegou:
         if not pegou:
-            raise TermoErro("Esta solicitação está sendo processada. Tente novamente em instantes.")
+            raise TermoErro(MSG_PROCESSANDO)
         termo = termos.obter(termo_id)
         if termo is None:
             raise TermoErro("Solicitação de termo não encontrada.")
         if termo["status"] not in ("enviado", "manual", "erro"):
             raise TermoErro("Esta solicitação não aceita anexo.")
-        ok, msg, _ = concluir_assinatura(termo, conteudo, nome_arquivo, operador, ctx, origem="manual")
+        ok, msg, _ = concluir_assinatura(
+            termo, conteudo, nome_arquivo, operador, ctx, origem="manual", travado=True
+        )
         if not ok:
             raise TermoErro(msg)
         return termos.obter(termo_id)

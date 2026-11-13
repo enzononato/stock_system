@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 
 import { downloadAuthenticated } from '@/api/client'
-import { getColaborador, type Colaborador } from '@/api/colaboradores'
+import { getColaborador, getColaboradorPorCpf, type Colaborador } from '@/api/colaboradores'
 import { getItem, listItemsPaginated, type Item } from '@/api/items'
 import { confirmReturn, initiateReturn } from '@/api/loans'
 import { usePageSize } from '@/hooks/usePageSize'
@@ -41,6 +41,8 @@ import { toast } from '@/components/ui/toast'
 // cliente — que ficava incorreto em silêncio quando o total passava do teto
 // de página do backend.
 
+const MSG_CPF_NAO_CONFERE = 'O CPF do colaborador escolhido não confere com o do responsável pelo equipamento.'
+
 type ResultadoDevolucao = Awaited<ReturnType<typeof initiateReturn>>
 
 interface IniciarDevolucaoDialogProps {
@@ -56,6 +58,7 @@ interface IniciarDevolucaoDialogProps {
  */
 function IniciarDevolucaoDialog({ item, onClose, onConcluido }: IniciarDevolucaoDialogProps) {
   const vinculadoId = item.colaborador_id ?? null
+  const cpfDoItem = (item.cpf ?? '').replace(/\D/g, '')
   const [escolhido, setEscolhido] = useState<Colaborador | null>(null)
   const [email, setEmail] = useState('')
 
@@ -70,9 +73,36 @@ function IniciarDevolucaoDialog({ item, onClose, onConcluido }: IniciarDevolucao
     if (vinculado) setEmail(vinculado.email ?? '')
   }, [vinculado])
 
+  // Equipamento antigo (sem vínculo de cadastro): o termo sai com o nome e o CPF registrados no
+  // equipamento, então já deixa escolhido o colaborador desse CPF (se houver no cadastro).
+  const { data: doCpf } = useQuery({
+    queryKey: ['colaboradores', 'por-cpf', cpfDoItem],
+    queryFn: () => getColaboradorPorCpf(cpfDoItem),
+    enabled: vinculadoId === null && cpfDoItem !== '',
+    retry: false,
+  })
+  useEffect(() => {
+    if (doCpf) {
+      setEscolhido((atual) => atual ?? doCpf)
+      setEmail((atual) => atual || (doCpf.email ?? ''))
+    }
+  }, [doCpf])
+
+  function escolher(c: Colaborador | null) {
+    setEscolhido(c)
+    setEmail(c?.email ?? '')
+  }
+
+  const cpfNaoConfere =
+    vinculadoId === null &&
+    cpfDoItem !== '' &&
+    colaborador !== null &&
+    colaborador.cpf.replace(/\D/g, '') !== cpfDoItem
+
   const mutation = useMutation({
     mutationFn: async () => {
       if (!colaborador) throw new Error('Selecione o colaborador.')
+      if (cpfNaoConfere) throw new Error(MSG_CPF_NAO_CONFERE)
       const atualizado = await garantirEmailDoColaborador(colaborador, email)
       const resultado = await initiateReturn(item.id, { colaborador_id: atualizado.id })
       return { resultado, atualizado }
@@ -99,13 +129,22 @@ function IniciarDevolucaoDialog({ item, onClose, onConcluido }: IniciarDevolucao
             </p>
           )}
           <div className="space-y-1.5">
-            <span className="text-caption font-medium text-foreground">Colaborador *</span>
-            <ColaboradorSelect
-              value={colaborador?.id ?? vinculadoId}
-              onChange={setEscolhido}
-              somenteAtivos={false}
-              disabled={vinculadoId !== null || mutation.isPending}
-            />
+            <span id="devolucao-colaborador-rotulo" className="text-caption font-medium text-foreground">
+              Colaborador *
+            </span>
+            <div role="group" aria-labelledby="devolucao-colaborador-rotulo">
+              <ColaboradorSelect
+                value={colaborador?.id ?? vinculadoId}
+                onChange={escolher}
+                somenteAtivos={false}
+                disabled={vinculadoId !== null || mutation.isPending}
+              />
+            </div>
+            {cpfNaoConfere && (
+              <p role="alert" className="text-xs text-destructive">
+                {MSG_CPF_NAO_CONFERE}
+              </p>
+            )}
           </div>
           <ColaboradorEmailField
             colaborador={colaborador}
@@ -119,7 +158,12 @@ function IniciarDevolucaoDialog({ item, onClose, onConcluido }: IniciarDevolucao
           <Button variant="outline" size="sm" onClick={onClose}>
             Cancelar
           </Button>
-          <Button size="sm" onClick={() => mutation.mutate()} loading={mutation.isPending}>
+          <Button
+            size="sm"
+            onClick={() => mutation.mutate()}
+            loading={mutation.isPending}
+            disabled={cpfNaoConfere}
+          >
             Gerar termo e iniciar
           </Button>
         </DialogFooter>

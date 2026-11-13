@@ -10,6 +10,16 @@ import {
   reenviarTermo,
   type TermoSolicitacao,
 } from '@/api/termos'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
 import { getErrorMessage } from '@/lib/api-error'
@@ -52,6 +62,7 @@ export function TermoVigenteCard({ itemId, itemStatus, vigente, revsignAtivo }: 
   const queryClient = useQueryClient()
   const [solicitarAberto, setSolicitarAberto] = useState(false)
   const [anexarAberto, setAnexarAberto] = useState(false)
+  const [cancelarAberto, setCancelarAberto] = useState(false)
 
   const podeSolicitar = !!itemStatus && STATUS_ITEM_COM_TERMO.includes(itemStatus)
   const real = vigente && vigente.id !== null ? vigente : null
@@ -136,7 +147,7 @@ export function TermoVigenteCard({ itemId, itemStatus, vigente, revsignAtivo }: 
           </Button>
         )}
         {pendente && (
-          <Button size="sm" variant="outline" onClick={() => cancelar.mutate()} loading={cancelar.isPending}>
+          <Button size="sm" variant="outline" onClick={() => setCancelarAberto(true)} loading={cancelar.isPending}>
             Cancelar
           </Button>
         )}
@@ -168,6 +179,23 @@ export function TermoVigenteCard({ itemId, itemStatus, vigente, revsignAtivo }: 
         temPendente={pendente}
       />
       {real && <AnexarAssinadoDialog termo={real} open={anexarAberto} onOpenChange={setAnexarAberto} />}
+
+      <AlertDialog open={cancelarAberto} onOpenChange={setCancelarAberto}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancelar solicitação de assinatura?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {real?.status === 'enviado'
+                ? 'O documento também será cancelado no RevSign e o colaborador não poderá mais assiná-lo.'
+                : 'A solicitação será cancelada e deixará de valer como termo vigente.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Voltar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => cancelar.mutate()}>Cancelar solicitação</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   )
 }

@@ -298,4 +298,15 @@ describe('LoanPage — assistente de 4 passos', () => {
 
     expect(screen.getByRole('checkbox')).not.toBeChecked()
   })
+
+  it('o rótulo "Colaborador *" nomeia o seletor da etapa 2', async () => {
+    mockListItems()
+    mockColaboradores([colaborador()])
+    const user = userEvent.setup()
+    renderPage()
+
+    await avancarParaColaborador(user)
+
+    expect(screen.getByRole('group', { name: 'Colaborador *' })).toBeInTheDocument()
+  })
 })

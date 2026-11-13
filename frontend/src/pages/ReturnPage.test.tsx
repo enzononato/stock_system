@@ -66,7 +66,7 @@ beforeEach(() => {
 describe('ReturnPage — devolução com colaborador do cadastro', () => {
   it('item sem vínculo exige escolher do cadastro e mostra desligados', async () => {
     const buscas: URLSearchParams[] = []
-    mockItens([itemEmCampo()])
+    mockItens([itemEmCampo({ cpf: null })])
     server.use(
       http.get('/api/colaboradores', ({ request }) => {
         buscas.push(new URL(request.url).searchParams)
@@ -204,5 +204,100 @@ describe('ReturnPage — devolução com colaborador do cadastro', () => {
     expect(limites['Indisponível']).toContain('25')
     expect(limites['Pendente Devolução']).toContain('25')
     expect(screen.getAllByText('REVALLE JUAZEIRO').length).toBeGreaterThan(0)
+  })
+
+  it('escolher um colaborador sem vínculo preenche o e-mail e não grava nada no cadastro', async () => {
+    let put = false
+    let corpo: unknown = null
+    mockItens([itemEmCampo({ cpf: null })])
+    server.use(
+      http.get('/api/colaboradores', () => HttpResponse.json({ items: [maria], total: 1 })),
+      http.put('/api/colaboradores/7', () => {
+        put = true
+        return HttpResponse.json(maria)
+      }),
+      http.post('/api/loans/9/return/initiate', async ({ request }) => {
+        corpo = await request.json()
+        return HttpResponse.json({
+          detail: 'ok',
+          download_url: '/api/documents/files/termos_devolucao/termo.docx',
+          filename: 'termo.docx',
+          termo: { id: 3, item_id: 9, tipo: 'devolucao', status: 'enviado', destinatario_email: 'maria@gmail.com' },
+        })
+      })
+    )
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: /Iniciar Devolução/i }))
+    await user.click(await screen.findByRole('button', { name: /Selecione um colaborador/i }))
+    await user.type(screen.getByPlaceholderText(/Buscar por nome, CPF ou matrícula/i), 'Mar')
+    await user.click(await screen.findByText('MARIA SOUZA'))
+
+    expect(screen.getByLabelText(/E-mail do colaborador/i)).toHaveValue('maria@gmail.com')
+    await user.click(screen.getByRole('button', { name: 'Gerar termo e iniciar' }))
+
+    expect(
+      await screen.findByText('Termo de devolução enviado para assinatura em maria@gmail.com.')
+    ).toBeInTheDocument()
+    expect(corpo).toEqual({ colaborador_id: 7 })
+    expect(put).toBe(false)
+  })
+
+  it('pré-seleciona o colaborador cujo CPF é o do responsável pelo equipamento', async () => {
+    let corpo: unknown = null
+    mockItens([itemEmCampo()]) // cpf 52998224725 = o de Maria
+    server.use(
+      http.get('/api/colaboradores', () => HttpResponse.json({ items: [maria], total: 1 })),
+      http.get('/api/colaboradores/cpf/52998224725', () => HttpResponse.json(maria)),
+      http.post('/api/loans/9/return/initiate', async ({ request }) => {
+        corpo = await request.json()
+        return HttpResponse.json({
+          detail: 'ok',
+          download_url: '/x',
+          filename: 'termo.docx',
+          termo: { id: 3, item_id: 9, tipo: 'devolucao', status: 'enviado', destinatario_email: 'maria@gmail.com' },
+        })
+      })
+    )
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: /Iniciar Devolução/i }))
+    await waitFor(() => expect(screen.getByLabelText(/E-mail do colaborador/i)).toHaveValue('maria@gmail.com'))
+    expect(screen.queryByText(/não confere/)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Gerar termo e iniciar' }))
+
+    await waitFor(() => expect(corpo).toEqual({ colaborador_id: 7 }))
+  })
+
+  it('avisa e bloqueia quando o CPF do colaborador escolhido não é o do responsável', async () => {
+    mockItens([itemEmCampo({ cpf: '11144477735' })])
+    server.use(
+      http.get('/api/colaboradores', () => HttpResponse.json({ items: [maria], total: 1 })),
+      http.get('/api/colaboradores/cpf/11144477735', () => HttpResponse.json({ detail: 'x' }, { status: 404 }))
+    )
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: /Iniciar Devolução/i }))
+    await user.click(await screen.findByRole('button', { name: /Selecione um colaborador/i }))
+    await user.type(screen.getByPlaceholderText(/Buscar por nome, CPF ou matrícula/i), 'Mar')
+    await user.click(await screen.findByText('MARIA SOUZA'))
+
+    expect(
+      await screen.findByText('O CPF do colaborador escolhido não confere com o do responsável pelo equipamento.')
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Gerar termo e iniciar' })).toBeDisabled()
+  })
+
+  it('o rótulo "Colaborador *" nomeia o seletor', async () => {
+    mockItens([itemEmCampo({ cpf: null })])
+    server.use(http.get('/api/colaboradores', () => HttpResponse.json({ items: [maria], total: 1 })))
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: /Iniciar Devolução/i }))
+    expect(await screen.findByRole('group', { name: 'Colaborador *' })).toBeInTheDocument()
   })
 })

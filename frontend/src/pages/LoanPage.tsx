@@ -378,12 +378,16 @@ export default function LoanPage() {
 
               <div className="space-y-4 pt-2 border-t border-border">
                 <div className="space-y-1.5">
-                  <Label className="text-caption font-medium text-foreground">Colaborador *</Label>
-                  <ColaboradorSelect
-                    value={colaborador?.id ?? null}
-                    onChange={escolherColaborador}
-                    disabled={salvandoEmail}
-                  />
+                  <Label id="emprestimo-colaborador-rotulo" className="text-caption font-medium text-foreground">
+                    Colaborador *
+                  </Label>
+                  <div role="group" aria-labelledby="emprestimo-colaborador-rotulo">
+                    <ColaboradorSelect
+                      value={colaborador?.id ?? null}
+                      onChange={escolherColaborador}
+                      disabled={salvandoEmail}
+                    />
+                  </div>
                 </div>
 
                 {colaborador && (
@@ -574,9 +578,9 @@ export default function LoanPage() {
                   <span className="text-muted-foreground">CPF</span>
                   <span className="font-mono text-foreground">{formatCpf(colaborador?.cpf)}</span>
                 </div>
-                <div className="flex justify-between border-b border-border pb-1.5">
+                <div className="flex justify-between gap-3 border-b border-border pb-1.5">
                   <span className="text-muted-foreground">E-mail para assinatura</span>
-                  <span className="text-foreground">{colaborador?.email ?? email}</span>
+                  <span className="min-w-0 break-all text-right text-foreground">{colaborador?.email ?? email}</span>
                 </div>
                 <div className="flex justify-between border-b border-border pb-1.5">
                   <span className="text-muted-foreground">Revenda / Setor</span>

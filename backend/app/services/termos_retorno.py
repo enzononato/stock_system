@@ -7,19 +7,17 @@ RevSign (a fonte da verdade). O status que vier no corpo do webhook nunca é usa
 repetido, ou webhook e consulta periódica ao mesmo tempo, geram uma única confirmação.
 """
 import logging
-from contextlib import contextmanager
 from datetime import datetime
-from typing import Iterator, Optional
+from typing import Optional
 
-from app.core import config as _config
 from app.core.tempo import FUSO_BRASILIA, agora_local
-from app.db.database_mysql import get_cursor
 from app.dependencies import get_termo_db
 from app.services import audit
 from app.services.audit import AuditContext
 from app.services.revsign_client import EventoWebhook, RevSignError, get_revsign_client
 from app.services.termos import OPERADOR_REVSIGN, PREFIXO_REFERENCIA
-from app.services.termos_confirmacao import concluir_assinatura
+from app.services.termos_confirmacao import MSG_JA_CONFIRMADO, concluir_assinatura
+from app.services.termos_trava import nome_da_trava, trava  # noqa: F401 (reexportados)
 
 logger = logging.getLogger(__name__)
 
@@ -31,30 +29,6 @@ _MOTIVO_PADRAO = {
     "cancelado": "Cancelado no RevSign.",
 }
 _RESULTADOS_SEM_MUDANCA = {"pendente", "em_processamento", "falha_download", "falha_consulta", "ja_processado"}
-
-
-def nome_da_trava(termo_id: int) -> str:
-    """Nome do `GET_LOCK` da solicitação. Vale para o servidor MySQL inteiro, então leva o
-    nome do database. Limite do MySQL: 64 caracteres."""
-    return f"patrimonio_termo_{termo_id}:{_config.settings.DB_NAME}"[:64]
-
-
-@contextmanager
-def trava(termo_id: int) -> Iterator[bool]:
-    """Trava por solicitação, sem espera. Entrega True se pegou o lock (e o segura, numa
-    conexão própria do pool, durante o bloco) e False se outra rotina está processando."""
-    nome = nome_da_trava(termo_id)
-    with get_cursor(commit=False) as cur:
-        cur.execute("SELECT GET_LOCK(%s, 0) AS ok", (nome,))
-        pegou = cur.fetchone()["ok"] == 1
-        try:
-            yield pegou
-        finally:
-            if pegou:
-                try:
-                    cur.execute("SELECT RELEASE_LOCK(%s)", (nome,))
-                except Exception:
-                    logger.exception("Falha ao liberar a trava da solicitação de termo %s.", termo_id)
 
 
 def _para_local(dt: datetime) -> datetime:
@@ -99,8 +73,13 @@ def _sincronizar_com_trava(termo_id: int) -> str:
             termos.atualizar(termo_id, somente_se_status=("enviado",), motivo=MOTIVO_FALHA_DOWNLOAD)
             return "falha_download"
         ok, msg, chave = concluir_assinatura(
-            termo, pdf, f"revsign_{documento_id}.pdf", OPERADOR_REVSIGN, ctx, origem="revsign"
+            termo, pdf, f"revsign_{documento_id}.pdf", OPERADOR_REVSIGN, ctx, origem="revsign",
+            travado=True,
         )
+        if not ok and msg == MSG_JA_CONFIRMADO.get(termo["tipo"]):
+            # Outra confirmação (upload manual, sem solicitação ligada) já concluiu a operação:
+            # nada a fazer aqui, e nenhuma linha extra no histórico ou na auditoria.
+            return "ja_processado"
         if ok:
             if status.assinado_em is not None:
                 termos.atualizar(termo_id, assinado_em=_para_local(status.assinado_em))

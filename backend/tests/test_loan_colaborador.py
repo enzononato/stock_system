@@ -15,6 +15,7 @@ from tests.fixtures_termos import (  # noqa: F401
 pytestmark = pytest.mark.integration
 
 CPF_VALIDO_TESTE = "11144477735"
+CPF_ITEM_FIXTURE = "11122233344"  # CPF do responsável nas fixtures item_pendente/item_indisponivel
 ARQUIVO_PDF = {"signed_pdf": ("termo.pdf", b"conteudo-fake-pdf", "application/pdf")}
 CTX = AuditContext(1, "gestor.teste", "Gestor", "127.0.0.1")
 
@@ -161,10 +162,11 @@ def test_devolucao_confirmada_limpa_colaborador_id(
 
 
 def test_devolucao_de_item_legado_vincula_colaborador_escolhido(
-    client_gestor, item_indisponivel, colaborador, termo_devolucao_disponivel
+    client_gestor, item_indisponivel, criar_colaborador, termo_devolucao_disponivel
 ):
     if not termo_devolucao_disponivel:
         pytest.skip("Modelo do termo de devolução ausente neste ambiente.")
+    colaborador = criar_colaborador(cpf=CPF_ITEM_FIXTURE)
     item_id = item_indisponivel["id"]
     resp = client_gestor.post(f"/api/loans/{item_id}/return/initiate", json={"colaborador_id": colaborador["id"]})
     assert resp.status_code == 200, resp.text
@@ -218,7 +220,7 @@ def test_devolucao_aceita_colaborador_desligado(
 ):
     if not termo_devolucao_disponivel:
         pytest.skip("Modelo do termo de devolução ausente neste ambiente.")
-    desligado = criar_colaborador(situacao="desligado")
+    desligado = criar_colaborador(situacao="desligado", cpf=CPF_ITEM_FIXTURE)
     resp = client_gestor.post(
         f"/api/loans/{item_indisponivel['id']}/return/initiate", json={"colaborador_id": desligado["id"]}
     )
@@ -287,3 +289,75 @@ def test_estorno_nao_falha_se_cancelar_solicitacoes_quebrar(
     monkeypatch.setattr(termos, "cancelar_por_estorno", quebra)
     resp = client_gestor.post(f"/api/history/{history_id}/reverse", json={"password": "SenhaForte#123"})
     assert resp.status_code == 200
+
+
+def test_devolucao_com_cpf_diferente_do_responsavel_422(
+    client_gestor, item_indisponivel, colaborador, termo_devolucao_disponivel
+):
+    """O termo sai com o nome/CPF do equipamento: o colaborador escolhido tem de ser essa pessoa."""
+    item_id = item_indisponivel["id"]
+    resp = client_gestor.post(f"/api/loans/{item_id}/return/initiate", json={"colaborador_id": colaborador["id"]})
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "O CPF do colaborador escolhido não confere com o do responsável pelo equipamento."
+    item = _item(client_gestor, item_id)
+    assert item["status"] == "Indisponível" and item["colaborador_id"] is None
+
+
+def test_devolucao_sem_cpf_no_item_aceita_qualquer_colaborador(
+    client_gestor, item_indisponivel, colaborador, executar_sql, termo_devolucao_disponivel
+):
+    if not termo_devolucao_disponivel:
+        pytest.skip("Modelo do termo de devolução ausente neste ambiente.")
+    executar_sql("UPDATE items SET cpf=NULL WHERE id=%s", (item_indisponivel["id"],))
+    resp = client_gestor.post(
+        f"/api/loans/{item_indisponivel['id']}/return/initiate", json={"colaborador_id": colaborador["id"]}
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def test_estorno_da_devolucao_restaura_colaborador_id_pelo_cpf(
+    client_gestor, inv_manager, item_disponivel, colaborador, forcar_devolucao_iniciada
+):
+    item_id = item_disponivel["id"]
+    assert client_gestor.post(
+        "/api/loans", json=corpo_emprestimo_colaborador(item_id, colaborador["id"])
+    ).status_code == 200
+    assert client_gestor.post(f"/api/loans/{item_id}/confirm", files=ARQUIVO_PDF).status_code == 200
+    forcar_devolucao_iniciada(item_id)
+    assert client_gestor.post(f"/api/loans/{item_id}/return/confirm", files=ARQUIVO_PDF).status_code == 200
+    assert _item(client_gestor, item_id)["colaborador_id"] is None
+
+    devolucao_id = inv_manager.ultimo_history_id(item_id, "Devolução")
+    resp = client_gestor.post(f"/api/history/{devolucao_id}/reverse", json={"password": "SenhaForte#123"})
+    assert resp.status_code == 200, resp.text
+    item = _item(client_gestor, item_id)
+    assert item["status"] == "Indisponível"
+    assert item["colaborador_id"] == colaborador["id"]
+
+
+def test_estorno_da_confirmacao_reabre_a_solicitacao_assinada(
+    client_gestor, inv_manager, item_disponivel, colaborador, unidade_juazeiro
+):
+    from app.dependencies import get_termo_db
+    from app.services.termos import MOTIVO_CONFIRMACAO_ESTORNADA
+
+    item_id = item_disponivel["id"]
+    termo_id = client_gestor.post(
+        "/api/loans", json=corpo_emprestimo_colaborador(item_id, colaborador["id"])
+    ).json()["termo"]["id"]
+    assert client_gestor.post(f"/api/loans/{item_id}/confirm", files=ARQUIVO_PDF).status_code == 200
+    assert get_termo_db().obter(termo_id)["status"] == "assinado"
+
+    confirmacao_id = inv_manager.ultimo_history_id(item_id, "Confirmação Empréstimo")
+    resp = client_gestor.post(f"/api/history/{confirmacao_id}/reverse", json={"password": "SenhaForte#123"})
+    assert resp.status_code == 200, resp.text
+
+    termo = get_termo_db().obter(termo_id)
+    assert termo["status"] == "manual"
+    assert termo["motivo"] == MOTIVO_CONFIRMACAO_ESTORNADA
+    assert termo["assinado_em"] is None and termo["arquivo_assinado_key"] is None
+    assert _item(client_gestor, item_id)["status"] == "Pendente"
+    # o card volta a oferecer "Anexar assinado": o anexo conclui de novo
+    assert client_gestor.post(f"/api/termos/{termo_id}/assinado", files=ARQUIVO_PDF).status_code == 200
+    assert _item(client_gestor, item_id)["status"] == "Indisponível"
+    assert get_termo_db().obter(termo_id)["status"] == "assinado"

@@ -104,6 +104,15 @@ class TermoDBManager:
             cur.execute(f"{sql} ORDER BY t.id DESC", params)
             return list(cur.fetchall())
 
+    def assinadas_do_item(self, item_id: int, tipo: str) -> list[dict]:
+        """Solicitações `assinado` do item para o tipo, da mais recente para a mais antiga."""
+        with get_cursor(commit=False) as cur:
+            cur.execute(
+                f"{_SELECT} WHERE t.item_id = %s AND t.tipo = %s AND t.status = 'assinado' ORDER BY t.id DESC",
+                (item_id, tipo),
+            )
+            return list(cur.fetchall())
+
     def por_history(self, history_id: int) -> list[dict]:
         with get_cursor(commit=False) as cur:
             cur.execute(f"{_SELECT} WHERE t.history_id = %s ORDER BY t.id DESC", (history_id,))

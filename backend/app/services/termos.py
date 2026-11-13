@@ -23,6 +23,7 @@ from app.dependencies import get_colaborador_db, get_inventory_db, get_termo_db
 from app.services import audit
 from app.services.audit import AuditContext
 from app.services.revsign_client import NovoDocumento, RevSignError, get_revsign_client
+from app.services.termos_trava import MSG_PROCESSANDO, trava
 
 logger = logging.getLogger(__name__)
 
@@ -179,7 +180,7 @@ def enviar(termo_id: int, ctx: AuditContext, *, documento: Optional[DocumentoGer
     item = get_inventory_db().find(termo["item_id"])
     tipo = termo["tipo"]
     if item is None or item["status"] != STATUS_ITEM_POR_TIPO[tipo]:
-        return cancelar(termo_id, ctx, MOTIVO_SITUACAO_MUDOU)
+        return cancelar(termo_id, ctx, MOTIVO_SITUACAO_MUDOU, travado=True)
 
     colaborador = _resolver_colaborador(item, termo)
     campos = {
@@ -258,7 +259,7 @@ def _cancelar_remoto(revsign_id: Optional[str]) -> bool:
         return False
 
 
-def cancelar(termo_id: int, ctx: AuditContext, motivo: str) -> dict:
+def _cancelar(termo_id: int, ctx: AuditContext, motivo: str) -> dict:
     termos = get_termo_db()
     termo = termos.obter(termo_id)
     if termo is None:
@@ -283,6 +284,20 @@ def cancelar(termo_id: int, ctx: AuditContext, motivo: str) -> dict:
         {"status": termo["status"]}, {"status": "cancelado", "motivo": motivo},
     )
     return termos.obter(termo_id)
+
+
+def cancelar(termo_id: int, ctx: AuditContext, motivo: str, *, travado: bool = False) -> dict:
+    """Cancela a solicitação pendente (e o documento no RevSign, em melhor esforço).
+
+    Roda sob a mesma trava por solicitação do retorno do RevSign, para não cancelar uma
+    solicitação que está sendo confirmada naquele instante. `travado=True`: o chamador já a segura.
+    """
+    if travado:
+        return _cancelar(termo_id, ctx, motivo)
+    with trava(termo_id) as pegou:
+        if not pegou:
+            raise TermoErro(MSG_PROCESSANDO)
+        return _cancelar(termo_id, ctx, motivo)
 
 
 def cancelar_pendentes_do_item(
@@ -351,3 +366,37 @@ def para_resposta(linha: dict) -> dict:
     saida["tem_assinado"] = bool(linha.get("arquivo_assinado_key"))
     saida["legado"] = bool(linha.get("legado", False))
     return saida
+
+
+MOTIVO_CONFIRMACAO_ESTORNADA = "Confirmação estornada."
+
+
+def reabrir_por_estorno(entrada: dict, ctx: AuditContext) -> Optional[int]:
+    """Estorno de uma `Confirmação Empréstimo`/`Confirmação Devolução`: a solicitação que foi
+    assinada por ela volta a `manual`, para o card voltar a oferecer "Anexar assinado".
+
+    Acha a solicitação pelo PDF guardado na confirmação (ou, na falta dele, a última assinada
+    do mesmo tipo do item). Devolve o id reaberto, ou None.
+    """
+    tipo = {"Confirmação Empréstimo": "entrega", "Confirmação Devolução": "devolucao"}.get(
+        entrada.get("operation")
+    )
+    if tipo is None or not entrada.get("item_id"):
+        return None
+    termos = get_termo_db()
+    assinadas = termos.assinadas_do_item(entrada["item_id"], tipo)
+    chave = entrada.get("termo_assinado_anexo")
+    alvo = next((t for t in assinadas if chave and t["arquivo_assinado_key"] == chave), None)
+    alvo = alvo or (assinadas[0] if assinadas else None)
+    if alvo is None:
+        return None
+    if not termos.atualizar(
+        alvo["id"], somente_se_status=("assinado",),
+        status="manual", motivo=MOTIVO_CONFIRMACAO_ESTORNADA, assinado_em=None, arquivo_assinado_key=None,
+    ):
+        return None
+    audit.record(
+        ctx, "termo", alvo["id"], "atualizar",
+        {"status": "assinado"}, {"status": "manual", "motivo": MOTIVO_CONFIRMACAO_ESTORNADA},
+    )
+    return alvo["id"]

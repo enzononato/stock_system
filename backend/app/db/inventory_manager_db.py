@@ -26,6 +26,11 @@ from app.db.unidade_db import get_unidade_manager
 
 logger = logging.getLogger(__name__)
 
+# Respostas de `confirm_loan`/`confirm_return` quando outra confirmação ganhou a corrida
+# (os routers as devolvem como 409).
+MSG_EMPRESTIMO_JA_CONFIRMADO = "O empréstimo já foi confirmado."
+MSG_DEVOLUCAO_JA_CONFIRMADA = "A devolução já foi confirmada."
+
 # ── Geração de termos (.docx) — utilitários compartilhados ─────────────────────
 #
 # Nomes dos meses em português para "{{data_hoje_extenso}}". Propositalmente NÃO
@@ -654,7 +659,15 @@ class InventoryDBManager:
                 if not last_loan:
                     raise Exception("Registro de empréstimo original não encontrado no histórico.")
 
-                cur.execute("UPDATE items SET status='Indisponível' WHERE id=%s", (item_id,))
+                # Transição atômica: duas confirmações simultâneas (upload manual e
+                # RevSign, ou dois operadores) passam pelo `find` acima com o item
+                # ainda Pendente, mas só uma consegue este UPDATE (a outra espera o
+                # lock da linha e depois não casa mais com status='Pendente').
+                cur.execute(
+                    "UPDATE items SET status='Indisponível' WHERE id=%s AND status='Pendente'", (item_id,)
+                )
+                if cur.rowcount == 0:
+                    return False, MSG_EMPRESTIMO_JA_CONFIRMADO
 
                 # Antes chamava self.list_peripherals_for_equipment(item_id), o que abria
                 # uma segunda conexão em paralelo à desta transação. Agora usa o mesmo cursor.
@@ -811,9 +824,12 @@ class InventoryDBManager:
         try:
             with get_cursor() as cur:
                 cur.execute(
-                    "UPDATE items SET status='Disponível', assigned_to=NULL, cpf=NULL, date_issued=NULL, pessoa_juridica=0, colaborador_id=NULL WHERE id=%s",
+                    "UPDATE items SET status='Disponível', assigned_to=NULL, cpf=NULL, date_issued=NULL, pessoa_juridica=0, colaborador_id=NULL WHERE id=%s AND status='Pendente Devolução'",
                     (item_id,),
                 )
+                if cur.rowcount == 0:
+                    # Outra confirmação já concluiu a devolução (transição atômica).
+                    return False, MSG_DEVOLUCAO_JA_CONFIRMADA
 
                 # Antes chamava self.list_peripherals_for_equipment(item_id) (2a conexão);
                 # agora usa o mesmo cursor da transação.
@@ -1124,9 +1140,16 @@ class InventoryDBManager:
                     last_loan = cur.fetchone()
                     if not last_loan:
                         return False, "Não foi possível encontrar o empréstimo original."
+                    # O vínculo de cadastro (zerado por confirm_return) volta quando o CPF
+                    # do empréstimo ainda corresponde a um colaborador.
+                    colaborador_id = None
+                    if last_loan["cpf"]:
+                        cur.execute("SELECT id FROM colaboradores WHERE cpf=%s", (last_loan["cpf"],))
+                        achado = cur.fetchone()
+                        colaborador_id = achado["id"] if achado else None
                     cur.execute(
-                        "UPDATE items SET status='Indisponível', assigned_to=%s, cpf=%s, date_issued=%s, pessoa_juridica=%s WHERE id=%s",
-                        (last_loan["usuario"], last_loan["cpf"], last_loan["data_operacao"], last_loan.get("pessoa_juridica") or 0, item_id),
+                        "UPDATE items SET status='Indisponível', assigned_to=%s, cpf=%s, date_issued=%s, pessoa_juridica=%s, colaborador_id=%s WHERE id=%s",
+                        (last_loan["usuario"], last_loan["cpf"], last_loan["data_operacao"], last_loan.get("pessoa_juridica") or 0, colaborador_id, item_id),
                     )
                 elif op == "Cadastro":
                     cur.execute("UPDATE items SET is_active=0 WHERE id=%s", (item_id,))
