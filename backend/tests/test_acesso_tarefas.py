@@ -361,3 +361,48 @@ def test_manter_com_observacao_longa_422(client_tecnico):
     r = _resolver(client_tecnico, tarefa_id, status="manter", observacao="x" * 484)
     assert r.status_code == 200
     assert len(_tarefa(r.json(), "Promax")["observacao"]) == 500
+
+
+def test_resolver_criar_e_registrar_acesso_ao_mesmo_tempo_nao_da_500(_fastapi_app, client_tecnico):
+    """Resolver uma tarefa "criar" enquanto POST /ficha registra acesso do mesmo colaborador no
+    mesmo sistema: as duas rotas travam na mesma ordem, então nunca há 500 (deadlock)."""
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    from fastapi.testclient import TestClient
+
+    ad, email = criar_sistema("AD"), criar_sistema("E-mail")
+    definir_pacote("Vendedor", ad, email)
+    cabecalho = {"Authorization": client_tecnico.headers["Authorization"]}
+
+    for rodada in range(6):
+        c = criar_colaborador(f"Pessoa {rodada}", cpf=f"8000000000{rodada}")
+        ev = _abrir(client_tecnico, c, "admissao")
+        tarefa_id = _tarefa(ev, "AD")["id"]
+        largada = Barrier(2)
+        login_ficha = "mesmo.login" if rodada % 2 else "outro.login"
+
+        def resolver():
+            largada.wait()
+            return TestClient(_fastapi_app).post(
+                f"/api/acessos/tarefas/{tarefa_id}/resolver",
+                json={"status": "feito", "login": "mesmo.login"},
+                headers=cabecalho,
+            ).status_code
+
+        def registrar():
+            largada.wait()
+            return TestClient(_fastapi_app).post(
+                "/api/acessos/ficha",
+                json={"colaborador_id": c, "sistema_id": ad, "login": login_ficha, "item_id": None},
+                headers=cabecalho,
+            ).status_code
+
+        with ThreadPoolExecutor(2) as pool:
+            futuros = [pool.submit(resolver), pool.submit(registrar)]
+            codigos = [f.result() for f in futuros]
+        assert all(codigo in (200, 201, 409) for codigo in codigos), f"rodada {rodada}: {codigos}"
+        # Nunca dois acessos ativos com o mesmo login (qualquer caixa) no mesmo sistema.
+        assert contar(
+            "colaborador_acessos", "colaborador_id=%s AND LOWER(login)='mesmo.login'", (c,)
+        ) <= 1

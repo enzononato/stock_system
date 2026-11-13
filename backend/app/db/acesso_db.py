@@ -9,6 +9,7 @@ Comparações sem caixa/acento (nome de sistema, login, cargo) não dependem da 
 do banco: nome e login comparam com `LOWER(...)` na consulta; cargo compara em Python
 com `chave_cargo` (as tabelas de pacotes são curtas).
 """
+import functools
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Optional
@@ -55,6 +56,28 @@ def agora() -> datetime:
     return datetime.now()
 
 
+MSG_DEADLOCK = "Outra alteração estava em andamento. Tente novamente."
+
+
+def mapear_deadlock(funcao):
+    """Deadlock do MySQL (1213) vira 409 com mensagem em português, em vez de 500.
+    O rollback já aconteceu quando a exceção sai do `get_cursor` da própria função.
+
+    Ordem GLOBAL das travas neste módulo (todo caminho de escrita a segue, para não haver
+    deadlock): tarefa -> evento -> colaborador -> acessos (`colaborador_acessos`)."""
+
+    @functools.wraps(funcao)
+    def interna(*args, **kwargs):
+        try:
+            return funcao(*args, **kwargs)
+        except pymysql.err.OperationalError as e:
+            if e.args and e.args[0] == 1213:
+                raise Conflito(MSG_DEADLOCK) from e
+            raise
+
+    return interna
+
+
 def _sistema(linha: dict) -> dict:
     return {
         "id": linha["id"],
@@ -97,6 +120,7 @@ class AcessoDBManager:
         )
         return cur.fetchone() is not None
 
+    @mapear_deadlock
     def criar_sistema(self, ctx: AuditContext, *, nome: str, descricao: Optional[str]) -> dict:
         with get_cursor() as cur:
             if self._nome_em_uso(cur, nome):
@@ -114,6 +138,7 @@ class AcessoDBManager:
             audit.record(ctx, "acesso_sistema", sistema["id"], "criar", depois=sistema, cur=cur)
             return sistema
 
+    @mapear_deadlock
     def atualizar_sistema(self, ctx: AuditContext, sistema_id: int, dados: dict) -> dict:
         with get_cursor() as cur:
             antes = self.obter_sistema(sistema_id, cur, travar=True)
@@ -180,6 +205,7 @@ class AcessoDBManager:
         ]
         return sorted(sistemas, key=lambda s: s["nome"].casefold())
 
+    @mapear_deadlock
     def definir_pacote(
         self, ctx: AuditContext, *, cargo: str, sistema_ids: list[int]
     ) -> dict:
@@ -312,6 +338,7 @@ class AcessoDBManager:
         )
         return cur.fetchone()
 
+    @mapear_deadlock
     def criar_acesso(
         self,
         ctx: AuditContext,
@@ -367,6 +394,7 @@ class AcessoDBManager:
             audit.record(ctx, "acesso", acesso["id"], "criar", depois=self._foto(acesso), cur=c)
             return acesso
 
+    @mapear_deadlock
     def atualizar_acesso(self, ctx: AuditContext, acesso_id: int, dados: dict) -> dict:
         with get_cursor() as cur:
             cur.execute(
@@ -406,6 +434,7 @@ class AcessoDBManager:
                 audit.record(ctx, "acesso", acesso_id, "editar", antes=a, depois=d, cur=cur)
             return depois
 
+    @mapear_deadlock
     def desativar_acesso(self, ctx: AuditContext, acesso_id: int, cur=None) -> dict:
         with cursor_ou_novo(cur) as c:
             c.execute(

@@ -13,6 +13,7 @@ from app.db.acesso_db import (
     Conflito,
     Invalido,
     NaoEncontrado,
+    mapear_deadlock,
     agora,
     cursor_ou_novo,
     obter_colaborador,
@@ -195,6 +196,7 @@ class AcessoEventoDBManager:
             return cargo_anterior, cargo_novo
         return cargo_atual, None  # desligamento
 
+    @mapear_deadlock
     def abrir(
         self,
         ctx: AuditContext,
@@ -327,6 +329,7 @@ class AcessoEventoDBManager:
             raise NaoEncontrado("Evento não encontrado.")
         return evento
 
+    @mapear_deadlock
     def resolver_tarefa(
         self,
         ctx: AuditContext,
@@ -353,6 +356,12 @@ class AcessoEventoDBManager:
             if achada is None:
                 raise NaoEncontrado("Tarefa não encontrada.")
             evento = self._travar_evento(cur, achada["evento_id"])
+            # Ordem global das travas: tarefa -> evento -> colaborador -> acessos. O colaborador
+            # é travado aqui, antes de qualquer leitura com trava em `colaborador_acessos`, como
+            # faz `criar_acesso` (POST /ficha): sem isso, as duas rotas pegariam as travas de
+            # índice/intervalo em ordem inversa e poderiam dar deadlock.
+            if obter_colaborador(cur, evento["colaborador_id"], travar=True) is None:
+                raise NaoEncontrado("Colaborador não encontrado.")
             # Relê a tarefa com trava: leitura com trava devolve o último estado confirmado.
             cur.execute(
                 "SELECT id, sistema_id, acesso_id, acao, status, login "
@@ -444,6 +453,7 @@ class AcessoEventoDBManager:
         )
         return cur.fetchone()
 
+    @mapear_deadlock
     def concluir(self, ctx: AuditContext, evento_id: int) -> dict:
         with get_cursor() as cur:
             evento = self._travar_evento(cur, evento_id)
@@ -455,6 +465,7 @@ class AcessoEventoDBManager:
             self._tentar_concluir(ctx, evento_id, cur)
             return self.obter(evento_id, cur)
 
+    @mapear_deadlock
     def cancelar(self, ctx: AuditContext, evento_id: int, *, motivo: str) -> dict:
         with get_cursor() as cur:
             evento = self._travar_evento(cur, evento_id)
