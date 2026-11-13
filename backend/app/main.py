@@ -14,6 +14,7 @@ from app.db.migrations import aplicar_pendentes, garantir_baseline
 from app.dependencies import limiter, get_inventory_db
 from app.services import scheduler
 from app.routers import auth, users, items, peripherals, loans, documents, history, reports, constants, unidades, audit, colaboradores, locais
+from app.routers import inventarios
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,14 @@ _ROTULOS_DE_CAMPO = {
     "ativo": "Ativo",
     "colaborador_id": "Colaborador",
     "local_id": "Local",
+    # Campos do inventário físico e das etiquetas
+    "observacao": "Observação",
+    "motivo": "Motivo",
+    "codigo": "Código lido",
+    "local_id_encontrado": "Local",
+    "colaborador_id_encontrado": "Colaborador",
+    "usuario_conferido": "Usuário conferido",
+    "item_ids": "Equipamentos",
 }
 
 # "nome" vale "Nome da unidade" nas unidades; nas rotas de colaboradores e locais é só "Nome".
@@ -149,6 +158,7 @@ app.include_router(unidades.router)
 app.include_router(audit.router)
 app.include_router(colaboradores.router)
 app.include_router(locais.router)
+app.include_router(inventarios.router)
 
 
 @app.on_event("startup")
