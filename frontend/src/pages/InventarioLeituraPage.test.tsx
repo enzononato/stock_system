@@ -393,4 +393,65 @@ describe('InventarioLeituraPage', () => {
     expect(await screen.findByText('Conferido')).toBeInTheDocument()
     expect(screen.getByLabelText(CAMPO)).not.toHaveFocus()
   })
+
+  it('segundo código digitado/lido pelo USB durante a gravação entra na fila: campo limpo e envio em ordem', async () => {
+    let abrir: () => void = () => {}
+    const espera = new Promise<void>((r) => (abrir = r))
+    server.use(
+      http.post('/api/inventarios/12/leituras', async ({ request }) => {
+        const corpo = (await request.json()) as { codigo: string }
+        corposPost.push(corpo)
+        if (corpo.codigo === 'A') await espera
+        return HttpResponse.json(leitura({ codigo_lido: corpo.codigo }), { status: 201 })
+      })
+    )
+    const user = userEvent.setup()
+    renderRota()
+    const campo = await screen.findByLabelText(CAMPO)
+
+    await user.type(campo, 'A{Enter}')
+    await waitFor(() => expect(corposPost).toHaveLength(1))
+    await user.type(campo, 'B{Enter}')
+    expect(campo).toHaveValue('')
+    await user.type(campo, 'B{Enter}') // repetição exata do último da fila: ignorada
+    expect(campo).toHaveValue('')
+    expect(corposPost).toHaveLength(1)
+
+    await act(async () => abrir())
+
+    await waitFor(() => expect(corposPost.map((c) => (c as { codigo: string }).codigo)).toEqual(['A', 'B']))
+    await new Promise((r) => setTimeout(r, 100))
+    expect(corposPost).toHaveLength(2)
+  })
+
+  it('409 na gravação em andamento descarta a fila', async () => {
+    let abrir: () => void = () => {}
+    const espera = new Promise<void>((r) => (abrir = r))
+    server.use(
+      http.post('/api/inventarios/12/leituras', async ({ request }) => {
+        const corpo = (await request.json()) as { codigo: string }
+        corposPost.push(corpo)
+        if (corpo.codigo === 'A') {
+          await espera
+          return HttpResponse.json({ detail: 'Conflito.' }, { status: 409 })
+        }
+        return HttpResponse.json(leitura({ codigo_lido: corpo.codigo }), { status: 201 })
+      })
+    )
+    const user = userEvent.setup()
+    renderRota()
+    const campo = await screen.findByLabelText(CAMPO)
+
+    await user.type(campo, 'A{Enter}')
+    await waitFor(() => expect(corposPost).toHaveLength(1))
+    await user.type(campo, 'B{Enter}')
+    await act(async () => abrir())
+    expect(await screen.findByText('Conflito.')).toBeInTheDocument()
+    await new Promise((r) => setTimeout(r, 100))
+    expect(corposPost.map((c) => (c as { codigo: string }).codigo)).toEqual(['A'])
+
+    // A fila não ficou travada: um novo código segue normalmente.
+    await user.type(campo, 'C{Enter}')
+    await waitFor(() => expect(corposPost.map((c) => (c as { codigo: string }).codigo)).toEqual(['A', 'C']))
+  })
 })

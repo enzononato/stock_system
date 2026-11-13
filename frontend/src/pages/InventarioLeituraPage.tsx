@@ -39,6 +39,8 @@ export default function InventarioLeituraPage() {
   const queryClient = useQueryClient()
   const campoRef = useRef<HTMLInputElement>(null)
   const registrando = useRef(false)
+  /** Códigos digitados/lidos pelo USB enquanto uma gravação está em andamento (FIFO). */
+  const fila = useRef<string[]>([])
 
   const [localId, setLocalId] = useState<number | null>(null)
   const [codigo, setCodigo] = useState('')
@@ -74,6 +76,7 @@ export default function InventarioLeituraPage() {
   function tratarErro(err: unknown, fallback: string) {
     toast.error(getErrorMessage(err, fallback))
     if (isAxiosError(err) && err.response?.status === 409) {
+      fila.current = []
       void queryClient.invalidateQueries({ queryKey: ['inventario', id] })
     }
   }
@@ -93,8 +96,21 @@ export default function InventarioLeituraPage() {
     },
     onSettled: () => {
       registrando.current = false
+      // O que chegou durante a gravação segue pelo mesmo caminho, um de cada vez.
+      const proximo = fila.current.shift()
+      if (proximo) enviarDoFormulario(proximo)
     },
   })
+
+  function enviarDoFormulario(texto: string) {
+    if (registrando.current) {
+      // Duplicata exata do último código da fila (leitor que repete o envio) não entra de novo.
+      if (fila.current[fila.current.length - 1] !== texto) fila.current.push(texto)
+      return
+    }
+    registrando.current = true
+    registrar.mutate({ texto, origem: 'formulario' })
+  }
 
   const corrigir = useMutation({
     mutationFn: (dados: AtualizarLeituraInput) => atualizarLeitura(id, (ultima as Leitura).id, dados),
@@ -215,11 +231,10 @@ export default function InventarioLeituraPage() {
         onSubmit={(e) => {
           e.preventDefault()
           const texto = codigo.trim()
-          if (!texto || registrando.current) return
-          // O campo esvazia ao enviar (não só no sucesso): o próximo código já pode ser digitado ou lido pelo USB.
+          if (!texto) return
+          // O campo esvazia sempre ao enviar: o próximo código do leitor USB nunca se soma a este.
           setCodigo('')
-          registrando.current = true
-          registrar.mutate({ texto, origem: 'formulario' })
+          enviarDoFormulario(texto)
         }}
       >
         <label className="flex flex-col gap-1 text-caption text-muted-foreground">
@@ -234,7 +249,8 @@ export default function InventarioLeituraPage() {
             className="h-11 text-base"
           />
         </label>
-        <Button type="submit" size="lg" loading={registrar.isPending}>
+        {/* Sem `loading`: um botão desabilitado impede o Enter do leitor USB de enviar o formulário. */}
+        <Button type="submit" size="lg" aria-busy={registrar.isPending || undefined}>
           Registrar
         </Button>
       </form>
