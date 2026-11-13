@@ -38,4 +38,18 @@ describe('Button', () => {
     render(<Button asChild loading><a href="/x">Ir</a></Button>)
     expect(screen.getByRole('link', { name: 'Ir' })).toBeInTheDocument()
   })
+
+  it('aria-busy do consumidor não sobrescreve o loading', () => {
+    render(<Button loading aria-busy={false}>Salvar</Button>)
+    expect(screen.getByRole('button', { name: 'Salvar' })).toHaveAttribute('aria-busy', 'true')
+  })
+
+  it('asChild + loading: o link não chama onClick e a navegação é cancelada', () => {
+    const onClick = vi.fn()
+    render(<Button asChild loading onClick={onClick}><a href="/x">Ir</a></Button>)
+    const link = screen.getByRole('link', { name: 'Ir' })
+    expect(fireEvent.click(link)).toBe(false)
+    expect(onClick).not.toHaveBeenCalled()
+    expect(link).toHaveAttribute('aria-busy', 'true')
+  })
 })

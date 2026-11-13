@@ -31,4 +31,9 @@ describe('StatusPill', () => {
     render(<StatusPill status="Ativo" className="ml-2" />)
     expect(screen.getByText('Ativo')).toHaveClass('ml-2')
   })
+
+  it('status só com espaços mostra travessão neutro', () => {
+    render(<StatusPill status="   " />)
+    expect(screen.getByText('—').style.color).toBe('var(--status-neutral)')
+  })
 })

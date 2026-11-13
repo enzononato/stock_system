@@ -24,15 +24,17 @@ export function Pagination({
   isFetching,
 }: PaginationProps) {
   const lastPage = Math.max(1, Math.ceil(total / pageSize))
-  const from = total === 0 ? 0 : (page - 1) * pageSize + 1
-  const to = Math.min(page * pageSize, total)
+  // Página fora da faixa (total encolheu) nunca produz "126–120": mostra a última válida.
+  const atual = Math.min(Math.max(1, page), lastPage)
+  const from = total === 0 ? 0 : (atual - 1) * pageSize + 1
+  const to = Math.min(atual * pageSize, total)
   const [goTo, setGoTo] = React.useState('')
 
   const confirmGoTo = () => {
-    const n = Number(goTo.trim())
-    // Texto inválido não muda nada; número fora da faixa é corrigido para [1, última].
-    if (goTo.trim() === '' || !Number.isFinite(n)) return
-    onPageChange(Math.min(lastPage, Math.max(1, Math.trunc(n))))
+    const texto = goTo.trim()
+    // Só dígitos: "1e2", "2.5", "-1" e "0x3" não mudam nada; número fora da faixa é corrigido para [1, última].
+    if (!/^\d+$/.test(texto)) return
+    onPageChange(Math.min(lastPage, Math.max(1, Number(texto))))
     setGoTo('')
   }
 
@@ -73,13 +75,13 @@ export function Pagination({
             size="icon"
             className="h-8 w-8"
             aria-label="Anterior"
-            disabled={page <= 1}
-            onClick={() => onPageChange(page - 1)}
+            disabled={atual <= 1}
+            onClick={() => onPageChange(atual - 1)}
           >
             <ChevronLeft aria-hidden="true" />
           </Button>
           <span className="px-2 tabular-nums">
-            {page} / {lastPage}
+            {atual} / {lastPage}
           </span>
           <Button
             type="button"
@@ -87,8 +89,8 @@ export function Pagination({
             size="icon"
             className="h-8 w-8"
             aria-label="Próxima"
-            disabled={page >= lastPage}
-            onClick={() => onPageChange(page + 1)}
+            disabled={atual >= lastPage}
+            onClick={() => onPageChange(atual + 1)}
           >
             <ChevronRight aria-hidden="true" />
           </Button>

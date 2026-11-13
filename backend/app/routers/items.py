@@ -5,7 +5,7 @@ from datetime import datetime
 
 from app.schemas.items import ItemCreate, ItemUpdate, ItemResponse
 from app.schemas.common import Paginated
-from app.db.inventory_manager_db import InventoryDBManager
+from app.db.inventory_manager_db import InventoryDBManager, montar_order_by_items
 from app.dependencies import (
     get_current_user, gestor_or_tecnico, gestor_only, get_inventory_db, get_audit_context, CurrentUser,
 )
@@ -30,6 +30,8 @@ def list_items(
     revenda: Optional[str] = None,
     search: Optional[str] = None,
     colaborador_id: Optional[int] = None,
+    sort: str = "id",
+    direcao: str = Query(default="desc", alias="dir"),
     limit: int = Query(default=settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_PAGE_SIZE),
     offset: int = Query(default=0, ge=0),
     _: CurrentUser = Depends(get_current_user),
@@ -37,9 +39,13 @@ def list_items(
 ):
     # T10: os filtros são repassados para a camada de dados (SQL), em vez de
     # filtrar em Python depois de carregar a tabela inteira em memória.
+    try:
+        montar_order_by_items(sort, direcao)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     items, total = inv.list_items(
         tipo=tipo, status=status, revenda=revenda, search=search,
-        colaborador_id=colaborador_id, limit=limit, offset=offset,
+        colaborador_id=colaborador_id, sort=sort, direcao=direcao, limit=limit, offset=offset,
     )
     return {"items": items, "total": total}
 

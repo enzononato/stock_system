@@ -39,7 +39,7 @@ export interface ButtonProps
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, loading = false, disabled, onClick, children, ...props }, ref) => {
+  ({ className, variant, size, asChild = false, loading = false, disabled, onClick, children, 'aria-busy': ariaBusy, ...props }, ref) => {
     const Comp = asChild ? Slot : 'button'
     const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
       if (loading) {
@@ -53,9 +53,9 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
         disabled={disabled || loading}
-        aria-busy={loading ? true : undefined}
         onClick={handleClick}
         {...props}
+        aria-busy={loading ? true : ariaBusy}
       >
         {asChild ? (
           // Slot exige um único filho: o spinner só entra no <button> real.

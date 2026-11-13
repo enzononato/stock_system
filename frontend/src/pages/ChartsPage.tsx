@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { upper } from '@/lib/format'
 import { useTheme } from '@/lib/theme'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -80,8 +81,8 @@ function corDoToken(nome: string, alternativa: string): string {
 }
 
 const CORES_GRAFICO = {
-  /** Linha e pontos da série principal (equivale a --foreground). */
-  serie1: () => corDoToken('--text-primary', '#111111'),
+  /** Linha e pontos da série principal (azul da marca, legível nos dois temas). */
+  serie1: () => corDoToken('--brand-text', '#0131CD'),
   /** Linha e pontos da série secundária (equivale a --muted-foreground). */
   serie2: () => corDoToken('--text-secondary', '#5F5F5A'),
   /** Degradê sob a série de empréstimos do gráfico principal. */
@@ -291,7 +292,7 @@ export default function ChartsPage() {
   const totalCadastros = regChartData.reduce((acc, d) => acc + d.Cadastros, 0)
 
   const periodoLegenda = `${MONTHS[params.month - 1] ?? 'Mês'} / ${params.year}${
-    filtrado ? ` · ${params.unidade}` : ''
+    filtrado ? ` · ${upper(params.unidade)}` : ''
   }`
 
   const loansVazio = loansChartData.every((d) => !d.Empréstimos && !d.Devoluções)
@@ -314,9 +315,9 @@ export default function ChartsPage() {
       />
 
       {/* Barra de filtro */}
-      <div className="rounded-md border border-border bg-surface p-4">
-        <div className="flex flex-wrap items-end gap-4">
-          <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground self-end pb-1">
+      <div className="rounded-md border border-border bg-surface p-5">
+        <div className="grid grid-cols-1 gap-4 sm:flex sm:flex-wrap sm:items-end">
+          <span className="text-caption font-semibold uppercase tracking-wider text-brand-text self-end pb-1">
             Período
           </span>
 
@@ -327,7 +328,7 @@ export default function ChartsPage() {
               maxLength={4}
               value={year}
               onChange={(e) => setYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
-              className="w-24 h-9 rounded-sm border-border bg-background text-body-sm font-mono"
+              className="w-full sm:w-24 h-9 rounded-sm border-border bg-background text-body-sm font-mono"
               aria-invalid={!anoValido}
             />
           </div>
@@ -335,7 +336,7 @@ export default function ChartsPage() {
           <div className="space-y-1">
             <Label className="text-caption font-medium">Mês</Label>
             <Select value={month} onValueChange={setMonth}>
-              <SelectTrigger className="w-40 h-9 rounded-sm border-border bg-background text-body-sm">
+              <SelectTrigger aria-label="Mês" className="w-full sm:w-52 h-9 rounded-sm border-border bg-background text-body-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="rounded-sm border-border bg-surface">
@@ -353,7 +354,7 @@ export default function ChartsPage() {
             <div className="space-y-1">
               <Label className="text-caption font-medium">Unidade / Filial</Label>
               <Select value={filtroUnidade} onValueChange={setFiltroUnidade}>
-                <SelectTrigger className="w-52 h-9 rounded-sm border-border bg-background text-body-sm">
+                <SelectTrigger aria-label="Unidade" className="w-full sm:w-52 h-9 rounded-sm border-border bg-background text-body-sm">
                   <SelectValue placeholder="Todas" />
                 </SelectTrigger>
                 <SelectContent className="rounded-sm border-border bg-surface">
@@ -362,7 +363,7 @@ export default function ChartsPage() {
                   </SelectItem>
                   {unidades.map((u) => (
                     <SelectItem key={u.id} value={u.nome} className="text-body-sm">
-                      {u.nome}
+                      {upper(u.nome)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -374,9 +375,10 @@ export default function ChartsPage() {
             size="sm"
             onClick={aplicarFiltro}
             disabled={!anoValido}
-            className="h-9 rounded-sm bg-primary text-primary-foreground hover:opacity-90 font-medium px-4"
+            loading={loansQuery.isFetching || regQuery.isFetching || monthlyQuery.isFetching}
+            className="h-9 rounded-sm font-medium px-4"
           >
-            <Calendar className="mr-1.5 size-4" />
+            <Calendar />
             Aplicar Filtro
           </Button>
 
@@ -393,15 +395,15 @@ export default function ChartsPage() {
           { label: 'Devoluções no mês', value: totalDevolucoes, symbol: '↓' },
           { label: 'Cadastros no mês', value: totalCadastros, symbol: '+' },
         ].map((stat) => (
-          <div key={stat.label} className="surface-panel p-5">
-            <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground block">
+          <div key={stat.label} className="rounded-md bg-brand-soft p-4">
+            <span className="text-caption font-semibold uppercase tracking-wider text-brand-soft-foreground block">
               {stat.label}
             </span>
             <div className="flex items-baseline gap-2 mt-2">
-              <span className="font-mono text-heading-lg font-bold text-foreground">{stat.value}</span>
-              <span className="font-mono text-body-lg text-muted-foreground">{stat.symbol}</span>
+              <span className="font-mono text-heading font-bold text-brand-soft-foreground">{stat.value}</span>
+              <span className="font-mono text-body-lg text-brand-soft-foreground">{stat.symbol}</span>
             </div>
-            <span className="text-caption text-muted-foreground mt-1 block">{periodoLegenda}</span>
+            <span className="text-caption text-brand-soft-foreground mt-1 block">{periodoLegenda}</span>
           </div>
         ))}
       </div>
@@ -477,9 +479,9 @@ export default function ChartsPage() {
               </ResponsiveContainer>
 
               {/* Legenda manual monocromática — classes de token, acompanham o tema. */}
-              <div className="flex items-center gap-6 mt-4 pt-3 border-t border-border text-caption">
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 pt-3 border-t border-border text-caption">
                 <div className="flex items-center gap-2">
-                  <div className="w-5 h-1 rounded bg-foreground" />
+                  <div className="w-5 h-1 rounded bg-brand-text" />
                   <span className="text-foreground font-medium">Empréstimos</span>
                 </div>
                 <div className="flex items-center gap-2">

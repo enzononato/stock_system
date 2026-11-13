@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { type Item, updateItem } from '@/api/items'
 import { listItemPeripherals, type Peripheral } from '@/api/peripherals'
 import { downloadSignedTerm } from '@/api/loans'
-import { StatusBadge } from '@/components/ui/badge'
+import { StatusPill } from '@/components/ui/StatusPill'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,6 +13,7 @@ import { toast } from '@/components/ui/toast'
 import { generateAndDownloadLoanTerm } from '@/components/equipment/ConfirmacaoTermo'
 import { useAuth } from '@/contexts/AuthContext'
 import { getErrorMessage } from '@/lib/api-error'
+import { upper } from '@/lib/format'
 import {
   formatDate,
   isValidNotaFiscal,
@@ -25,7 +26,6 @@ import {
   X,
   Pencil,
   Save,
-  Loader2,
   FileDown,
   Cpu,
   User,
@@ -99,12 +99,12 @@ function Section({
   children: ReactNode
 }) {
   return (
-    <div className="rounded border border-border bg-card p-4 space-y-3">
-      <div className="flex items-center gap-2 border-b border-border pb-2 text-xs font-semibold text-foreground">
-        <Icon className="size-3.5 text-muted-foreground" aria-hidden />
+    <div className="rounded-md border border-border bg-surface p-4 space-y-3">
+      <div className="flex items-center gap-2 border-b border-border pb-2 text-xs font-semibold text-brand-text">
+        <Icon className="size-3.5" aria-hidden />
         <span>{title}</span>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">{children}</div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-3">{children}</div>
     </div>
   )
 }
@@ -122,13 +122,13 @@ function ContextCard({
   mono?: boolean
 }) {
   return (
-    <div className="rounded border border-border bg-surface-alt p-3 flex items-center gap-3">
-      <div className="h-8 w-8 rounded bg-surface border border-border text-muted-foreground flex items-center justify-center shrink-0">
+    <div className="rounded-md bg-brand-soft p-4 flex items-center gap-3">
+      <div className="h-8 w-8 rounded bg-surface text-brand-text flex items-center justify-center shrink-0">
         <Icon className="size-4" aria-hidden />
       </div>
       <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
-        <p className={`text-xs font-medium text-foreground truncate ${mono ? 'font-mono' : ''}`}>{value}</p>
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-brand-soft-foreground">{label}</p>
+        <p className={`text-xs font-medium text-brand-soft-foreground truncate ${mono ? 'font-mono' : ''}`}>{value}</p>
       </div>
     </div>
   )
@@ -164,6 +164,7 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
   const [fornecedor, setFornecedor] = useState('')
   const [specificFields, setSpecificFields] = useState<Record<string, string>>({})
   const [downloadingTerm, setDownloadingTerm] = useState(false)
+  const [baixandoTermoResp, setBaixandoTermoResp] = useState(false)
 
   // Busca os periféricos vinculados caso existam
   const { data: peripherals = [] } = useQuery({
@@ -211,6 +212,7 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
   // "Desktop", nunca "Computador" — só Desktop e Notebook têm os campos de
   // hardware/rede abaixo (host, cpu, ram, storage, sistema, dominio, etc.),
   // conforme TypeSpecificFields.tsx.
+  const temColaborador = item.colaborador_id != null || !!item.colaborador_nome
   const isLaptopOrPC = ['Desktop', 'Notebook'].includes(item.tipo || '')
   const isNobreak = item.tipo === 'Nobreak'
   const isSwitch = item.tipo === 'Switch'
@@ -230,6 +232,15 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
       toast.error(getErrorMessage(err, 'Termo assinado não encontrado.'))
     } finally {
       setDownloadingTerm(false)
+    }
+  }
+
+  async function handleBaixarTermoResponsabilidade() {
+    setBaixandoTermoResp(true)
+    try {
+      await generateAndDownloadLoanTerm(item!.id)
+    } finally {
+      setBaixandoTermoResp(false)
     }
   }
 
@@ -305,13 +316,13 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
         <div className="flex items-start justify-between px-5 py-4 border-b border-border shrink-0">
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded border border-border bg-surface-alt text-muted-foreground">
+              <span className="rounded-full bg-brand-soft px-2 py-0.5 font-mono text-xs font-semibold text-brand-soft-foreground">
                 #{item.id}
               </span>
               <span className="text-xs font-medium text-muted-foreground">{item.tipo}</span>
-              <StatusBadge status={item.status} />
+              <StatusPill status={item.status} />
               {editing && (
-                <span className="text-[10px] font-semibold text-foreground bg-surface-alt border border-border-strong px-2 py-0.5 rounded uppercase tracking-wide">
+                <span className="rounded-full bg-lime px-2 py-0.5 text-xs font-semibold text-lime-foreground">
                   Editando
                 </span>
               )}
@@ -330,6 +341,7 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
             variant="ghost"
             size="icon"
             onClick={onClose}
+            aria-label="Fechar"
             className="text-muted-foreground hover:text-foreground shrink-0 ml-2"
           >
             <X size={18} />
@@ -340,8 +352,8 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {/* Cartões de contexto rápido */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <ContextCard icon={Building2} label="Unidade" value={item.revenda || 'Não definida'} />
-            <ContextCard icon={User} label="Usuário Atual" value={item.assigned_to || 'Nenhum'} />
+            <ContextCard icon={Building2} label="Unidade" value={upper(item.revenda) || 'Não definida'} />
+            <ContextCard icon={User} label="Usuário Atual" value={item.colaborador_nome || item.assigned_to || 'Nenhum'} />
             <ContextCard
               icon={Tag}
               label="Identificador / NF"
@@ -387,36 +399,44 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
 
           {/* Dados de Alocação */}
           <Section icon={User} title="Dados de Alocação">
-            <ReadOnlyField label="Funcionário Alocado" value={item.assigned_to} />
+            <ReadOnlyField label="Funcionário Alocado" value={item.colaborador_nome || item.assigned_to} />
             <ReadOnlyField label="CPF do Colaborador" value={item.cpf} />
+            <ReadOnlyField label="Setor do colaborador" value={item.colaborador_setor} />
+            <ReadOnlyField label="Cargo" value={item.colaborador_cargo} />
+            <ReadOnlyField
+              label="Superior imediato"
+              value={item.superior_nome || (temColaborador ? 'Não informado' : null)}
+            />
+            <ReadOnlyField label="Local" value={item.local_nome} />
             <ReadOnlyField label="Setor" value={item.setor} />
             <ReadOnlyField label="Data do Empréstimo" value={formatDate(item.date_issued)} />
             {/* Campos que a FT_STC não exibia, mantidos para não perder informação. */}
             <ReadOnlyField label="Responsável Técnico" value={item.responsavel} />
             <ReadOnlyField label="Local de Instalação" value={item.local_instalacao} />
             {item.status === 'Indisponível' && item.assigned_to && (
-              <div className="col-span-2 sm:col-span-3 pt-2">
+              <div className="sm:col-span-2 lg:col-span-3 pt-2">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled={downloadingTerm}
+                  loading={downloadingTerm}
                   onClick={() => void handleViewSignedTerm()}
                 >
-                  <FileDown className="size-3.5 mr-1.5" aria-hidden />
-                  {downloadingTerm ? 'Baixando termo...' : 'Ver Termo Assinado'}
+                  <FileDown aria-hidden />
+                  Ver Termo Assinado
                 </Button>
               </div>
             )}
             {item.status?.startsWith('Pendente') && (
-              <div className="col-span-2 sm:col-span-3 pt-2">
+              <div className="sm:col-span-2 lg:col-span-3 pt-2">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => generateAndDownloadLoanTerm(item.id)}
+                  loading={baixandoTermoResp}
+                  onClick={() => void handleBaixarTermoResponsabilidade()}
                 >
-                  <FileDown className="size-3.5 mr-1.5" aria-hidden />
+                  <FileDown aria-hidden />
                   Baixar Termo de Responsabilidade
                 </Button>
               </div>
@@ -443,7 +463,7 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
                   />
                   <EditableField id="edit-ip-laptop" label="Endereço IP" value={sf('ip')} onChange={(v) => setSf('ip', v)} mono />
                   <EditableField id="edit-anydesk" label="AnyDesk ID" value={sf('anydesk')} onChange={(v) => setSf('anydesk', v)} mono />
-                  <div className="col-span-2">
+                  <div className="sm:col-span-2">
                     <EditableField id="edit-licenca" label="Licença do Windows" value={sf('licenca')} onChange={(v) => setSf('licenca', v)} mono />
                   </div>
                 </>
@@ -458,7 +478,7 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
                   <ReadOnlyField label="Endereço MAC / Físico" value={item.endereco_fisico || item.mac} mono />
                   <ReadOnlyField label="Endereço IP" value={item.ip} mono />
                   <ReadOnlyField label="AnyDesk ID" value={item.anydesk} mono />
-                  <div className="col-span-2">
+                  <div className="sm:col-span-2">
                     <ReadOnlyField label="Licença do Windows" value={item.licenca} mono />
                   </div>
                 </>
@@ -504,9 +524,9 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
 
           {/* Periféricos Vinculados */}
           {Boolean(item.peripheral_count && item.peripheral_count > 0) && (
-            <div className="rounded border border-border bg-card p-4 space-y-3">
-              <div className="flex items-center gap-2 border-b border-border pb-2 text-xs font-semibold text-foreground">
-                <Cpu className="size-3.5 text-muted-foreground" aria-hidden />
+            <div className="rounded-md border border-border bg-surface p-4 space-y-3">
+              <div className="flex items-center gap-2 border-b border-border pb-2 text-xs font-semibold text-brand-text">
+                <Cpu className="size-3.5" aria-hidden />
                 <span>Periféricos Vinculados ({item.peripheral_count})</span>
               </div>
               {peripherals.length > 0 ? (
@@ -514,15 +534,15 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
                   {peripherals.map((p: Peripheral) => (
                     <div
                       key={p.id}
-                      className="flex items-center justify-between p-2 rounded bg-surface-alt border border-border text-xs"
+                      className="flex items-center justify-between p-2 rounded-md bg-brand-soft text-brand-soft-foreground text-xs"
                     >
                       <div className="flex items-center gap-2 min-w-0">
-                        <Network className="size-3.5 text-muted-foreground shrink-0" aria-hidden />
-                        <span className="font-medium text-foreground truncate">
+                        <Network className="size-3.5 shrink-0" aria-hidden />
+                        <span className="font-medium truncate">
                           {p.tipo}: {p.brand} {p.model}
                         </span>
                       </div>
-                      <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 bg-surface text-muted-foreground border border-border rounded shrink-0">
+                      <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 bg-surface text-brand-text rounded-full shrink-0">
                         #{p.id}
                       </span>
                     </div>
@@ -536,20 +556,16 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
         </div>
 
         {/* Rodapé de ações */}
-        <div className="flex items-center justify-between gap-2 px-5 py-4 border-t border-border shrink-0 bg-surface-alt">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-4 border-t border-border shrink-0 bg-surface">
           {editing ? (
             <>
               <Button variant="outline" size="sm" onClick={cancelEdit} disabled={saveMutation.isPending}>
-                <X className="size-3.5 mr-1.5" aria-hidden />
+                <X aria-hidden />
                 Cancelar
               </Button>
-              <Button size="sm" onClick={handleSave} disabled={saveMutation.isPending}>
-                {saveMutation.isPending ? (
-                  <Loader2 className="size-3.5 mr-1.5 animate-spin" aria-hidden />
-                ) : (
-                  <Save className="size-3.5 mr-1.5" aria-hidden />
-                )}
-                {saveMutation.isPending ? 'Salvando...' : 'Salvar Alterações'}
+              <Button size="sm" onClick={handleSave} loading={saveMutation.isPending}>
+                <Save aria-hidden />
+                Salvar Alterações
               </Button>
             </>
           ) : (
@@ -557,7 +573,7 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
               <Button variant="outline" size="sm" onClick={onClose}>
                 Fechar
               </Button>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {/* Página de detalhe com abas (dados, histórico, ...), aberta para todos os papéis. */}
                 <Button
                   size="sm"
@@ -583,7 +599,7 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
                       Formulário Completo
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
-                      <Pencil className="size-3.5 mr-1.5" aria-hidden />
+                      <Pencil aria-hidden />
                       Editar
                     </Button>
                   </>

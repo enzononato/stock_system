@@ -27,4 +27,9 @@ describe('statusTone', () => {
     expect(statusTone(null)).toBe('neutral')
     expect(statusTone(undefined)).toBe('neutral')
   })
+
+  it('"Pendente …" desconhecido fica neutro (casamento exato)', () => {
+    expect(statusTone('Pendente Assinatura')).toBe('neutral')
+    expect(statusTone('Pendente Devolução')).toBe('return')
+  })
 })

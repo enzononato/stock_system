@@ -26,6 +26,7 @@ const tonsDeStatus = ['available', 'loaned', 'pending', 'return', 'maintenance',
 const pares: [string, string][] = [
   ['--primary-foreground', '--primary'],
   ['--brand-text', '--surface'],
+  ['--brand-text', '--canvas'],
   ['--brand-soft-foreground', '--brand-soft'],
   ['--lime-foreground', '--lime'],
   ...tonsDeStatus.map((t): [string, string] => [`--status-${t}`, `--status-${t}-bg`]),

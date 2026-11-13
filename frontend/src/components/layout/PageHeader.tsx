@@ -33,7 +33,7 @@ export function PageHeader({ eyebrow, eyebrowDetail, title, description, actions
       <div>
         {eyebrow && (
           <div className="flex items-center gap-2">
-            <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
+            <span className="text-caption font-semibold uppercase tracking-wider text-brand-text">
               {eyebrow}
             </span>
             {eyebrowDetail && (
@@ -70,7 +70,7 @@ export function PanelHeader({ title, description, actions, className }: PanelHea
   return (
     <div className={cn('border-b border-border pb-2.5 flex items-center justify-between gap-3', className)}>
       <div>
-        <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">{title}</span>
+        <span className="text-caption font-semibold uppercase tracking-wider text-brand-text">{title}</span>
         {description && <p className="text-body-sm text-muted-foreground mt-1">{description}</p>}
       </div>
       {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}

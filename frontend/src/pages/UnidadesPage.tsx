@@ -14,9 +14,11 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
+import { Pagination } from '@/components/ui/Pagination'
 import { StatBlock } from '@/components/ui/StatBlock'
-import { DataTable } from '@/components/ui/DataTable'
+import { StatusPill } from '@/components/ui/StatusPill'
+import { usePageSize } from '@/hooks/usePageSize'
+import { statusTone } from '@/lib/status'
 import { toast } from '@/components/ui/toast'
 import { getErrorMessage } from '@/lib/api-error'
 import {
@@ -32,8 +34,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { LocaisDialog } from '@/components/locais/LocaisDialog'
 import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
-import type { ColumnDef } from '@tanstack/react-table'
-import { Pencil, Ban, BarChart3, MapPin, RotateCcw, Loader2 } from 'lucide-react'
+import { Pencil, Ban, BarChart3, MapPin, RotateCcw, Loader2, Search } from 'lucide-react'
 
 // --- Validação e máscaras -----------------------------------------------------
 // `lib/utils.ts` (fora da posse deste módulo) já tem `isValidCpf` seguindo o
@@ -111,6 +112,9 @@ export function maskUfInput(value: string): string {
  */
 const STATUS_ORDER = ['Disponível', 'Indisponível', 'Pendente', 'Pendente Devolução']
 
+// StatBlock é compartilhado e pinta rótulo/valor em cinza: dentro da caixa azul tudo vai para o texto da caixa.
+const BLOCO_AZUL = '[&_span]:text-brand-soft-foreground'
+
 function IndicadoresPanel({ dados }: { dados: IndicadoresUnidade }) {
   // "Sem movimento" não é um erro — é o estado normal de uma unidade recém
   // criada ou que nunca recebeu equipamentos. Sem este aviso explícito, uma
@@ -126,23 +130,23 @@ function IndicadoresPanel({ dados }: { dados: IndicadoresUnidade }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <div className="surface-panel p-4">
-          <StatBlock label="Termos Emitidos" value={dados.termos_emitidos} />
+        <div className="rounded-md bg-brand-soft p-4">
+          <StatBlock className={BLOCO_AZUL} label="Termos Emitidos" value={dados.termos_emitidos} />
         </div>
-        <div className="surface-panel p-4">
-          <StatBlock label="Termos Confirmados" value={dados.termos_confirmados} />
+        <div className="rounded-md bg-brand-soft p-4">
+          <StatBlock className={BLOCO_AZUL} label="Termos Confirmados" value={dados.termos_confirmados} />
         </div>
-        <div className="surface-panel p-4">
-          <StatBlock label="Devoluções Concluídas" value={dados.devolucoes_concluidas} symbol="↓" />
+        <div className="rounded-md bg-brand-soft p-4">
+          <StatBlock className={BLOCO_AZUL} label="Devoluções Concluídas" value={dados.devolucoes_concluidas} symbol="↓" />
         </div>
-        <div className="surface-panel p-4">
-          <StatBlock label="Total de Itens" value={dados.itens_total} symbol="◯" />
+        <div className="rounded-md bg-brand-soft p-4">
+          <StatBlock className={BLOCO_AZUL} label="Total de Itens" value={dados.itens_total} symbol="◯" />
         </div>
-        <div className="surface-panel p-4">
-          <StatBlock label="Empréstimos Ativos" value={dados.emprestimos_ativos} symbol="↑" />
+        <div className="rounded-md bg-brand-soft p-4">
+          <StatBlock className={BLOCO_AZUL} label="Empréstimos Ativos" value={dados.emprestimos_ativos} symbol="↑" />
         </div>
-        <div className="surface-panel p-4">
-          <StatBlock label="Periféricos Vinculados" value={dados.perifericos_vinculados} />
+        <div className="rounded-md bg-brand-soft p-4">
+          <StatBlock className={BLOCO_AZUL} label="Periféricos Vinculados" value={dados.perifericos_vinculados} />
         </div>
       </div>
 
@@ -150,9 +154,7 @@ function IndicadoresPanel({ dados }: { dados: IndicadoresUnidade }) {
         <p className="text-body-sm font-medium text-foreground mb-2">Itens por Status</p>
         <div className="flex flex-wrap gap-2">
           {STATUS_ORDER.map((status) => (
-            <Badge key={status}>
-              {status}: {dados.itens_por_status[status] ?? 0}
-            </Badge>
+            <StatusPill key={status} status={`${status}: ${dados.itens_por_status[status] ?? 0}`} tone={statusTone(status)} />
           ))}
         </div>
       </div>
@@ -172,6 +174,9 @@ const emptyForm = { nome: '', razaoSocial: '', cnpj: '', endereco: '', cep: '', 
 
 export default function UnidadesPage() {
   const queryClient = useQueryClient()
+  const [busca, setBusca] = useState('')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = usePageSize('unidades')
 
   const [editingId, setEditingId] = useState<number | null>(null)
   const [originalNome, setOriginalNome] = useState('')
@@ -351,109 +356,89 @@ export default function UnidadesPage() {
 
   const isSaving = createMutation.isPending || updateMutation.isPending
 
-  const columns: ColumnDef<Unidade, unknown>[] = [
-    {
-      accessorKey: 'nome',
-      header: 'Nome',
-      cell: ({ row }) => (
-        <div className="flex items-center gap-2">
-          <span className={row.original.is_active ? 'uppercase' : 'uppercase text-muted-foreground line-through'}>
-            {row.original.nome}
-          </span>
-          {!row.original.is_active && <Badge variant="default">Inativa</Badge>}
-        </div>
-      ),
-    },
-    { accessorKey: 'razao_social', header: 'Razão Social' },
-    { accessorKey: 'cnpj', header: 'CNPJ' },
-    {
-      id: 'localizacao',
-      header: 'Cidade/UF',
-      cell: ({ row }) => {
-        const { cidade, uf } = row.original
-        if (!cidade && !uf) return <span className="text-muted-foreground">—</span>
-        return <span>{cidade || '—'}/{uf || '—'}</span>
-      },
-    },
-    {
-      id: 'actions',
-      header: '',
-      cell: ({ row }) => (
-        <div className="flex gap-2">
+  function renderAcoes(u: Unidade) {
+    return (
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          variant="ghost"
+          aria-label={`Indicadores da unidade ${u.nome}`}
+          onClick={() => setIndicadoresUnidadeId(u.id)}
+        >
+          <BarChart3 size={14} />
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          aria-label={`Locais da unidade ${u.nome}`}
+          onClick={() => setLocaisUnidade(u)}
+        >
+          <MapPin size={14} />
+        </Button>
+        <Button size="sm" variant="ghost" aria-label={`Editar unidade ${u.nome}`} onClick={() => startEdit(u)}>
+          <Pencil size={14} />
+        </Button>
+        {u.is_active && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-label={`Inativar unidade ${u.nome}`}
+                className="text-muted-foreground hover:text-destructive"
+                loading={deactivateMutation.isPending && deactivateMutation.variables === u.id}
+                disabled={deactivateMutation.isPending}
+              >
+                <Ban size={14} />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Inativar unidade "{u.nome}"?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Unidades com itens ativos vinculados não podem ser inativadas. Esta ação não pode ser desfeita.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={() => deactivateMutation.mutate(u.id)}>Inativar</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
+        {!u.is_active && (
           <Button
             size="sm"
             variant="ghost"
-            aria-label={`Indicadores da unidade ${row.original.nome}`}
-            onClick={() => setIndicadoresUnidadeId(row.original.id)}
+            aria-label={`Reativar unidade ${u.nome}`}
+            loading={reactivateMutation.isPending && reactivateMutation.variables === u.id}
+            disabled={reactivateMutation.isPending}
+            onClick={() => reactivateMutation.mutate(u.id)}
           >
-            <BarChart3 size={14} />
+            <RotateCcw size={14} />
           </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            aria-label={`Locais da unidade ${row.original.nome}`}
-            onClick={() => setLocaisUnidade(row.original)}
-          >
-            <MapPin size={14} />
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            aria-label={`Editar unidade ${row.original.nome}`}
-            onClick={() => startEdit(row.original)}
-          >
-            <Pencil size={14} />
-          </Button>
-          {row.original.is_active && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  aria-label={`Inativar unidade ${row.original.nome}`}
-                  className="text-muted-foreground hover:text-destructive"
-                  disabled={deactivateMutation.isPending}
-                >
-                  <Ban size={14} />
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Inativar unidade "{row.original.nome}"?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Unidades com itens ativos vinculados não podem ser inativadas. Esta ação não
-                    pode ser desfeita.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => deactivateMutation.mutate(row.original.id)}>
-                    Inativar
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
-          {!row.original.is_active && (
-            <Button
-              size="sm"
-              variant="ghost"
-              aria-label={`Reativar unidade ${row.original.nome}`}
-              disabled={reactivateMutation.isPending}
-              onClick={() => reactivateMutation.mutate(row.original.id)}
-            >
-              <RotateCcw size={14} />
-            </Button>
-          )}
-        </div>
-      ),
-    },
-  ]
+        )}
+      </div>
+    )
+  }
+
+  // Busca e paginação no cliente: o endpoint devolve a lista inteira (poucas unidades).
+  const termoBusca = busca.trim().toLowerCase()
+  const unidadesFiltradas = termoBusca
+    ? unidades.filter((u) =>
+        [u.nome, u.razao_social, u.cnpj, u.cidade, u.uf]
+          .filter(Boolean)
+          .some((v) => String(v).toLowerCase().includes(termoBusca))
+      )
+    : unidades
+  const lastPage = Math.max(1, Math.ceil(unidadesFiltradas.length / pageSize))
+  const paginaAtual = Math.min(page, lastPage)
+  const unidadesDaPagina = unidadesFiltradas.slice((paginaAtual - 1) * pageSize, paginaAtual * pageSize)
 
   const unidadeSelecionadaIndicadores = unidades.find((u) => u.id === indicadoresUnidadeId)
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <PageHeader
         eyebrow="Estrutura Organizacional"
         eyebrowDetail="Unidades e Revendas"
@@ -462,20 +447,20 @@ export default function UnidadesPage() {
       />
 
       {/* Criar / editar unidade */}
-      <form onSubmit={handleSubmit} className="surface-panel p-6 space-y-4 max-w-3xl">
+      <form onSubmit={handleSubmit} className="rounded-md border border-border bg-surface p-5 space-y-4 max-w-3xl">
         <PanelHeader
           title={editingId !== null ? `Editar Unidade #${editingId}` : 'Nova Unidade'}
           description="Dados jurídicos, fiscais e de localização da unidade."
         />
 
         {editingId !== null && (
-          <p className="border border-border-strong bg-surface-alt p-3 rounded text-body-sm">
+          <p className="rounded-md bg-brand-soft p-3 text-body-sm text-brand-soft-foreground">
             O nome da unidade liga os equipamentos e todo o histórico a ela. Alterá-lo atualiza
             automaticamente essas referências — confirme antes de salvar se for esse o caso.
           </p>
         )}
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="unidade-nome">Nome *</Label>
             <Input
@@ -526,7 +511,7 @@ export default function UnidadesPage() {
             <div className="flex items-center gap-2">
               <Label htmlFor="unidade-cep">CEP</Label>
               {editingId !== null && !form.cep && (
-                <Badge variant="warning" className="text-[10px]">Não informado</Badge>
+                <StatusPill status="Não informado" tone="pending" className="text-[10px]" />
               )}
             </div>
             <Input
@@ -563,8 +548,8 @@ export default function UnidadesPage() {
               Cancelar edição
             </Button>
           )}
-          <Button type="submit" disabled={isSaving}>
-            {isSaving ? 'Salvando...' : editingId !== null ? 'Salvar Alterações' : 'Criar Unidade'}
+          <Button type="submit" loading={isSaving}>
+            {editingId !== null ? 'Salvar Alterações' : 'Criar Unidade'}
           </Button>
         </div>
       </form>
@@ -594,8 +579,8 @@ export default function UnidadesPage() {
       </AlertDialog>
 
       {/* Lista */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-body-lg font-semibold text-foreground">Unidades cadastradas</h3>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-body-lg font-semibold text-brand-text">Unidades cadastradas</h3>
         <label className="flex items-center gap-2 text-body-sm text-foreground cursor-pointer select-none">
           <input
             type="checkbox"
@@ -612,7 +597,87 @@ export default function UnidadesPage() {
           Carregando...
         </div>
       ) : (
-        <DataTable data={unidades} columns={columns} searchPlaceholder="Buscar unidade..." />
+        <div className="space-y-4">
+          <div className="rounded-md border border-border bg-surface p-3">
+            <div className="relative w-full max-w-md">
+              <Search size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Buscar unidade..."
+                aria-label="Buscar unidade"
+                value={busca}
+                onChange={(e) => {
+                  setBusca(e.target.value)
+                  setPage(1)
+                }}
+                className="pl-10"
+              />
+            </div>
+          </div>
+
+          <div className="rounded-md border border-border bg-surface">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] text-left text-body-sm">
+                <thead className="bg-brand-soft text-brand-soft-foreground">
+                  <tr>
+                    <th scope="col" className="px-4 py-2.5 text-caption font-semibold">Nome</th>
+                    <th scope="col" className="px-4 py-2.5 text-caption font-semibold">Razão Social</th>
+                    <th scope="col" className="px-4 py-2.5 text-caption font-semibold">CNPJ</th>
+                    <th scope="col" className="px-4 py-2.5 text-caption font-semibold">Cidade/UF</th>
+                    <th scope="col" className="px-4 py-2.5">
+                      <span className="sr-only">Ações</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {unidadesDaPagina.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-10 text-center text-muted-foreground">
+                        <p>Nenhum resultado encontrado.</p>
+                        <p className="mt-1">Tente ajustar seus termos de busca ou filtros.</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    unidadesDaPagina.map((u) => (
+                      <tr key={u.id} className="transition-colors hover:bg-surface-alt">
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center gap-2">
+                            {/* A gravação do nome não muda; só a exibição vai em CAIXA ALTA. */}
+                            <span className={u.is_active ? 'uppercase' : 'uppercase text-muted-foreground line-through'}>
+                              {u.nome}
+                            </span>
+                            <StatusPill status={u.is_active ? 'Ativa' : 'Inativa'} tone={u.is_active ? 'available' : 'retired'} />
+                          </div>
+                        </td>
+                        <td className="px-4 py-2.5">{u.razao_social}</td>
+                        <td className="px-4 py-2.5 whitespace-nowrap">{u.cnpj}</td>
+                        <td className="px-4 py-2.5">
+                          {!u.cidade && !u.uf ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : (
+                            <span>{u.cidade || '—'}/{u.uf || '—'}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5">{renderAcoes(u)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="border-t border-border p-4">
+              <Pagination
+                page={paginaAtual}
+                pageSize={pageSize}
+                total={unidadesFiltradas.length}
+                onPageChange={setPage}
+                onPageSizeChange={(n) => {
+                  setPageSize(n)
+                  setPage(1)
+                }}
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       <LocaisDialog
@@ -625,7 +690,7 @@ export default function UnidadesPage() {
 
       {/* Indicadores */}
       {indicadoresUnidadeId !== null && (
-        <div className="surface-panel p-6 space-y-4">
+        <div className="rounded-md border border-border bg-surface p-5 space-y-4">
           <PanelHeader
             title={`Indicadores — ${unidadeSelecionadaIndicadores?.nome ?? `Unidade #${indicadoresUnidadeId}`}`}
             actions={
