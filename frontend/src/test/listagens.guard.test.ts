@@ -5,11 +5,7 @@ import { resolve, join, relative, sep } from 'node:path'
 const SRC = resolve(__dirname, '..')
 
 /** Telas de outras fases que ainda têm tamanho de página fixo (caminhos relativos a `src/`). Sai da lista quando a fase dona migrar. */
-const AGUARDANDO_OUTRAS_FASES: Record<string, string> = {
-  'pages/LoanPage.tsx': 'F3',
-  'pages/ReturnPage.tsx': 'F3',
-  'pages/TermsPage.tsx': 'F3',
-}
+const AGUARDANDO_OUTRAS_FASES: Record<string, string> = {}
 
 const TAMANHO_FIXO = /\b[A-Z_]*PAGE_SIZE\s*=\s*\d+/
 

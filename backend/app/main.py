@@ -19,6 +19,7 @@ from app.routers import linhas
 from app.routers import inventarios
 from app.routers import etiquetas
 from app.routers import manutencoes
+from app.routers import termos, integracoes_revsign
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +114,7 @@ _ROTULOS_DE_CAMPO = {
     "assistencia": "Assistência técnica",
     "previsao_retorno": "Previsão de retorno",
     "item_id": "Equipamento",
+    "agendado_para": "Data agendada",
 }
 
 # "nome" vale "Nome da unidade" nas unidades; nas rotas de colaboradores e locais é só "Nome".
@@ -194,6 +196,8 @@ app.include_router(etiquetas.router)
 app.include_router(acessos.router)
 app.include_router(acesso_eventos.router)
 app.include_router(manutencoes.router)
+app.include_router(termos.router)
+app.include_router(integracoes_revsign.router)
 
 
 @app.on_event("startup")

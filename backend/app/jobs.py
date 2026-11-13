@@ -36,3 +36,12 @@ def registrar_jobs() -> None:
             sincronizar_colaboradores,
             diariamente_as=cfg.COLABORADORES_SYNC_HORA,
         )
+    if cfg.REVSIGN_ENABLED:
+        from app.services import termos_retorno
+
+        scheduler.registrar_job(
+            "termos_envios_agendados", termos_retorno.enviar_agendados, a_cada_segundos=60
+        )
+        scheduler.registrar_job(
+            "termos_consulta_revsign", termos_retorno.consultar_enviados, a_cada_segundos=600
+        )

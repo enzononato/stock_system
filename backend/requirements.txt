@@ -58,6 +58,8 @@ s3transfer==0.10.4
 jmespath==1.1.0
 
 # Utilitários HTTP/rede e diversos, usados pelas libs acima
+# Cliente HTTP do RevSign (assinatura eletrônica)
+httpx==0.28.1
 idna==3.11
 urllib3==2.6.3
 packaging==25.0

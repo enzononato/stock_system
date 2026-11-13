@@ -21,6 +21,7 @@ from app.db.linha_db import LinhaDBManager
 from app.db.inventario_db import InventarioDBManager
 from app.db.transferencia_db import TransferenciaDBManager
 from app.db.manutencao_db import ManutencaoDBManager
+from app.db.termo_db import TermoDBManager
 from app.services.audit import AuditContext
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -142,6 +143,11 @@ def get_transferencia_db() -> TransferenciaDBManager:
 @lru_cache
 def get_manutencao_db() -> ManutencaoDBManager:
     return ManutencaoDBManager()
+
+
+@lru_cache
+def get_termo_db() -> TermoDBManager:
+    return TermoDBManager()
 
 
 # ── Rate limiting (T2) ──────────────────────────────────────────────────────

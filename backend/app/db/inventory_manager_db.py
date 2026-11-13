@@ -27,6 +27,11 @@ from app.services.baixa import Apagamento, motivo_bloqueio_baixa
 
 logger = logging.getLogger(__name__)
 
+# Respostas de `confirm_loan`/`confirm_return` quando outra confirmação ganhou a corrida
+# (os routers as devolvem como 409).
+MSG_EMPRESTIMO_JA_CONFIRMADO = "O empréstimo já foi confirmado."
+MSG_DEVOLUCAO_JA_CONFIRMADA = "A devolução já foi confirmada."
+
 # ── Geração de termos (.docx) — utilitários compartilhados ─────────────────────
 #
 # Nomes dos meses em português para "{{data_hoje_extenso}}". Propositalmente NÃO
@@ -668,7 +673,7 @@ class InventoryDBManager:
 
     def issue(
         self, pid, user, cpf, center_cost, cargo, setor, revenda, date_issue, logged_user: str,
-        pessoa_juridica: bool = False,
+        pessoa_juridica: bool = False, colaborador_id: int | None = None,
     ):
         item = self.find(pid)
         if not item:
@@ -692,8 +697,8 @@ class InventoryDBManager:
         try:
             with get_cursor(dict_cursor=False) as cur:
                 cur.execute(
-                    "UPDATE items SET status='Pendente', assigned_to=%s, cpf=%s, date_issued=%s, revenda=%s, pessoa_juridica=%s WHERE id=%s",
-                    (user, cpf, dt_issue, revenda, pessoa_juridica, pid),
+                    "UPDATE items SET status='Pendente', assigned_to=%s, cpf=%s, date_issued=%s, revenda=%s, pessoa_juridica=%s, colaborador_id=%s WHERE id=%s",
+                    (user, cpf, dt_issue, revenda, pessoa_juridica, colaborador_id, pid),
                 )
                 # pessoa_juridica também vai para o histórico (não só para items):
                 # é o que permite reverse_history_entry() restaurar o valor correto
@@ -726,7 +731,15 @@ class InventoryDBManager:
                 if not last_loan:
                     raise Exception("Registro de empréstimo original não encontrado no histórico.")
 
-                cur.execute("UPDATE items SET status='Indisponível' WHERE id=%s", (item_id,))
+                # Transição atômica: duas confirmações simultâneas (upload manual e
+                # RevSign, ou dois operadores) passam pelo `find` acima com o item
+                # ainda Pendente, mas só uma consegue este UPDATE (a outra espera o
+                # lock da linha e depois não casa mais com status='Pendente').
+                cur.execute(
+                    "UPDATE items SET status='Indisponível' WHERE id=%s AND status='Pendente'", (item_id,)
+                )
+                if cur.rowcount == 0:
+                    return False, MSG_EMPRESTIMO_JA_CONFIRMADO
 
                 # Antes chamava self.list_peripherals_for_equipment(item_id), o que abria
                 # uma segunda conexão em paralelo à desta transação. Agora usa o mesmo cursor.
@@ -781,9 +794,36 @@ class InventoryDBManager:
         Gera o termo de devolução em memória e inicia o processo (status → Pendente Devolução).
         Retorna (True, bytes_do_docx, filename) ou (False, msg_erro, None).
         """
+        ok, result, filename = self.render_return_term(item_id)
+        if not ok:
+            return False, result, None
+        doc_bytes = result
+
+        # Atualiza status e registra no histórico
+        try:
+            with get_cursor(dict_cursor=False) as cur:
+                cur.execute("UPDATE items SET status='Pendente Devolução' WHERE id=%s", (item_id,))
+                cur.execute(
+                    "INSERT INTO history (item_id, operador, data_operacao, operation) VALUES (%s,%s,%s,'Devolução')",
+                    (item_id, logged_user, datetime.now()),
+                )
+        except pymysql.MySQLError:
+            logger.exception("Erro de banco de dados")
+            return False, "Erro ao processar a operação. Tente novamente.", None
+
+        return True, doc_bytes, filename
+
+    def render_return_term(self, item_id: int, *, status_permitidos: tuple[str, ...] = ("Indisponível",)):
+        """
+        Só gera o .docx do termo de devolução (não toca no banco nem muda o status).
+        `status_permitidos` diz em que situações do item o termo pode ser gerado.
+        Retorna (True, bytes_do_docx, filename) ou (False, msg_erro, None).
+        """
         item = self.find(item_id)
-        if not item or item["status"] != "Indisponível":
-            return False, "Apenas itens com status 'Indisponível' podem ter termo de devolução gerado.", None
+        if not item or item["status"] not in status_permitidos:
+            if status_permitidos == ("Indisponível",):
+                return False, "Apenas itens com status 'Indisponível' podem ter termo de devolução gerado.", None
+            return False, "Este equipamento não está com devolução pendente.", None
 
         user = item.get("assigned_to")
         if not user:
@@ -842,18 +882,6 @@ class InventoryDBManager:
             logger.exception("Erro ao gerar documento")
             return False, "Erro ao gerar o documento.", None
 
-        # Atualiza status e registra no histórico
-        try:
-            with get_cursor(dict_cursor=False) as cur:
-                cur.execute("UPDATE items SET status='Pendente Devolução' WHERE id=%s", (item_id,))
-                cur.execute(
-                    "INSERT INTO history (item_id, operador, data_operacao, operation) VALUES (%s,%s,%s,'Devolução')",
-                    (item_id, logged_user, datetime.now()),
-                )
-        except pymysql.MySQLError:
-            logger.exception("Erro de banco de dados")
-            return False, "Erro ao processar a operação. Tente novamente.", None
-
         safe_user = user.replace(" ", "_")
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"termo_devolucao_{item_id}_{safe_user}_{revenda}_{timestamp}.docx"
@@ -868,9 +896,12 @@ class InventoryDBManager:
         try:
             with get_cursor() as cur:
                 cur.execute(
-                    "UPDATE items SET status='Disponível', assigned_to=NULL, cpf=NULL, date_issued=NULL, pessoa_juridica=0 WHERE id=%s",
+                    "UPDATE items SET status='Disponível', assigned_to=NULL, cpf=NULL, date_issued=NULL, pessoa_juridica=0, colaborador_id=NULL WHERE id=%s AND status='Pendente Devolução'",
                     (item_id,),
                 )
+                if cur.rowcount == 0:
+                    # Outra confirmação já concluiu a devolução (transição atômica).
+                    return False, MSG_DEVOLUCAO_JA_CONFIRMADA
 
                 # Antes chamava self.list_peripherals_for_equipment(item_id) (2a conexão);
                 # agora usa o mesmo cursor da transação.
@@ -920,11 +951,18 @@ class InventoryDBManager:
         (bloco do EMPREGADOR) e do equipamento/empréstimo.
         Retorna (True, bytes_do_docx, filename) ou (False, msg_erro, None).
         """
+        return self.render_loan_term(item_id)
+
+    def render_loan_term(self, item_id: int, *, status_permitidos: tuple[str, ...] = ("Pendente",)):
+        """Corpo de `generate_loan_term_bytes`; `status_permitidos` diz em que situações do item
+        o termo pode ser gerado (o termo de "uso" é gerado com o item `Indisponível`)."""
         item = self.find(item_id)
         if not item:
             return False, "Equipamento não encontrado.", None
-        if item["status"] != "Pendente":
-            return False, "Este equipamento não está pendente de empréstimo.", None
+        if item["status"] not in status_permitidos:
+            if status_permitidos == ("Pendente",):
+                return False, "Este equipamento não está pendente de empréstimo.", None
+            return False, "Este equipamento não está com um colaborador.", None
 
         revenda = item.get("revenda")
 
@@ -1126,6 +1164,22 @@ class InventoryDBManager:
             cur.execute("SELECT * FROM history WHERE id=%s", (history_id,))
             return cur.fetchone()
 
+    def ultimo_history_id(self, item_id: int, operation: str) -> int | None:
+        """Id do último lançamento não estornado de `operation` para o item, ou None."""
+        with get_cursor(commit=False) as cur:
+            cur.execute(
+                """SELECT id FROM history WHERE item_id=%s AND operation=%s AND is_reversed=0
+                ORDER BY data_operacao DESC, id DESC LIMIT 1""",
+                (item_id, operation),
+            )
+            row = cur.fetchone()
+        return row["id"] if row else None
+
+    def vincular_colaborador(self, item_id: int, colaborador_id: int) -> None:
+        """Grava o colaborador responsável no item (sem mexer em mais nada)."""
+        with get_cursor(dict_cursor=False) as cur:
+            cur.execute("UPDATE items SET colaborador_id=%s WHERE id=%s", (colaborador_id, item_id))
+
     def reverse_history_entry(self, history_id: int, logged_user: str):
         try:
             with get_cursor() as cur:
@@ -1142,7 +1196,7 @@ class InventoryDBManager:
                 if op == "Confirmação Empréstimo":
                     cur.execute("UPDATE items SET status='Pendente' WHERE id=%s", (item_id,))
                 elif op == "Empréstimo":
-                    cur.execute("UPDATE items SET status='Disponível', assigned_to=NULL, cpf=NULL, date_issued=NULL, pessoa_juridica=0 WHERE id=%s", (item_id,))
+                    cur.execute("UPDATE items SET status='Disponível', assigned_to=NULL, cpf=NULL, date_issued=NULL, pessoa_juridica=0, colaborador_id=NULL WHERE id=%s", (item_id,))
                 elif op == "Confirmação Devolução":
                     cur.execute("UPDATE items SET status='Pendente Devolução' WHERE id=%s", (item_id,))
                 elif op == "Devolução":
@@ -1158,9 +1212,17 @@ class InventoryDBManager:
                     last_loan = cur.fetchone()
                     if not last_loan:
                         return False, "Não foi possível encontrar o empréstimo original."
+                    # O vínculo de cadastro (zerado por confirm_return) volta quando o CPF
+                    # do empréstimo ainda corresponde a um colaborador.
+                    colaborador_id = None
+                    cpf_digitos = "".join(ch for ch in (last_loan["cpf"] or "") if ch.isdigit())
+                    if cpf_digitos:
+                        cur.execute("SELECT id FROM colaboradores WHERE cpf=%s", (cpf_digitos,))
+                        achado = cur.fetchone()
+                        colaborador_id = achado["id"] if achado else None
                     cur.execute(
-                        "UPDATE items SET status='Indisponível', assigned_to=%s, cpf=%s, date_issued=%s, pessoa_juridica=%s WHERE id=%s",
-                        (last_loan["usuario"], last_loan["cpf"], last_loan["data_operacao"], last_loan.get("pessoa_juridica") or 0, item_id),
+                        "UPDATE items SET status='Indisponível', assigned_to=%s, cpf=%s, date_issued=%s, pessoa_juridica=%s, colaborador_id=%s WHERE id=%s",
+                        (last_loan["usuario"], last_loan["cpf"], last_loan["data_operacao"], last_loan.get("pessoa_juridica") or 0, colaborador_id, item_id),
                     )
                 elif op == "Cadastro":
                     cur.execute("UPDATE items SET is_active=0 WHERE id=%s", (item_id,))
