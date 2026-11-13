@@ -18,6 +18,7 @@ from app.db.colaborador_db import ColaboradorDBManager
 from app.db.audit_db import AuditDBManager
 from app.db.local_db import LocalDBManager
 from app.db.password_reset_db import PasswordResetDBManager
+from app.db.mfa_db import MfaDBManager
 from app.services.audit import AuditContext
 from app.services.sessao import validar_sessao_ativa
 
@@ -195,6 +196,11 @@ def contexto_auditoria_de(usuario: Optional[dict], request: Request) -> AuditCon
 @lru_cache
 def get_password_reset_db() -> PasswordResetDBManager:
     return PasswordResetDBManager()
+
+
+@lru_cache
+def get_mfa_db() -> MfaDBManager:
+    return MfaDBManager()
 
 
 limiter = Limiter(key_func=get_client_ip)

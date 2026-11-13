@@ -79,6 +79,8 @@ _ROTULOS_DE_CAMPO = {
     "identificador": "Usuário ou e-mail",
     "nova_senha": "Nova senha",
     "token": "Link",
+    "codigo": "Código",
+    "mfa_token": "Etapa de verificação",
 }
 
 # "nome" vale "Nome da unidade" nas unidades; nas rotas de colaboradores e locais é só "Nome".

@@ -111,3 +111,78 @@ def usuario_com_email(criar_usuario, senha_padrao_teste, executar_sql) -> dict:
         ("tecnico@revalle.com.br", "tecnico.email"),
     )
     return UserDBManager().get_user_by_username("tecnico.email")
+
+
+# ── 2FA (Task 5) ────────────────────────────────────────────────────────────
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+
+
+@pytest.fixture
+def chave_totp(monkeypatch) -> str:
+    """Liga o 2FA no servidor com uma chave Fernet nova (o runner não define a chave)."""
+    from cryptography.fernet import Fernet
+
+    from app.core import config
+
+    chave = Fernet.generate_key().decode()
+    monkeypatch.setattr(config.settings, "TOTP_ENCRYPTION_KEY", chave)
+    return chave
+
+
+@dataclass
+class Dados2fa:
+    segredo: str
+    codigos: list[str]
+
+
+@pytest.fixture
+def ativar_2fa_direto(chave_totp) -> Callable[[int], Dados2fa]:
+    """Ativa o 2FA de um usuário direto no banco (sem passar pela API)."""
+
+    def _ativar(usuario_id: int) -> Dados2fa:
+        from app.db.mfa_db import MfaDBManager
+        from app.services import mfa
+
+        db = MfaDBManager()
+        segredo = mfa.gerar_segredo()
+        db.salvar_segredo_pendente(usuario_id, mfa.cifrar_segredo(segredo))
+        codigos = mfa.gerar_codigos_recuperacao()
+        db.ativar(usuario_id, [mfa.hash_codigo_recuperacao(c) for c in codigos], passo=0)
+        return Dados2fa(segredo=segredo, codigos=codigos)
+
+    return _ativar
+
+
+def codigo_totp(segredo: str, passos: int = 0) -> str:
+    """Código TOTP de agora (+30 s por passo). Use `passos=1` num segundo login do
+    mesmo usuário no mesmo teste, por causa do anti-replay."""
+    import pyotp
+
+    return pyotp.TOTP(segredo).at(datetime.now(timezone.utc) + timedelta(seconds=30 * passos))
+
+
+def login_com_2fa(client, username: str, senha: str, codigo: str) -> str:
+    """Login completo em duas etapas; devolve o access token."""
+    resp = client.post("/api/auth/login", json={"username": username, "password": senha})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["etapa"] == "mfa", resp.text
+    ver = client.post(
+        "/api/auth/mfa/verificar", json={"mfa_token": resp.json()["mfa_token"], "codigo": codigo}
+    )
+    assert ver.status_code == 200, ver.text
+    return ver.json()["access_token"]
+
+
+@pytest.fixture
+def gestor_2fa(_fastapi_app, client, usuario_gestor, senha_padrao_teste, ativar_2fa_direto) -> dict:
+    """Gestor com 2FA ativo e um TestClient autenticado. Com `chave_totp` ligada, os
+    testes não usam `client_gestor` (o login do Gestor sem 2FA não devolve access token)."""
+    from fastapi.testclient import TestClient
+
+    dados = ativar_2fa_direto(usuario_gestor["id"])
+    access = login_com_2fa(client, usuario_gestor["username"], senha_padrao_teste, codigo_totp(dados.segredo))
+    c = TestClient(_fastapi_app)
+    c.headers.update({"Authorization": f"Bearer {access}"})
+    return {"usuario": usuario_gestor, "segredo": dados.segredo, "codigos": dados.codigos, "client": c}
