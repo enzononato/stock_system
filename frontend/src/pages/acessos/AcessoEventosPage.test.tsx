@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { http, HttpResponse } from 'msw'
+import { delay, http, HttpResponse } from 'msw'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -57,9 +57,9 @@ let total = 1
 
 function renderPagina() {
   return renderWithClient(
-    <MemoryRouter initialEntries={['/acessos']}>
+    <MemoryRouter initialEntries={['/acessos/eventos']}>
       <Routes>
-        <Route path="/acessos" element={<AcessoEventosPage />} />
+        <Route path="/acessos/eventos" element={<AcessoEventosPage />} />
         <Route path="/acessos/eventos/:id" element={<p>Detalhe do evento aberto</p>} />
       </Routes>
       <ToastContainer />
@@ -97,15 +97,49 @@ describe('AcessoEventosPage', () => {
     expect(consultas[0].get('offset')).toBe('0')
   })
 
-  it('"Todos" refaz a consulta sem status e voltando ao início', async () => {
+  it('"Todos" refaz a consulta sem status e voltando ao início, mesmo vindo de outra página', async () => {
+    total = 60
     const user = userEvent.setup()
     renderPagina()
     await screen.findByText('MARIA SILVA')
+    await user.click(screen.getByRole('button', { name: 'Próxima' }))
+    await waitFor(() => expect(consultas.some((c) => c.get('offset') === '25')).toBe(true))
     await user.selectOptions(screen.getByLabelText('Situação'), 'todos')
     await waitFor(() => expect(consultas.some((c) => !c.has('status'))).toBe(true))
-    const ultima = consultas[consultas.length - 1]
-    expect(ultima.has('status')).toBe(false)
-    expect(ultima.get('offset')).toBe('0')
+    const semStatus = consultas.filter((c) => !c.has('status'))
+    // Nenhuma consulta pediu o filtro novo com a página antiga.
+    expect(semStatus.every((c) => c.get('offset') === '0')).toBe(true)
+  })
+
+  it('dois cliques em "Registrar evento" no diálogo geram uma só requisição', async () => {
+    let chamadas = 0
+    server.use(
+      http.post('/api/acessos/eventos', async () => {
+        chamadas += 1
+        await delay(80)
+        return HttpResponse.json({ ...evento, id: 14 }, { status: 201 })
+      })
+    )
+    const user = userEvent.setup()
+    renderPagina()
+    await screen.findByText('MARIA SILVA')
+    await user.click(screen.getByRole('button', { name: 'Registrar evento' }))
+    const dialogo = await screen.findByRole('dialog')
+    expect(within(dialogo).getByRole('group', { name: 'Colaborador' })).toBeInTheDocument()
+    await user.click(within(dialogo).getByRole('button', { name: /selecione um colaborador/i }))
+    await user.click(await within(dialogo).findByText('MARIA SILVA'))
+    await user.dblClick(within(dialogo).getByRole('button', { name: 'Registrar evento' }))
+    await waitFor(() => expect(chamadas).toBeGreaterThanOrEqual(1))
+    await delay(150)
+    expect(chamadas).toBe(1)
+  })
+
+  it('nenhum item do grupo Acessos é prefixo de outro (só um item ativo por tela)', () => {
+    const rotas = getVisibleNavItems('Gestor')
+      .map((i) => i.to)
+      .filter((to) => to.startsWith('/acessos'))
+    expect(rotas.length).toBeGreaterThan(1)
+    for (const a of rotas) for (const b of rotas) if (a !== b) expect(b.startsWith(`${a}/`)).toBe(false)
   })
 
   it('filtra por tipo e pela busca (com debounce)', async () => {
@@ -224,7 +258,7 @@ describe('AcessoEventosPage', () => {
   })
 
   it('o menu mostra Eventos para Técnico e não para Jovem Aprendiz', () => {
-    expect(getVisibleNavItems('Técnico').map((i) => i.to)).toContain('/acessos')
-    expect(getVisibleNavItems('Jovem Aprendiz').map((i) => i.to)).not.toContain('/acessos')
+    expect(getVisibleNavItems('Técnico').map((i) => i.to)).toContain('/acessos/eventos')
+    expect(getVisibleNavItems('Jovem Aprendiz').map((i) => i.to)).not.toContain('/acessos/eventos')
   })
 })

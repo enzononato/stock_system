@@ -95,7 +95,7 @@ export const navGroups: NavGroup[] = [
   {
     title: 'Acessos',
     items: [
-      { to: '/acessos', label: 'Eventos', icon: KeyRound, roles: ['Gestor', 'Técnico'] },
+      { to: '/acessos/eventos', label: 'Eventos', icon: KeyRound, roles: ['Gestor', 'Técnico'] },
       { to: '/acessos/sistemas', label: 'Sistemas', icon: AppWindow, roles: ['Gestor'] },
       { to: '/acessos/pacotes', label: 'Pacotes por função', icon: Boxes, roles: ['Gestor'] },
     ],

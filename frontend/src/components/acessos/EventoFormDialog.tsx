@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createEvento, type EventoDetalhe, type TipoEvento } from '@/api/acessos'
 import { listCargos, type Colaborador } from '@/api/colaboradores'
@@ -84,6 +84,7 @@ function FormBody({
   const [cargoAnterior, setCargoAnterior] = useState('')
   const [cargoNovo, setCargoNovo] = useState(colaboradorInicial?.cargo ?? '')
   const [observacao, setObservacao] = useState('')
+  const enviando = useRef(false)
 
   const { data: cargos = [] } = useQuery({
     queryKey: ['colaboradores', 'cargos'],
@@ -106,6 +107,9 @@ function FormBody({
       onCreated(evento)
     },
     onError: (err: unknown) => toast(getErrorMessage(err, 'Erro ao registrar evento.'), 'error'),
+    onSettled: () => {
+      enviando.current = false
+    },
   })
 
   function escolherColaborador(c: Colaborador | null) {
@@ -117,7 +121,9 @@ function FormBody({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (incompleto) return
+    // Trava síncrona: dois cliques seguidos chegam antes de o botão virar `loading`.
+    if (incompleto || enviando.current) return
+    enviando.current = true
     mutation.mutate()
   }
 
@@ -146,8 +152,8 @@ function FormBody({
         </select>
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <Label>Colaborador</Label>
+      <div className="flex flex-col gap-1.5" role="group" aria-labelledby="evento-colaborador-rotulo">
+        <Label id="evento-colaborador-rotulo">Colaborador</Label>
         <ColaboradorSelect value={colaborador?.id ?? null} onChange={escolherColaborador} somenteAtivos={false} />
       </div>
 

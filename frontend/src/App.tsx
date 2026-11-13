@@ -212,13 +212,14 @@ export default function App() {
           />
 
           <Route
-            path="acessos"
+            path="acessos/eventos"
             element={
               <RequireRole roles={['Gestor', 'Técnico']}>
                 <AcessoEventosPage />
               </RequireRole>
             }
           />
+          <Route path="acessos" element={<Navigate to="/acessos/eventos" replace />} />
 
           <Route
             path="acessos/eventos/:id"

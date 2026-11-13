@@ -51,14 +51,17 @@ describe('api/acessos', () => {
 
   it('savePacote usa PUT /acessos/pacotes', async () => {
     let metodo = ''
+    let corpo: unknown = null
     server.use(
-      http.put('/api/acessos/pacotes', ({ request }) => {
+      http.put('/api/acessos/pacotes', async ({ request }) => {
         metodo = request.method
+        corpo = await request.json()
         return HttpResponse.json({ cargo: 'Vendedor', sistemas: [] })
       })
     )
-    await savePacote({ cargo: 'Vendedor', sistema_ids: [] })
+    await savePacote({ cargo: 'Vendedor', sistema_ids: [1, 3] })
     expect(metodo).toBe('PUT')
+    expect(corpo).toEqual({ cargo: 'Vendedor', sistema_ids: [1, 3] })
   })
 
   it('desativarAcesso faz POST /acessos/ficha/:id/desativar', async () => {

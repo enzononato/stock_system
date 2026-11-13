@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
@@ -53,6 +53,7 @@ export default function AcessoEventoDetailPage() {
 
   const [resolvendo, setResolvendo] = useState<{ tarefa: Tarefa; modo: ModoResolucao } | null>(null)
   const [cancelando, setCancelando] = useState(false)
+  const concluindo = useRef(false)
 
   const { data: evento, isLoading, isError, error, refetch } = useQuery({
     queryKey: chave,
@@ -73,6 +74,9 @@ export default function AcessoEventoDetailPage() {
       toast('Evento concluído.')
     },
     onError: (err: unknown) => toast(getErrorMessage(err, 'Erro ao concluir o evento.'), 'error'),
+    onSettled: () => {
+      concluindo.current = false
+    },
   })
 
   if (isLoading) return <LoadingState label="Carregando evento..." />
@@ -80,7 +84,7 @@ export default function AcessoEventoDetailPage() {
     if (isAxiosError(error) && error.response?.status === 404) {
       return (
         <div className="space-y-4">
-          <Link to="/acessos" className={`inline-flex items-center gap-1 text-sm ${linkClass}`}>
+          <Link to="/acessos/eventos" className={`inline-flex items-center gap-1 text-sm ${linkClass}`}>
             <ArrowLeft size={14} aria-hidden="true" />
             Voltar aos eventos
           </Link>
@@ -97,7 +101,7 @@ export default function AcessoEventoDetailPage() {
 
   return (
     <div className="space-y-6">
-      <Link to="/acessos" className={`inline-flex items-center gap-1 text-sm ${linkClass}`}>
+      <Link to="/acessos/eventos" className={`inline-flex items-center gap-1 text-sm ${linkClass}`}>
         <ArrowLeft size={14} aria-hidden="true" />
         Voltar aos eventos
       </Link>
@@ -218,7 +222,12 @@ export default function AcessoEventoDetailPage() {
           )}
           <div className="flex flex-wrap gap-2">
             <Button
-              onClick={() => concluir.mutate()}
+              onClick={() => {
+                // Trava síncrona além do `loading`: dois cliques seguidos antes do repintar.
+                if (concluindo.current) return
+                concluindo.current = true
+                concluir.mutate()
+              }}
               loading={concluir.isPending}
               disabled={!evento.pode_concluir}
             >

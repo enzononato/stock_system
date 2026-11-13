@@ -71,7 +71,7 @@ function renderPagina(id = 5) {
     <MemoryRouter initialEntries={[`/acessos/eventos/${id}`]}>
       <Routes>
         <Route path="/acessos/eventos/:id" element={<AcessoEventoDetailPage />} />
-        <Route path="/acessos" element={<p>Lista de eventos</p>} />
+        <Route path="/acessos/eventos" element={<p>Lista de eventos</p>} />
       </Routes>
       <ToastContainer />
     </MemoryRouter>
@@ -90,7 +90,7 @@ describe('AcessoEventoDetailPage', () => {
     renderPagina()
     expect(await screen.findByRole('heading', { level: 1, name: 'Admissão' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'MARIA SILVA' })).toHaveAttribute('href', '/colaboradores/7')
-    expect(screen.getByRole('link', { name: 'Voltar aos eventos' })).toHaveAttribute('href', '/acessos')
+    expect(screen.getByRole('link', { name: 'Voltar aos eventos' })).toHaveAttribute('href', '/acessos/eventos')
     expect(screen.getByText('Vendedor')).toBeInTheDocument()
     const tarefas = within(screen.getByRole('list', { name: 'Tarefas' }))
     expect(tarefas.getAllByText('Pendente')).toHaveLength(2)
@@ -266,10 +266,11 @@ describe('AcessoEventoDetailPage', () => {
 
   it('conclui o evento quando pode_concluir', async () => {
     usarEvento({ ...admissao, tarefas_pendentes: 0, pode_concluir: true, pendencias: [] })
-    let chamado = false
+    let chamadas = 0
     server.use(
-      http.post('/api/acessos/eventos/5/concluir', () => {
-        chamado = true
+      http.post('/api/acessos/eventos/5/concluir', async () => {
+        chamadas += 1
+        await delay(80)
         return HttpResponse.json({ ...atual, status: 'concluido', concluido_por: 'tecnico', concluido_em: '2026-11-10T11:00:00' })
       })
     )
@@ -277,9 +278,11 @@ describe('AcessoEventoDetailPage', () => {
     renderPagina()
     const botao = await screen.findByRole('button', { name: 'Concluir evento' })
     expect(botao).toBeEnabled()
-    await user.click(botao)
-    await waitFor(() => expect(chamado).toBe(true))
+    await user.dblClick(botao) // dois cliques seguidos: uma só requisição
+    await waitFor(() => expect(chamadas).toBeGreaterThanOrEqual(1))
     expect(await screen.findByText('Evento concluído.')).toBeInTheDocument()
+    await delay(100)
+    expect(chamadas).toBe(1)
   })
 
   it('cancela o evento com o motivo', async () => {
