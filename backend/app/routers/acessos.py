@@ -1,7 +1,10 @@
 """Módulo de Acessos (F8): catálogo de sistemas, pacotes por cargo e ficha de acessos."""
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.db.acesso_db import AcessoDBManager, AcessoErro
+from app.db.acesso_db import AcessoDBManager, AcessoErro, obter_colaborador
+from app.db.database_mysql import get_cursor
 from app.dependencies import (
     CurrentUser,
     get_acesso_db,
@@ -10,11 +13,16 @@ from app.dependencies import (
     gestor_or_tecnico,
 )
 from app.schemas.acessos import (
+    AcessoCreate,
+    AcessoResponse,
+    AcessoUpdate,
+    EquipamentoResumo,
     PacoteResponse,
     PacoteUpdate,
     SistemaCreate,
     SistemaResponse,
     SistemaUpdate,
+    StatusAcesso,
 )
 from app.services.audit import AuditContext
 
@@ -94,3 +102,81 @@ def definir_pacote(
         return db.definir_pacote(ctx, cargo=body.cargo, sistema_ids=body.sistema_ids)
     except AcessoErro as e:
         raise erro_http(e)
+
+
+# ── Ficha de acessos do colaborador ─────────────────────────────────────────
+
+@router.get("/ficha", response_model=list[AcessoResponse])
+def listar_ficha(
+    colaborador_id: Optional[int] = None,
+    item_id: Optional[int] = None,
+    status: Optional[StatusAcesso] = None,
+    _: CurrentUser = Depends(gestor_or_tecnico),
+    db: AcessoDBManager = Depends(get_acesso_db),
+):
+    if colaborador_id is None and item_id is None:
+        raise HTTPException(status_code=422, detail="Informe colaborador_id ou item_id.")
+    return db.listar_acessos(colaborador_id=colaborador_id, item_id=item_id, status=status)
+
+
+@router.post("/ficha", response_model=AcessoResponse, status_code=201)
+def registrar_acesso(
+    body: AcessoCreate,
+    _: CurrentUser = Depends(gestor_or_tecnico),
+    db: AcessoDBManager = Depends(get_acesso_db),
+    ctx: AuditContext = Depends(get_audit_context),
+):
+    try:
+        return db.criar_acesso(
+            ctx,
+            colaborador_id=body.colaborador_id,
+            sistema_id=body.sistema_id,
+            login=body.login,
+            item_id=body.item_id,
+        )
+    except AcessoErro as e:
+        raise erro_http(e)
+
+
+@router.put("/ficha/{acesso_id}", response_model=AcessoResponse)
+def atualizar_acesso(
+    acesso_id: int,
+    body: AcessoUpdate,
+    _: CurrentUser = Depends(gestor_or_tecnico),
+    db: AcessoDBManager = Depends(get_acesso_db),
+    ctx: AuditContext = Depends(get_audit_context),
+):
+    dados = body.model_dump(exclude_unset=True)
+    if not dados:
+        raise HTTPException(status_code=400, detail=MSG_NADA_PARA_ATUALIZAR)
+    try:
+        return db.atualizar_acesso(ctx, acesso_id, dados)
+    except AcessoErro as e:
+        raise erro_http(e)
+
+
+@router.post("/ficha/{acesso_id}/desativar", response_model=AcessoResponse)
+def desativar_acesso(
+    acesso_id: int,
+    _: CurrentUser = Depends(gestor_or_tecnico),
+    db: AcessoDBManager = Depends(get_acesso_db),
+    ctx: AuditContext = Depends(get_audit_context),
+):
+    try:
+        return db.desativar_acesso(ctx, acesso_id)
+    except AcessoErro as e:
+        raise erro_http(e)
+
+
+@router.get(
+    "/colaboradores/{colaborador_id}/equipamentos", response_model=list[EquipamentoResumo]
+)
+def equipamentos_do_colaborador(
+    colaborador_id: int,
+    _: CurrentUser = Depends(gestor_or_tecnico),
+    db: AcessoDBManager = Depends(get_acesso_db),
+):
+    with get_cursor(commit=False) as cur:
+        if obter_colaborador(cur, colaborador_id) is None:
+            raise HTTPException(status_code=404, detail="Colaborador não encontrado.")
+        return db.equipamentos_com_colaborador(colaborador_id, cur=cur)
