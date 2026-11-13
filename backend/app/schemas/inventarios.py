@@ -144,3 +144,33 @@ class LeituraResponse(BaseModel):
     item_identificador: Optional[str] = None
     item_revenda: Optional[str] = None
     duplicada: bool = False
+
+
+# ── Relatório ───────────────────────────────────────────────────────────────
+
+class RelatorioLinha(BaseModel):
+    categoria: Literal[
+        "ok", "local_errado", "usuario_diferente", "outra_unidade", "nao_cadastrado", "nao_encontrado"
+    ]
+    leitura_id: Optional[int] = None
+    item_id: Optional[int] = None
+    tipo: Optional[str] = None
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    identificador: Optional[str] = None
+    status_item: Optional[str] = None
+    unidade_item: Optional[str] = None
+    local_esperado: Optional[str] = None
+    local_encontrado: Optional[str] = None
+    usuario_esperado: Optional[str] = None
+    usuario_encontrado: Optional[str] = None
+    codigo_lido: Optional[str] = None
+    lido_por: Optional[str] = None
+    lido_em: Optional[datetime] = None
+    detalhe: Optional[str] = None
+    observacao: Optional[str] = None
+
+
+class RelatorioInventario(BaseModel):
+    inventario: InventarioDetalhe
+    linhas: list[RelatorioLinha]

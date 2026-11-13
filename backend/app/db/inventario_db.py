@@ -18,6 +18,7 @@ import pymysql
 from app.db.database_mysql import get_cursor
 from app.services.inventario import (
     Encontrado,
+    ORDEM_CATEGORIAS,
     Esperado,
     chave_da_leitura,
     classificar,
@@ -182,7 +183,7 @@ class InventarioDBManager:
 
     _SELECT_LEITURA = (
         "SELECT l.*, i.tipo AS item_tipo, i.brand AS item_brand, i.model AS item_model, "
-        "i.identificador AS item_identificador, l.revenda_item AS item_revenda, "
+        "i.identificador AS item_identificador, i.status AS item_status, l.revenda_item AS item_revenda, "
         "le.nome AS local_encontrado_nome, lx.nome AS local_esperado_nome, "
         "c.nome AS colaborador_encontrado_nome "
         "FROM inventario_leituras l "
@@ -439,3 +440,130 @@ class InventarioDBManager:
                 [*params, limit, offset],
             )
             return cur.fetchall(), total
+
+    # ── Encerramento, relatório e histórico do item ─────────────────────────
+
+    def encerrar(self, inventario_id: int, por: str) -> None:
+        """Congela os não encontrados (itens ativos da unidade sem leitura) e fecha o
+        inventário, tudo na mesma transação e com o inventário travado."""
+        with get_cursor() as cur:
+            inventario = self._travar(cur, inventario_id)
+            if inventario["status"] != "aberto":
+                raise InventarioFechado("Só inventários abertos podem ser encerrados.")
+            cur.execute(
+                "INSERT INTO inventario_nao_encontrados "
+                "(inventario_id, item_id, status_item, local_id, colaborador_id, usuario) "
+                "SELECT %s, i.id, i.status, i.local_id, i.colaborador_id, COALESCE(c.nome, i.assigned_to) "
+                "FROM items i LEFT JOIN colaboradores c ON c.id = i.colaborador_id "
+                "WHERE i.is_active = 1 AND i.revenda = %s "
+                "AND NOT EXISTS (SELECT 1 FROM inventario_leituras l "
+                "WHERE l.inventario_id = %s AND l.item_id = i.id)",
+                (inventario_id, inventario["unidade_nome"], inventario_id),
+            )
+            cur.execute(
+                "UPDATE inventarios SET status = 'encerrado', encerrado_por = %s, encerrado_em = %s "
+                "WHERE id = %s",
+                (por, datetime.now(), inventario_id),
+            )
+
+    @staticmethod
+    def _linha_vazia(categoria: str) -> dict:
+        return {
+            "categoria": categoria, "leitura_id": None, "item_id": None, "tipo": None,
+            "brand": None, "model": None, "identificador": None, "status_item": None,
+            "unidade_item": None, "local_esperado": None, "local_encontrado": None,
+            "usuario_esperado": None, "usuario_encontrado": None, "codigo_lido": None,
+            "lido_por": None, "lido_em": None, "detalhe": None, "observacao": None,
+        }
+
+    def linhas_relatorio(self, inventario: dict) -> list[dict]:
+        """Uma linha por leitura e uma por não encontrado, na ordem das categorias."""
+        inventario_id = inventario["id"]
+        status = inventario["status"]
+        linhas: list[dict] = []
+        with get_cursor(commit=False) as cur:
+            cur.execute(
+                self._SELECT_LEITURA + " WHERE l.inventario_id = %s", (inventario_id,)
+            )
+            for leitura in cur.fetchall():
+                linha = self._linha_vazia(leitura["resultado"])
+                linha.update(
+                    leitura_id=leitura["id"], item_id=leitura["item_id"],
+                    tipo=leitura["item_tipo"], brand=leitura["item_brand"],
+                    model=leitura["item_model"], identificador=leitura["item_identificador"],
+                    status_item=leitura["item_status"], unidade_item=leitura["revenda_item"],
+                    local_esperado=leitura["local_esperado_nome"],
+                    local_encontrado=leitura["local_encontrado_nome"],
+                    usuario_esperado=leitura["usuario_esperado"],
+                    usuario_encontrado=leitura["colaborador_encontrado_nome"],
+                    codigo_lido=leitura["codigo_lido"], lido_por=leitura["lido_por"],
+                    lido_em=leitura["lido_em"], detalhe=leitura["detalhe"],
+                    observacao=leitura["observacao"],
+                )
+                linhas.append(linha)
+
+            nao_encontrados: list[dict] = []
+            if status == "aberto":
+                cur.execute(
+                    "SELECT i.id, i.tipo, i.brand, i.model, i.identificador, i.status, "
+                    "lo.nome AS local_nome, COALESCE(c.nome, i.assigned_to) AS usuario "
+                    "FROM items i LEFT JOIN locais lo ON lo.id = i.local_id "
+                    "LEFT JOIN colaboradores c ON c.id = i.colaborador_id "
+                    "WHERE i.is_active = 1 AND i.revenda = %s "
+                    "AND NOT EXISTS (SELECT 1 FROM inventario_leituras l "
+                    "WHERE l.inventario_id = %s AND l.item_id = i.id)",
+                    (inventario["unidade_nome"], inventario_id),
+                )
+                nao_encontrados = cur.fetchall()
+            elif status == "encerrado":
+                cur.execute(
+                    "SELECT i.id, i.tipo, i.brand, i.model, i.identificador, n.status_item AS status, "
+                    "lo.nome AS local_nome, n.usuario AS usuario "
+                    "FROM inventario_nao_encontrados n JOIN items i ON i.id = n.item_id "
+                    "LEFT JOIN locais lo ON lo.id = n.local_id WHERE n.inventario_id = %s",
+                    (inventario_id,),
+                )
+                nao_encontrados = cur.fetchall()
+            for item in nao_encontrados:
+                linha = self._linha_vazia("nao_encontrado")
+                linha.update(
+                    item_id=item["id"], tipo=item["tipo"], brand=item["brand"],
+                    model=item["model"], identificador=item["identificador"],
+                    status_item=item["status"], unidade_item=inventario["unidade_nome"],
+                    local_esperado=item["local_nome"], usuario_esperado=item["usuario"],
+                )
+                linhas.append(linha)
+
+        posicao = {c: i for i, c in enumerate(ORDEM_CATEGORIAS)}
+        linhas.sort(
+            key=lambda linha: (
+                posicao[linha["categoria"]],
+                linha["item_id"] is None,
+                linha["item_id"] or 0,
+                linha["leitura_id"] or 0,
+            )
+        )
+        return linhas
+
+    def historico_do_item(self, item_id: int) -> list[dict]:
+        """Participações do item em inventários não cancelados (leitura ou não
+        encontrado), da mais antiga para a mais recente. Alimenta a linha do tempo (F7)."""
+        with get_cursor(commit=False) as cur:
+            cur.execute(
+                "SELECT l.inventario_id, u.nome AS unidade_nome, i.status AS status_inventario, "
+                "'leitura' AS evento, l.resultado AS resultado, l.lido_em AS data, "
+                "l.lido_por AS por, lo.nome AS local_encontrado_nome "
+                "FROM inventario_leituras l JOIN inventarios i ON i.id = l.inventario_id "
+                "JOIN unidades u ON u.id = i.unidade_id "
+                "LEFT JOIN locais lo ON lo.id = l.local_id_encontrado "
+                "WHERE l.item_id = %s AND i.status <> 'cancelado' "
+                "UNION ALL "
+                "SELECT n.inventario_id, u.nome, i.status, 'nao_encontrado', NULL, "
+                "i.encerrado_em, i.encerrado_por, NULL "
+                "FROM inventario_nao_encontrados n JOIN inventarios i ON i.id = n.inventario_id "
+                "JOIN unidades u ON u.id = i.unidade_id "
+                "WHERE n.item_id = %s AND i.status <> 'cancelado' "
+                "ORDER BY data, inventario_id",
+                (item_id, item_id),
+            )
+            return cur.fetchall()
