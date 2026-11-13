@@ -75,7 +75,11 @@ def export_monthly_report(
         writer = csv.writer(output, delimiter=';', quoting=csv.QUOTE_ALL)
         writer.writerow(pt_headers)
         for row in rows:
-            writer.writerow([str(v) if v is not None else "" for v in row.values()])
+            # Unidade/revenda em CAIXA ALTA nas exportações (a gravação não muda).
+            writer.writerow([
+                "" if v is None else (str(v).upper() if k == "revenda" else str(v))
+                for k, v in row.items()
+            ])
 
     output.seek(0)
     filename = f"relatorio_{year}_{month:02d}.csv"
