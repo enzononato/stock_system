@@ -24,6 +24,7 @@ import AuditPage from '@/pages/AuditPage'
 import LocaisPage from '@/pages/LocaisPage'
 import SistemasPage from '@/pages/acessos/SistemasPage'
 import PacotesPage from '@/pages/acessos/PacotesPage'
+import AcessoEventosPage from '@/pages/acessos/AcessoEventosPage'
 import { ToastContainer } from '@/components/ui/toast'
 
 /**
@@ -205,6 +206,15 @@ export default function App() {
             element={
               <RequireRole roles={['Gestor']}>
                 <PacotesPage />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="acessos"
+            element={
+              <RequireRole roles={['Gestor', 'Técnico']}>
+                <AcessoEventosPage />
               </RequireRole>
             }
           />

@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react'
 import { Contact, MapPin, ScrollText, type LucideIcon } from 'lucide-react'
-import { AppWindow, Boxes } from 'lucide-react'
+import { AppWindow, Boxes, KeyRound } from 'lucide-react'
 import {
   DashboardIcon,
   EstoqueIcon,
@@ -95,6 +95,7 @@ export const navGroups: NavGroup[] = [
   {
     title: 'Acessos',
     items: [
+      { to: '/acessos', label: 'Eventos', icon: KeyRound, roles: ['Gestor', 'Técnico'] },
       { to: '/acessos/sistemas', label: 'Sistemas', icon: AppWindow, roles: ['Gestor'] },
       { to: '/acessos/pacotes', label: 'Pacotes por função', icon: Boxes, roles: ['Gestor'] },
     ],
