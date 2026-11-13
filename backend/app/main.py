@@ -23,6 +23,7 @@ from app.routers import termos, integracoes_revsign
 from app.services.mfa import mfa_configurado
 from app.routers import auth_senha
 from app.routers import perfil
+from app.routers import painel
 
 logger = logging.getLogger(__name__)
 
@@ -211,6 +212,7 @@ app.include_router(acesso_eventos.router)
 app.include_router(manutencoes.router)
 app.include_router(termos.router)
 app.include_router(integracoes_revsign.router)
+app.include_router(painel.router)
 
 
 @app.on_event("startup")
