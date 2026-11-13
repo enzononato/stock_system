@@ -406,9 +406,10 @@ class ColaboradorDBManager:
         unidade_id: Optional[int] = None,
         limit: int = 25,
         offset: int = 0,
+        busca_por_cpf: bool = True,
     ) -> tuple[list[dict], int]:
         """Colaboradores por ordem de nome. `busca` procura no nome, na matrícula e,
-        se for só dígitos/pontuação de CPF, no CPF."""
+        se for só dígitos/pontuação de CPF e `busca_por_cpf`, no CPF."""
         condicoes: list[str] = []
         params: list = []
         termo = (busca or "").strip()
@@ -417,7 +418,7 @@ class ColaboradorDBManager:
             alternativas = ["c.nome LIKE %s", "c.matricula LIKE %s"]
             params += [padrao, padrao]
             digitos = re.sub(r"\D", "", termo)
-            if digitos and re.fullmatch(r"[\d.\-/\s]+", termo):
+            if busca_por_cpf and digitos and re.fullmatch(r"[\d.\-/\s]+", termo):
                 alternativas.append("c.cpf LIKE %s")
                 params.append(f"%{digitos}%")
             condicoes.append(f"({' OR '.join(alternativas)})")

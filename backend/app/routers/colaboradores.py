@@ -66,10 +66,14 @@ def listar_colaboradores(
 ):
     if situacao is not None and situacao not in SITUACOES:
         raise HTTPException(status_code=422, detail=MSG_SITUACAO_INVALIDA)
+    ve_dados_pessoais = user.role in ("Gestor", "Técnico")
+    # Sem `busca_por_cpf` para os demais papéis: com o CPF mascarado na resposta, a busca
+    # por trechos de dígitos ainda revelaria o CPF inteiro (oráculo).
     itens, total = db.listar(
-        busca=busca, situacao=situacao, unidade_id=unidade_id, limit=limit, offset=offset
+        busca=busca, situacao=situacao, unidade_id=unidade_id, limit=limit, offset=offset,
+        busca_por_cpf=ve_dados_pessoais,
     )
-    if user.role not in ("Gestor", "Técnico"):
+    if not ve_dados_pessoais:
         # Jovem Aprendiz vê só o necessário para identificar a pessoa: CPF
         # mascarado e nenhum dado de contato.
         itens = [

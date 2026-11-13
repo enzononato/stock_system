@@ -1017,3 +1017,20 @@ def test_rotulo_nome_das_unidades_nao_mudou(client_gestor):
     )
     assert resp.status_code == 422
     assert resp.json()["detail"].startswith("Nome da unidade: ")
+
+
+@pytest.mark.integration
+def test_busca_por_cpf_so_para_gestor_ou_tecnico(
+    client_gestor, client_tecnico, client_aprendiz, executar_sql
+):
+    criado = client_gestor.post("/api/colaboradores", json={"cpf": CPF_OUTRO, "nome": "Carlos"}).json()
+    executar_sql("UPDATE colaboradores SET matricula='7788' WHERE id=%s", (criado["id"],))
+    for cliente in (client_gestor, client_tecnico):
+        assert cliente.get("/api/colaboradores", params={"busca": "456789"}).json()["total"] == 1
+        assert cliente.get("/api/colaboradores", params={"busca": "123.456.789-09"}).json()["total"] == 1
+
+    # Jovem Aprendiz: a busca não vira oráculo de CPF (nome e matrícula continuam valendo).
+    for busca in ("456789", "123.456.789-09", "12345678909"):
+        assert client_aprendiz.get("/api/colaboradores", params={"busca": busca}).json()["total"] == 0
+    assert client_aprendiz.get("/api/colaboradores", params={"busca": "7788"}).json()["total"] == 1
+    assert client_aprendiz.get("/api/colaboradores", params={"busca": "carl"}).json()["total"] == 1
