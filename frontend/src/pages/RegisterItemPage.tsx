@@ -147,7 +147,9 @@ export default function RegisterItemPage({ mode }: Props) {
     }
   }, [mode, existingItem, hydrated])
 
-  const unidadeDoItem = unidades?.find((u) => u.nome === revenda)
+  // Comparação sem diferenciar maiúsculas: item legado com a unidade grafada de outro jeito
+  // não pode perder o local por causa da caixa.
+  const unidadeDoItem = unidades?.find((u) => u.nome.trim().toLocaleLowerCase('pt-BR') === revenda.trim().toLocaleLowerCase('pt-BR'))
   const unidadeId = unidadeDoItem ? unidadeDoItem.id : null
 
   const mutation = useMutation({
@@ -241,12 +243,13 @@ export default function RegisterItemPage({ mode }: Props) {
       tipo,
       brand,
       model,
-      revenda,
       nota_fiscal: notaFiscal,
       fornecedor,
       ...specificFields,
     }
     if (mode === 'create') {
+      // Na edição a unidade está travada (só muda pela transferência): não é enviada.
+      data['revenda'] = revenda
       data['date_registered'] = dateRegistered
       // Na criação só vão os campos preenchidos.
       if (valor !== null) data['valor_compra'] = valor
@@ -373,15 +376,19 @@ export default function RegisterItemPage({ mode }: Props) {
               <div className="flex items-center gap-2">
                 <Select
                   value={revenda}
-                  onValueChange={setRevenda}
-                  required
+                  // Na edição a unidade é travada: o Radix chama onValueChange('') quando o valor
+                  // gravado não está na lista (ex.: grafia antiga), e isso apagaria a unidade do estado.
+                  onValueChange={(v) => {
+                    if (mode === 'create') setRevenda(v)
+                  }}
+                  required={mode === 'create'}
                   disabled={constantsLoading || mode === 'edit'}
                 >
                   <SelectTrigger id="revenda" className="h-9">
                     <SelectValue placeholder="Selecione a revenda" />
                   </SelectTrigger>
                   <SelectContent>
-                    {revendas.map((r) => (
+                    {(revenda && !revendas.some((r) => r === revenda) ? [revenda, ...revendas] : revendas).map((r) => (
                       <SelectItem key={r} value={r}>
                         {upper(r)}
                       </SelectItem>

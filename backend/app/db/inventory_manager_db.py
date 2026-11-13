@@ -285,15 +285,16 @@ class InventoryDBManager:
             logger.exception("Erro de banco de dados")
             return False, "Erro ao processar a operação. Tente novamente."
 
-    def update_item(self, item_id: int, item_data: dict, logged_user: str):
+    def update_item(self, item_id: int, item_data: dict, logged_user: str, details: str | None = None):
         sets = ", ".join([f"{k}=%s" for k in item_data.keys()])
         values = list(item_data.values()) + [item_id]
         try:
             with get_cursor(dict_cursor=False) as cur:
                 cur.execute(f"UPDATE items SET {sets} WHERE id=%s", values)
                 cur.execute(
-                    "INSERT INTO history (item_id, operador, data_operacao, operation) VALUES (%s,%s,%s,'Edição')",
-                    (item_id, logged_user, datetime.now()),
+                    "INSERT INTO history (item_id, operador, data_operacao, operation, details) "
+                    "VALUES (%s,%s,%s,'Edição',%s)",
+                    (item_id, logged_user, datetime.now(), details),
                 )
             return True, f"Item {item_id} atualizado."
         except pymysql.MySQLError:

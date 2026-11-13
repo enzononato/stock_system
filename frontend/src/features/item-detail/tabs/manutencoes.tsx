@@ -50,10 +50,9 @@ function ManutencoesTab({ item }: { item: Item }) {
   }, [data, page, lastPage])
 
   const regra = podeAbrirManutencao(item, temEmAndamento)
-  const semConserto =
-    item.status === 'Em Manutenção' &&
-    !temEmAndamento &&
-    (data?.items ?? []).some((m) => m.status === 'sem_conserto')
+  // Pelo estado do equipamento (vindo da API), não pela página aberta da lista: `Em Manutenção`
+  // sem nenhuma ordem em andamento só acontece depois de um "sem conserto".
+  const semConserto = item.status === 'Em Manutenção' && andamento !== undefined && !temEmAndamento
 
   return (
     <div className="space-y-4">

@@ -192,3 +192,40 @@ def test_nf_exige_gestor_ou_tecnico(client_aprendiz, client_tecnico, item_dispon
     assert resp.json()["detail"] == "Acesso restrito a Gestor ou Técnico."
     assert client_aprendiz.get(rota).status_code == 403
     assert client_tecnico.post(rota, files=PDF).status_code == 200
+
+
+def test_editar_item_legado_com_revenda_nula_nao_exige_transferencia(client_gestor, item_disponivel, executar_sql):
+    executar_sql("UPDATE items SET revenda=NULL WHERE id=%s", (item_disponivel["id"],))
+    resp = client_gestor.put(f"/api/items/{item_disponivel['id']}", json={"revenda": "", "brand": "Nova"})
+    assert resp.status_code == 200, resp.text
+    item = client_gestor.get(f"/api/items/{item_disponivel['id']}").json()
+    assert item["brand"] == "Nova"
+    assert item["revenda"] is None
+    # Só a revenda vazia: nada a atualizar, mas não é erro.
+    assert client_gestor.put(f"/api/items/{item_disponivel['id']}", json={"revenda": ""}).status_code == 200
+
+
+def test_editar_com_revenda_em_outra_caixa_nao_e_transferencia(client_gestor, criar_unidade):
+    u = criar_unidade(nome="Revalle Juazeiro")
+    local_id = _local(client_gestor, u)
+    item_id = _criar(client_gestor, local_id=local_id)
+    resp = client_gestor.put(
+        f"/api/items/{item_id}", json={"revenda": "REVALLE JUAZEIRO", "local_id": local_id, "brand": "Z"}
+    )
+    assert resp.status_code == 200, resp.text
+    item = client_gestor.get(f"/api/items/{item_id}").json()
+    assert item["revenda"] == "Revalle Juazeiro"  # a caixa gravada não é reescrita
+    assert item["local_id"] == local_id
+    assert item["brand"] == "Z"
+
+
+def test_anexar_nf_registra_edicao_com_detalhe(client_gestor):
+    from app.db.database_mysql import get_cursor
+
+    item_id = _criar(client_gestor)
+    assert client_gestor.post(f"/api/items/{item_id}/nota-fiscal", files=PDF).status_code == 200
+    with get_cursor(commit=False) as cur:
+        cur.execute(
+            "SELECT details FROM history WHERE item_id=%s AND operation='Edição' ORDER BY id DESC", (item_id,)
+        )
+        assert cur.fetchone()["details"] == "Nota fiscal anexada"

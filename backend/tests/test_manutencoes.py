@@ -335,3 +335,51 @@ def test_auditoria_das_demais_acoes(client_gestor, criar_item):
     for acao, mid in (("enviar", m1), ("em_reparo", m1), ("sem_conserto", m2), ("cancelar", m3)):
         linhas = _auditoria("manutencao", acao)
         assert [l["entidade_id"] for l in linhas] == [str(mid)], acao
+
+
+def test_cancelar_segunda_ordem_apos_sem_conserto_mantem_em_manutencao(client_gestor, item_disponivel):
+    id_item = item_disponivel["id"]
+    primeira = _abrir(client_gestor, id_item)
+    assert _retorno(client_gestor, primeira, resultado="sem_conserto").status_code == 200
+    segunda = _abrir(client_gestor, id_item, defeito="Segunda assistência")
+    resp = client_gestor.post(f"/api/manutencoes/{segunda}/cancelar", json={"motivo": "Desistiu"})
+    assert resp.status_code == 200
+    # O defeito conhecido continua: não vira "Disponível".
+    assert _item(client_gestor, id_item)["status"] == "Em Manutenção"
+    assert client_gestor.get(f"/api/manutencoes/{segunda}").json()["status"] == "cancelada"
+
+
+def test_cancelar_depois_de_reparo_bem_sucedido_volta_disponivel(client_gestor, item_disponivel):
+    id_item = item_disponivel["id"]
+    primeira = _abrir(client_gestor, id_item)
+    assert _retorno(client_gestor, primeira, resultado="sem_conserto").status_code == 200
+    segunda = _abrir(client_gestor, id_item)
+    assert _retorno(client_gestor, segunda, resultado="retornada").status_code == 200
+    assert _item(client_gestor, id_item)["status"] == "Disponível"
+    terceira = _abrir(client_gestor, id_item)
+    client_gestor.post(f"/api/manutencoes/{terceira}/cancelar", json={"motivo": "Engano"})
+    assert _item(client_gestor, id_item)["status"] == "Disponível"
+
+
+def test_retorno_nao_sobrescreve_status_alterado_fora_da_manutencao(client_gestor, item_disponivel, executar_sql):
+    id_item = item_disponivel["id"]
+    mid = _abrir(client_gestor, id_item)
+    # Simula outra operação (ex.: estorno) que mudou o status do item no meio do caminho.
+    executar_sql("UPDATE items SET status='Indisponível' WHERE id=%s", (id_item,))
+    resp = _retorno(client_gestor, mid, custo="10.00")
+    assert resp.status_code == 409
+    assert "status do equipamento mudou" in resp.json()["detail"]
+    assert _item(client_gestor, id_item)["status"] == "Indisponível"
+    m = client_gestor.get(f"/api/manutencoes/{mid}").json()
+    assert m["status"] == "aberta"
+    assert m["custo"] is None
+
+
+def test_cancelar_nao_sobrescreve_status_alterado_fora_da_manutencao(client_gestor, item_disponivel, executar_sql):
+    id_item = item_disponivel["id"]
+    mid = _abrir(client_gestor, id_item)
+    executar_sql("UPDATE items SET status='Indisponível' WHERE id=%s", (id_item,))
+    resp = client_gestor.post(f"/api/manutencoes/{mid}/cancelar", json={"motivo": "Engano"})
+    assert resp.status_code == 409
+    assert _item(client_gestor, id_item)["status"] == "Indisponível"
+    assert client_gestor.get(f"/api/manutencoes/{mid}").json()["status"] == "aberta"

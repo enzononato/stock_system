@@ -43,7 +43,8 @@ export function TransferirItemDialog({ item, open, onOpenChange, onTransferido }
     queryFn: () => listUnidades(),
     enabled: open,
   })
-  const destinos = unidades.filter((u) => u.is_active && u.nome !== item.revenda)
+  const atual = (item.revenda ?? '').trim().toLocaleLowerCase('pt-BR')
+  const destinos = unidades.filter((u) => u.is_active && u.nome.trim().toLocaleLowerCase('pt-BR') !== atual)
   const destino = destinos.find((u) => u.id === destinoId)
 
   function reiniciar() {
@@ -122,8 +123,10 @@ export function TransferirItemDialog({ item, open, onOpenChange, onTransferido }
             </select>
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <Label className="text-caption font-medium">Local de destino</Label>
+          <div role="group" aria-labelledby="transferir-local-rotulo" className="flex flex-col gap-1.5">
+            <span id="transferir-local-rotulo" className="text-caption font-medium text-foreground">
+              Local de destino
+            </span>
             <LocalSelect unidadeId={destinoId} value={localId} onChange={setLocalId} />
           </div>
 

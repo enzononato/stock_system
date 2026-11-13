@@ -127,6 +127,20 @@ class ManutencaoDBManager:
         return manutencao
 
     @staticmethod
+    def _devolver_item(cur, item_id: int) -> None:
+        """Item volta a Disponível só se ainda estiver `Em Manutenção`. Se outra operação mexeu
+        no status nesse meio tempo (ex.: estorno), nada é alterado: o erro desfaz a transação."""
+        cur.execute(
+            "UPDATE items SET status='Disponível' WHERE id=%s AND status='Em Manutenção'", (item_id,)
+        )
+        if cur.rowcount == 0:
+            raise ManutencaoErro(
+                409,
+                "O status do equipamento mudou fora da manutenção. "
+                "Confira o equipamento antes de encerrar a ordem.",
+            )
+
+    @staticmethod
     def _checar_transicao(manutencao: dict, novo: str) -> None:
         atual = manutencao["status"]
         if novo not in TRANSICOES[atual]:
@@ -193,7 +207,7 @@ class ManutencaoDBManager:
                     [resultado, datetime.now(), usuario, custo, anexo_key, *obs_params, manutencao_id],
                 )
                 if resultado == "retornada":
-                    cur.execute("UPDATE items SET status='Disponível' WHERE id=%s", (m["item_id"],))
+                    self._devolver_item(cur, m["item_id"])
                 # sem_conserto: o item continua "Em Manutenção" até a baixa (ou uma nova ordem).
         except ManutencaoErro:
             raise
@@ -212,7 +226,17 @@ class ManutencaoDBManager:
                     + obs_sql + " WHERE id=%s",
                     [datetime.now(), usuario, *obs_params, manutencao_id],
                 )
-                cur.execute("UPDATE items SET status='Disponível' WHERE id=%s", (m["item_id"],))
+                # Segunda ordem aberta depois de um "sem conserto": o equipamento segue com defeito
+                # conhecido, então continua "Em Manutenção" (só volta a Disponível se um reparo
+                # fechou como retornada depois). Senão volta a Disponível.
+                cur.execute(
+                    "SELECT status FROM manutencoes WHERE item_id=%s AND id<%s "
+                    "AND status IN ('sem_conserto','retornada') ORDER BY id DESC LIMIT 1",
+                    (m["item_id"], manutencao_id),
+                )
+                anterior = cur.fetchone()
+                if not (anterior and anterior["status"] == "sem_conserto"):
+                    self._devolver_item(cur, m["item_id"])
         except ManutencaoErro:
             raise
         except pymysql.MySQLError:

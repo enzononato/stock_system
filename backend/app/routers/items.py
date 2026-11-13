@@ -138,11 +138,18 @@ def update_item(
     if not item_data:
         raise HTTPException(status_code=400, detail="Nenhum campo para atualizar.")
 
-    # A unidade só muda pela transferência (fica registrada e muda o local junto).
-    if "revenda" in item_data and item_data["revenda"] != existing.get("revenda"):
-        raise HTTPException(
-            status_code=400, detail="Para mudar a unidade do equipamento, use a transferência."
-        )
+    # A unidade só muda pela transferência (fica registrada e muda o local junto). Vazio, ou igual
+    # à atual sem diferenciar maiúsculas, não é mudança: o campo sai da atualização (a caixa gravada
+    # não é reescrita e item legado com revenda NULL continua editável).
+    if "revenda" in item_data:
+        nova = (item_data.pop("revenda") or "").strip()
+        atual = (existing.get("revenda") or "").strip()
+        if nova and nova.casefold() != atual.casefold():
+            raise HTTPException(
+                status_code=400, detail="Para mudar a unidade do equipamento, use a transferência."
+            )
+        if not item_data:
+            return {"detail": f"Item {item_id} atualizado."}
     for campo in CAMPOS_DE_DATA:
         if item_data.get(campo) is not None:
             item_data[campo] = data_br_para_date(item_data[campo])
@@ -178,7 +185,9 @@ async def anexar_nota_fiscal(
     if not existing:
         raise HTTPException(status_code=404, detail="Item não encontrado.")
     key = await salvar_anexo(arquivo, CATEGORIA_NF, f"nf_{item_id}")
-    ok, msg = inv.update_item(item_id, {"nf_anexo_key": key}, current_user.username)
+    ok, msg = inv.update_item(
+        item_id, {"nf_anexo_key": key}, current_user.username, details="Nota fiscal anexada"
+    )
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
     audit.record_diff(

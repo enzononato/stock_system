@@ -85,6 +85,16 @@ describe('ManutencaoAcoes — diálogos', () => {
     expect(await screen.findByText('Retorno registrado. O equipamento voltou a Disponível.')).toBeInTheDocument()
   })
 
+  it('as opções de resultado ficam num grupo com legenda', async () => {
+    const user = userEvent.setup()
+    renderAcoes(manutencao())
+
+    await user.click(screen.getByRole('button', { name: 'Registrar retorno' }))
+    const dialogo = await screen.findByRole('dialog')
+    const grupo = within(dialogo).getByRole('group', { name: 'Resultado da manutenção' })
+    expect(within(grupo).getAllByRole('radio')).toHaveLength(2)
+  })
+
   it('sem conserto envia o resultado correspondente', async () => {
     let campos: Record<string, string> = {}
     server.use(

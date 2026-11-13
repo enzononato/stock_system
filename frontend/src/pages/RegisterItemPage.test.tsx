@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -7,6 +7,9 @@ import { server } from '@/test/server'
 import { renderWithClient } from '@/test/render'
 import { ToastContainer } from '@/components/ui/toast'
 import RegisterItemPage from '@/pages/RegisterItemPage'
+
+// Os testes de cadastro digitam vários campos e abrem selects do Radix: sob carga (suíte inteira em paralelo) passam de 5 s.
+vi.setConfig({ testTimeout: 20000 })
 
 // Radix Select usa a Pointer Events API, que o jsdom não implementa.
 beforeAll(() => {
@@ -276,6 +279,7 @@ describe('RegisterItemPage — edição', () => {
     ).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Transferir' }))
+    expect(await screen.findByRole('group', { name: 'Local de destino' })).toBeInTheDocument()
     await user.selectOptions(await screen.findByLabelText('Unidade de destino'), 'REVALLE PETROLINA')
     await user.type(screen.getByLabelText('Motivo da transferência'), 'Mudança de setor')
     await user.click(screen.getByRole('button', { name: 'Confirmar transferência' }))
@@ -308,6 +312,52 @@ describe('RegisterItemPage — edição', () => {
     expect(corpo.valor_compra).toBeNull()
     expect(corpo.data_compra).toBe('10/01/2026')
     expect(corpo.garantia_ate).toBe('10/01/2027')
+    expect(corpo.local_id).toBe(5)
+    // A unidade está travada na edição: nunca vai no corpo.
+    expect(corpo).not.toHaveProperty('revenda')
+  })
+
+  it('item legado sem unidade pode ser salvo na edição, sem enviar revenda', async () => {
+    mockBase()
+    let corpo: Record<string, unknown> = {}
+    server.use(
+      http.get('/api/items/9', () => HttpResponse.json({ ...itemExistente, revenda: null, local_id: null })),
+      http.put('/api/items/9', async ({ request }) => {
+        corpo = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json({ detail: 'Item 9 atualizado.' })
+      })
+    )
+    const user = userEvent.setup()
+    renderPage('/edit/9')
+
+    await screen.findByLabelText('Valor de compra (R$)')
+    await user.click(screen.getByRole('button', { name: /Salvar Alterações/ }))
+
+    expect(await screen.findByText('Estoque')).toBeInTheDocument()
+    expect(corpo).not.toHaveProperty('revenda')
+  })
+
+  it('unidade grafada em outra caixa não apaga o local', async () => {
+    mockBase()
+    let corpo: Record<string, unknown> = {}
+    server.use(
+      http.get('/api/items/9', () => HttpResponse.json({ ...itemExistente, revenda: 'REVALLE JUAZEIRO' })),
+      http.put('/api/items/9', async ({ request }) => {
+        corpo = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json({ detail: 'Item 9 atualizado.' })
+      })
+    )
+    const user = userEvent.setup()
+    renderPage('/edit/9')
+
+    const local = await screen.findByLabelText('Local')
+    await waitFor(() => expect(within(local).getByRole('option', { name: 'Sala TI' })).toBeInTheDocument(), {
+      timeout: 4000,
+    })
+    expect(local).toHaveValue('5')
+    await user.click(screen.getByRole('button', { name: /Salvar Alterações/ }))
+
+    expect(await screen.findByText('Estoque')).toBeInTheDocument()
     expect(corpo.local_id).toBe(5)
   })
 

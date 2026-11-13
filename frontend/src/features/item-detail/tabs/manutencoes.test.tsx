@@ -136,6 +136,22 @@ describe('aba Manutenções', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Abrir manutenção' })).toBeEnabled())
   })
 
+  it('aviso de sem conserto vale pelo estado do equipamento, mesmo sem a ordem na página aberta', async () => {
+    mockLista([m({ id: 5, status: 'retornada' })])
+    renderTab({ status: 'Em Manutenção' })
+
+    expect(await screen.findByText('Equipamento sem conserto. Avalie a baixa.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Dar baixa' })).toHaveAttribute('href', '/remove?item=7')
+  })
+
+  it('equipamento Disponível não mostra o aviso de sem conserto', async () => {
+    mockLista([m({ id: 5, status: 'sem_conserto' })])
+    renderTab({ status: 'Disponível' })
+
+    await screen.findByText('Custo acumulado: R$ 239,90')
+    expect(screen.queryByText('Equipamento sem conserto. Avalie a baixa.')).not.toBeInTheDocument()
+  })
+
   it('sem conserto não mostra Dar baixa para o Técnico', async () => {
     mockLista([m({ id: 4, status: 'sem_conserto' })])
     renderTab({ status: 'Em Manutenção' }, 'Técnico')

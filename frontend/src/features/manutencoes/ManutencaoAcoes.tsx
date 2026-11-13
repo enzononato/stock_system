@@ -217,7 +217,8 @@ export function ManutencaoAcoes({ manutencao }: { manutencao: Manutencao }) {
               confirmarRetorno()
             }}
           >
-            <div className="flex flex-col gap-2">
+            <fieldset className="flex flex-col gap-2">
+              <legend className="mb-1 text-caption font-medium text-foreground">Resultado da manutenção</legend>
               <label className="flex items-center gap-2 text-body-sm text-foreground">
                 <input
                   type="radio"
@@ -238,7 +239,7 @@ export function ManutencaoAcoes({ manutencao }: { manutencao: Manutencao }) {
                 />
                 Sem conserto
               </label>
-            </div>
+            </fieldset>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor={`retorno-custo-${manutencao.id}`} className="text-caption font-medium">
                 Custo (R$)

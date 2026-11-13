@@ -175,11 +175,21 @@ def test_eventos_de_manutencao_sem_conserto_e_cancelamento(client_gestor, criar_
 
 
 @pytest.mark.integration
-def test_historico_mapeia_emprestimo_e_nao_inclui_estornados(client_gestor, item_pendente):
+def test_historico_mapeia_emprestimo(client_gestor, item_pendente):
     corpo = _eventos(client_gestor, item_pendente["id"])
     titulos = [e["titulo"] for e in corpo["eventos"]]
     assert "Cadastro do equipamento" in titulos
     assert "Empréstimo para Fulano de Tal" in titulos
+
+
+@pytest.mark.integration
+def test_historico_nao_inclui_entradas_estornadas(client_gestor, item_pendente, executar_sql):
+    executar_sql(
+        "UPDATE history SET is_reversed=1 WHERE item_id=%s AND operation='Empréstimo'", (item_pendente["id"],)
+    )
+    titulos = [e["titulo"] for e in _eventos(client_gestor, item_pendente["id"])["eventos"]]
+    assert "Cadastro do equipamento" in titulos
+    assert not any(t.startswith("Empréstimo") for t in titulos)
 
 
 @pytest.mark.integration
