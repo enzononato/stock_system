@@ -378,3 +378,134 @@ def test_job_sincronizar_colaboradores_usa_contexto_do_sistema(monkeypatch):
     monkeypatch.setattr(jobs, "ColaboradorDBManager", lambda: object())
     jobs.sincronizar_colaboradores()
     assert recebidos[0].username == "sistema"
+
+
+# ── robustez (rodada de revisão) ───────────────────────────────────────────
+
+class _CursorEspiao:
+    """Cursor da conexão do lock: registra os comandos e quebra no INSERT do estado."""
+
+    def __init__(self, real, comandos):
+        self._real = real
+        self._comandos = comandos
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self._real.close()
+        return False
+
+    def execute(self, sql, args=None):
+        self._comandos.append(sql)
+        if "INSERT" in sql.upper():
+            raise pymysql.err.OperationalError(2013, "Lost connection to MySQL server")
+        return self._real.execute(sql, args)
+
+    def fetchone(self):
+        return self._real.fetchone()
+
+
+class _ConexaoEspia:
+    def __init__(self, real, comandos):
+        self._real = real
+        self._comandos = comandos
+
+    def cursor(self, *a, **kw):
+        return _CursorEspiao(self._real.cursor(*a, **kw), self._comandos)
+
+    def __getattr__(self, nome):
+        return getattr(self._real, nome)
+
+
+@pytest.mark.integration
+def test_estado_e_gravado_por_outra_conexao_que_nao_a_do_lock(agendador, monkeypatch):
+    """A conexão do lock só segura/solta o lock e relê o estado; se ela estivesse morta na
+    hora de gravar (INSERT quebra nela), o estado ainda assim é gravado."""
+    comandos = []
+    original = agendador.get_connection
+    monkeypatch.setattr(agendador, "get_connection", lambda: _ConexaoEspia(original(), comandos))
+    chamadas = []
+    agendador.registrar_job(PREFIXO + "o", lambda: chamadas.append(1), diariamente_as="05:00")
+
+    assert agendador.executar_pendentes(_utc(2026, 1, 10, 8, 1)) == [PREFIXO + "o"]
+
+    assert chamadas == [1]
+    assert _estado(PREFIXO + "o")["ultimo_status"] == "ok"
+    assert all("INSERT" not in c.upper() for c in comandos)
+    assert any("GET_LOCK" in c for c in comandos) and any("RELEASE_LOCK" in c for c in comandos)
+    # Estado gravado: não roda de novo no tique seguinte.
+    assert agendador.executar_pendentes(_utc(2026, 1, 10, 8, 2)) == []
+    assert chamadas == [1]
+
+
+@pytest.mark.integration
+def test_falha_ao_gravar_estado_avisa_sem_traceback_e_libera_o_lock(agendador, _test_schema, monkeypatch, caplog):
+    chamadas = []
+    job = agendador.Job(PREFIXO + "w", lambda: chamadas.append(1), a_cada_segundos=60)
+
+    def sem_banco(*a, **kw):
+        raise pymysql.err.OperationalError(2003, "Can't connect to MySQL server")
+
+    monkeypatch.setattr(agendador, "get_cursor", sem_banco)
+    with caplog.at_level("WARNING"):
+        assert agendador._executar_com_trava(job, _utc(2026, 1, 10, 12, 0)) is True
+    assert chamadas == [1]
+    avisos = [r for r in caplog.records if r.levelname == "WARNING" and "gravar o estado" in r.getMessage()]
+    assert len(avisos) == 1 and avisos[0].exc_info is None
+
+    conn = _conexao_crua(_test_schema)
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT GET_LOCK(%s, 0)", (agendador.nome_do_lock(job.nome),))
+            assert cur.fetchone()[0] == 1  # o lock foi solto apesar da falha
+    finally:
+        conn.close()
+
+
+@pytest.mark.integration
+def test_ultima_execucao_sem_microssegundos_nao_pula_o_proximo_tique(agendador):
+    """DATETIME arredonda 12:00:00.7 para 12:00:01; sem truncar, o tique de 12:01:00.2
+    veria só 59,2 s e pularia o job de 60 s."""
+    chamadas = []
+    agendador.registrar_job(PREFIXO + "m", lambda: chamadas.append(1), a_cada_segundos=60)
+
+    assert agendador.executar_pendentes(_utc(2026, 1, 10, 12, 0, 0, 700000)) == [PREFIXO + "m"]
+    assert _estado(PREFIXO + "m")["ultima_execucao"] == datetime(2026, 1, 10, 12, 0, 0)
+    assert agendador.executar_pendentes(_utc(2026, 1, 10, 12, 1, 0, 200000)) == [PREFIXO + "m"]
+    assert chamadas == [1, 1]
+
+
+@pytest.mark.unit
+def test_banco_fora_do_ar_vira_aviso_de_uma_linha_e_outros_erros_levam_traceback(monkeypatch, caplog):
+    from app.core import config
+    from app.services import scheduler
+
+    monkeypatch.setattr(config.settings, "SCHEDULER_ENABLED", True)
+    monkeypatch.setattr(scheduler, "TIQUE_SEGUNDOS", 0.01)
+    erros = [
+        pymysql.err.OperationalError(2003, "Can't connect"),
+        pymysql.err.InterfaceError(0, ""),
+        RuntimeError("bug"),
+    ]
+
+    def tique():
+        if erros:
+            raise erros.pop(0)
+        return []
+
+    monkeypatch.setattr(scheduler, "executar_pendentes", tique)
+
+    async def principal():
+        scheduler.iniciar()
+        await asyncio.sleep(0.2)
+        await scheduler.parar()
+
+    with caplog.at_level("WARNING"):
+        asyncio.run(principal())
+
+    registros = [r for r in caplog.records if "tique do agendador" in r.getMessage()]
+    assert len(registros) == 3
+    assert [r.levelname for r in registros] == ["WARNING", "WARNING", "ERROR"]
+    assert registros[0].exc_info is None and registros[1].exc_info is None
+    assert registros[2].exc_info is not None

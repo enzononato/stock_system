@@ -20,6 +20,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional
 from zoneinfo import ZoneInfo
 
+import pymysql
+
 from app.core import config as _config
 from app.db.database_mysql import get_connection, get_cursor
 
@@ -151,21 +153,49 @@ def _executar_com_trava(job: Job, agora: datetime) -> bool:
                 if not job_vencido(job, linha["ultima_execucao"] if linha else None, agora):
                     return False
                 status, erro = _rodar(job)
-                cur.execute(
-                    "INSERT INTO scheduler_execucoes (nome, ultima_execucao, ultimo_status, ultimo_erro) "
-                    "VALUES (%s, %s, %s, %s) "
-                    "ON DUPLICATE KEY UPDATE ultima_execucao=VALUES(ultima_execucao), "
-                    "ultimo_status=VALUES(ultimo_status), ultimo_erro=VALUES(ultimo_erro)",
-                    (job.nome, _em_utc(agora).replace(tzinfo=None), status, erro),
-                )
+                # O estado vai por outra conexão (do pool): a do lock pode ter ficado ociosa
+                # durante um job longo e ter sido derrubada (wait_timeout/proxy).
+                _gravar_estado(job, agora, status, erro)
                 return True
             finally:
                 try:
                     cur.execute("SELECT RELEASE_LOCK(%s)", (lock,))
-                except Exception:
-                    logger.exception("Falha ao liberar o lock do job %s.", job.nome)
+                except Exception as e:
+                    # Conexão derrubada já perdeu o lock; fechá-la (abaixo) basta.
+                    logger.warning(
+                        "Falha ao liberar o lock do job %s (%s).", job.nome, type(e).__name__
+                    )
     finally:
         conn.close()
+
+
+def _gravar_estado(job: Job, agora: datetime, status: str, erro: Optional[str]) -> None:
+    """Grava o resultado do job numa conexão do pool. Falha vira aviso (sem traceback): o
+    job já rodou e o lock ainda precisa ser liberado."""
+    try:
+        with get_cursor() as cur:
+            cur.execute(
+                "INSERT INTO scheduler_execucoes (nome, ultima_execucao, ultimo_status, ultimo_erro) "
+                "VALUES (%s, %s, %s, %s) "
+                "ON DUPLICATE KEY UPDATE ultima_execucao=VALUES(ultima_execucao), "
+                "ultimo_status=VALUES(ultimo_status), ultimo_erro=VALUES(ultimo_erro)",
+                # Sem microssegundos: o DATETIME arredondaria para cima e um job de 60 s
+                # poderia ser pulado no tique seguinte.
+                (job.nome, _em_utc(agora).replace(tzinfo=None, microsecond=0), status, erro),
+            )
+    except Exception as e:
+        logger.warning(
+            "Não foi possível gravar o estado do job %s (%s); ele pode rodar de novo.",
+            job.nome, type(e).__name__,
+        )
+
+
+def _logar_falha(mensagem: str, e: Exception) -> None:
+    """Banco fora do ar vira uma linha de aviso; qualquer outra falha leva o traceback."""
+    if isinstance(e, (pymysql.err.OperationalError, pymysql.err.InterfaceError)):
+        logger.warning("%s Banco indisponível (%s).", mensagem, type(e).__name__)
+    else:
+        logger.error(mensagem, exc_info=e)
 
 
 def executar_pendentes(agora: Optional[datetime] = None) -> list[str]:
@@ -185,8 +215,8 @@ def executar_pendentes(agora: Optional[datetime] = None) -> list[str]:
         try:
             if _executar_com_trava(job, agora):
                 executados.append(job.nome)
-        except Exception:
-            logger.exception("Falha ao executar o job %s.", job.nome)
+        except Exception as e:
+            _logar_falha(f"Falha ao executar o job {job.nome}.", e)
     return executados
 
 
@@ -197,10 +227,8 @@ async def _laco() -> None:
     while True:
         try:
             await asyncio.to_thread(executar_pendentes)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            logger.exception("Falha no tique do agendador.")
+        except Exception as e:  # CancelledError não é Exception: propaga e encerra o laço
+            _logar_falha("Falha no tique do agendador.", e)
         await asyncio.sleep(TIQUE_SEGUNDOS)
 
 
