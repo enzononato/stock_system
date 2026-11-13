@@ -5,7 +5,8 @@ from pathlib import Path
 import pymysql
 import pytest
 
-pytestmark = pytest.mark.integration
+# `_test_schema` garante o banco (e as migrações já aplicadas) mesmo quando o teste não pede fixture.
+pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("_test_schema")]
 
 PASTA = Path(__file__).resolve().parent.parent / "migrations"
 COLUNAS_COMPRA = ("valor_compra", "data_compra", "garantia_ate", "nf_anexo_key")
