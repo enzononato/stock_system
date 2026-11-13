@@ -151,14 +151,23 @@ def concluir_assinatura(
 def anexar_assinado(
     termo_id: int, conteudo: bytes, nome_arquivo: str, operador: str, ctx: AuditContext
 ) -> dict:
-    """Upload manual do PDF assinado de uma solicitação."""
+    """Upload manual do PDF assinado de uma solicitação.
+
+    Serializado com o retorno do RevSign pela mesma trava por solicitação: assinatura manual e
+    webhook ao mesmo tempo não confirmam o empréstimo duas vezes.
+    """
+    from app.services.termos_retorno import trava  # import tardio: termos_retorno importa este módulo
+
     termos = get_termo_db()
-    termo = termos.obter(termo_id)
-    if termo is None:
-        raise TermoErro("Solicitação de termo não encontrada.")
-    if termo["status"] not in ("enviado", "manual", "erro"):
-        raise TermoErro("Esta solicitação não aceita anexo.")
-    ok, msg, _ = concluir_assinatura(termo, conteudo, nome_arquivo, operador, ctx, origem="manual")
-    if not ok:
-        raise TermoErro(msg)
-    return termos.obter(termo_id)
+    with trava(termo_id) as pegou:
+        if not pegou:
+            raise TermoErro("Esta solicitação está sendo processada. Tente novamente em instantes.")
+        termo = termos.obter(termo_id)
+        if termo is None:
+            raise TermoErro("Solicitação de termo não encontrada.")
+        if termo["status"] not in ("enviado", "manual", "erro"):
+            raise TermoErro("Esta solicitação não aceita anexo.")
+        ok, msg, _ = concluir_assinatura(termo, conteudo, nome_arquivo, operador, ctx, origem="manual")
+        if not ok:
+            raise TermoErro(msg)
+        return termos.obter(termo_id)
