@@ -35,6 +35,7 @@ class LocalStorage:
 
     def save(self, category: str, filename: str, content: bytes) -> str:
         path = os.path.join(self.base_path, category, filename)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "wb") as f:
             f.write(content)
         return f"{category}/{filename}"
