@@ -3,14 +3,14 @@ from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, Q
 from typing import Optional
 from datetime import datetime
 
-from app.schemas.items import ItemCreate, ItemUpdate, ItemResponse
+from app.schemas.items import ItemCreate, ItemUpdate, ItemResponse, TransferenciaCreate
 from app.schemas.common import Paginated
 from app.db.inventory_manager_db import InventoryDBManager
-from app.db.transferencia_db import erro_local
+from app.db.transferencia_db import erro_local, TransferenciaDBManager, TransferenciaErro
 from app.schemas.validators import data_br_para_date
 from app.services.anexos import CATEGORIA_NF, resposta_anexo, salvar_anexo
 from app.dependencies import (
-    get_current_user, gestor_or_tecnico, gestor_only, get_inventory_db, get_audit_context, CurrentUser,
+    get_current_user, gestor_or_tecnico, gestor_only, get_inventory_db, get_audit_context, get_transferencia_db, CurrentUser,
 )
 from app.services import audit
 from app.services.audit import AuditContext
@@ -177,6 +177,29 @@ def baixar_nota_fiscal(
     if not item.get("nf_anexo_key"):
         raise HTTPException(status_code=404, detail="Nenhuma nota fiscal anexada a este equipamento.")
     return resposta_anexo(item["nf_anexo_key"], f"nota_fiscal_item_{item_id}")
+
+
+@router.post("/{item_id}/transferir", response_model=dict)
+def transferir_item(
+    item_id: int,
+    body: TransferenciaCreate,
+    current_user: CurrentUser = Depends(gestor_or_tecnico),
+    transferencias: TransferenciaDBManager = Depends(get_transferencia_db),
+    ctx: AuditContext = Depends(get_audit_context),
+):
+    try:
+        r = transferencias.transferir(
+            item_id, body.para_unidade_id, body.para_local_id, body.motivo, current_user.username
+        )
+    except TransferenciaErro as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+    audit.record(
+        ctx, "item", item_id, "transferir",
+        antes={"revenda": r["de_unidade"], "local_id": r["de_local_id"]},
+        depois={"revenda": r["para_unidade"], "local_id": r["para_local_id"], "motivo": body.motivo},
+    )
+    de = r["de_unidade"] or "sem unidade"
+    return {"detail": f"Equipamento transferido de {de} para {r['para_unidade']}.", "id": r["id"]}
 
 
 @router.delete("/{item_id}", response_model=dict)

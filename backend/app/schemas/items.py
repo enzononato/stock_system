@@ -4,6 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from app.schemas.validators import (
+    blank_to_none,
     validar_nota_fiscal,
     normalizar_mac,
     validar_ip,
@@ -123,6 +124,22 @@ class ItemUpdate(BaseModel, _ItemDomainValidators):
     data_compra: Optional[str] = None
     garantia_ate: Optional[str] = None
     local_id: Optional[int] = None
+
+
+class TransferenciaCreate(BaseModel):
+    para_unidade_id: int
+    para_local_id: Optional[int] = None
+    motivo: str
+
+    @field_validator("motivo")
+    @classmethod
+    def _validar_motivo(cls, v):
+        v = blank_to_none(v)
+        if v is None:
+            raise ValueError("Informe o motivo da transferência.")
+        if len(v) > 255:
+            raise ValueError("O motivo deve ter no máximo 255 caracteres.")
+        return v
 
 
 class ItemResponse(BaseModel):

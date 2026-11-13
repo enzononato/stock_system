@@ -78,6 +78,10 @@ _ROTULOS_DE_CAMPO = {
     "valor_compra": "Valor de compra",
     "data_compra": "Data da compra",
     "garantia_ate": "Fim da garantia",
+    # Transferência do equipamento (F4)
+    "motivo": "Motivo",
+    "para_unidade_id": "Unidade de destino",
+    "para_local_id": "Local de destino",
 }
 
 # "nome" vale "Nome da unidade" nas unidades; nas rotas de colaboradores e locais é só "Nome".
