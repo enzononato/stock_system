@@ -1,8 +1,10 @@
+from dataclasses import asdict
 import os
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, Query
 from typing import Optional
 from datetime import datetime
 
+from app.schemas.linha_do_tempo import LinhaDoTempoResponse
 from app.schemas.items import ItemCreate, ItemUpdate, ItemResponse, TransferenciaCreate
 from app.schemas.common import Paginated
 from app.db.inventory_manager_db import InventoryDBManager
@@ -17,6 +19,7 @@ from app.dependencies import (
     get_current_user, gestor_or_tecnico, gestor_only, get_inventory_db, get_audit_context, get_transferencia_db, get_manutencao_db, CurrentUser,
 )
 from app.services import audit
+from app.services.linha_do_tempo import item_existe, montar_linha_do_tempo
 from app.services.audit import AuditContext
 from app.core.storage import storage
 from app.core.config import settings
@@ -66,6 +69,22 @@ def get_item(
     if not item:
         raise HTTPException(status_code=404, detail="Item não encontrado.")
     return item
+
+
+@router.get("/{item_id}/linha-do-tempo", response_model=LinhaDoTempoResponse)
+def linha_do_tempo(
+    item_id: int,
+    _: CurrentUser = Depends(gestor_or_tecnico),
+):
+    # Equipamento baixado continua com linha do tempo: o 404 é só para id que nunca existiu.
+    if not item_existe(item_id):
+        raise HTTPException(status_code=404, detail="Item não encontrado.")
+    resultado = montar_linha_do_tempo(item_id)
+    return {
+        "item_id": item_id,
+        "eventos": [asdict(e) for e in resultado.eventos],
+        "fontes_com_erro": resultado.fontes_com_erro,
+    }
 
 
 @router.post("", response_model=dict)
