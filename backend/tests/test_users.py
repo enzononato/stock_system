@@ -34,7 +34,7 @@ class TestCriarUsuario:
         assert resp.status_code == 200
         usuario = next(u for u in resp.json() if u["username"] == usuario_gestor["username"])
         assert "password" not in usuario
-        assert set(usuario.keys()) == {"id", "username", "role"}
+        assert set(usuario.keys()) == {"id", "username", "role", "email", "totp_ativo"}
 
 
 class TestRemoverUsuario:

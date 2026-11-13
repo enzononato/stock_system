@@ -1,0 +1,150 @@
+import { useEffect, useState, lazy, Suspense, type ReactNode } from 'react'
+import { LogoFallback } from '@/components/auth/LogoFallback'
+import { ShieldCheck, Sparkles } from 'lucide-react'
+
+// Carregamento sob demanda do WebGL three.js (isolado do bundle principal) —
+// só é importado quando o painel institucional de fato precisa montá-lo.
+const ThreeLogoCanvas = lazy(() => import('@/components/auth/ThreeLogoCanvas'))
+
+interface AuthShellProps {
+  titulo: string
+  descricao?: string
+  children: ReactNode
+}
+
+/**
+ * Layout das telas públicas de autenticação (login, esqueci minha senha,
+ * redefinir senha): painel institucional com o logo 3D sob demanda e, ao lado,
+ * o card com título, descrição e o conteúdo da etapa.
+ */
+export default function AuthShell({ titulo, descricao, children }: AuthShellProps) {
+  const [isDesktop, setIsDesktop] = useState(false)
+
+  useEffect(() => {
+    // Detecta viewport desktop para renderização seletiva do 3D — mesmo
+    // abaixo de lg o painel institucional fica com `hidden`, mas sem esta
+    // checagem o React ainda inicializaria o WebGLRenderer escondido.
+    const checkDesktop = () => setIsDesktop(window.innerWidth >= 1024)
+    checkDesktop()
+    window.addEventListener('resize', checkDesktop)
+    return () => window.removeEventListener('resize', checkDesktop)
+  }, [])
+
+  useEffect(() => {
+    // Bloqueia qualquer possibilidade de scroll no body durante estas rotas
+    const originalOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = originalOverflow
+    }
+  }, [])
+
+  return (
+    <div className="relative h-screen h-[100dvh] max-h-[100dvh] w-full max-w-[100vw] bg-background overflow-hidden flex flex-col lg:grid lg:grid-cols-[1.2fr_minmax(420px,520px)] text-foreground">
+      {/* Malha técnica e glows radiais de fundo (Enterprise Core) */}
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-grid-tech opacity-40" aria-hidden />
+      <div
+        className="pointer-events-none absolute -top-40 -left-40 size-[600px] rounded-full bg-[var(--login-wash)] blur-[120px] -z-10"
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute bottom-0 right-1/3 size-[500px] rounded-full bg-[var(--login-wash-soft)] blur-[100px] -z-10"
+        aria-hidden
+      />
+
+      {/* PAINEL INSTITUCIONAL — some abaixo de lg, só o formulário aparece */}
+      <section className="relative hidden lg:flex flex-col justify-between p-8 xl:p-12 border-r border-[var(--login-divider)] bg-gradient-to-br from-sidebar via-background to-sidebar overflow-hidden h-full max-h-[100dvh]">
+        {/* Topo institucional */}
+        <div className="relative z-10 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="flex size-9 items-center justify-center rounded-lg border border-[var(--login-border-strong)] bg-[var(--login-wash)] shadow-sm">
+              <img src="/logo-revalle.jpg" alt="Revalle" className="size-7 rounded object-cover" />
+            </div>
+            <div>
+              <span className="text-sm font-bold tracking-tight text-foreground">Revalle</span>
+              <span className="ml-2 rounded border border-[var(--login-border)] bg-[var(--login-wash)] px-1.5 py-0.5 text-[10px] font-semibold text-brand-text uppercase">
+                Enterprise Core
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 rounded-full border border-[var(--login-divider)] bg-[var(--login-glass)] px-3 py-1 text-xs text-muted-foreground backdrop-blur-md">
+            <span className="size-2 rounded-full bg-[var(--status-available)] animate-pulse" />
+            <span>Sistema Operacional</span>
+          </div>
+        </div>
+
+        {/* Centro: logo 3D interativo ou fallback vetorial */}
+        <div className="relative z-10 my-auto flex flex-1 min-h-[260px] max-h-[460px] w-full items-center justify-center">
+          {/* Anéis decorativos concêntricos */}
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center -z-10">
+            <div className="size-[420px] rounded-full border border-[var(--login-wash)] opacity-60" />
+            <div className="size-[520px] rounded-full border border-dashed border-[var(--login-border)] opacity-40" />
+          </div>
+
+          {isDesktop ? (
+            <Suspense fallback={<LogoFallback />}>
+              <ThreeLogoCanvas />
+            </Suspense>
+          ) : (
+            <LogoFallback />
+          )}
+        </div>
+
+        {/* Rodapé institucional */}
+        <div className="relative z-10 space-y-3 shrink-0">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-brand-text">
+            <Sparkles className="size-3.5" />
+            <span>Controle Patrimonial de Alto Desempenho</span>
+          </div>
+          <h2 className="text-2xl font-bold tracking-tight text-foreground xl:text-3xl max-w-lg leading-snug">
+            Gestão unificada de ativos de TI, vínculos e termos com rastreabilidade total.
+          </h2>
+        </div>
+      </section>
+
+      {/* PAINEL DE ACESSO — conteúdo da etapa. Rola quando a etapa é mais alta que a tela
+          (QR code, códigos de recuperação); `my-auto` centraliza sem cortar o topo. */}
+      <section className="relative z-10 flex flex-1 p-6 sm:p-8 lg:p-10 overflow-y-auto h-full max-h-[100dvh]">
+        <div className="w-full max-w-[400px] space-y-5 my-auto mx-auto shrink-0">
+          {/* Identidade compacta — some a partir de lg (o painel institucional
+              ao lado já mostra a marca); abaixo de lg é o painel que some, e
+              sem isto a tela ficaria sem nenhuma identidade visual. */}
+          <div className="lg:hidden flex flex-col items-center text-center mb-6">
+            <div className="flex size-12 items-center justify-center rounded-xl border border-[var(--login-border-strong)] bg-[var(--login-wash)] mb-3 shadow-md">
+              <img src="/logo-revalle.jpg" alt="Revalle" className="size-9 rounded-lg object-cover" />
+            </div>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">Controle de Estoque</h1>
+          </div>
+
+          {/* Card */}
+          <div className="rounded-2xl border border-[var(--login-divider)] bg-[var(--login-glass)] p-6 sm:p-8 backdrop-blur-xl shadow-xl transition-all duration-300 hover:border-[var(--login-border-strong)]">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="size-2 rounded-full bg-primary" />
+                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Acesso Restrito
+                </p>
+              </div>
+              <h2 className="mt-2 text-2xl font-bold tracking-tight text-foreground">{titulo}</h2>
+              {descricao && (
+                <p className="mt-1 text-xs text-muted-foreground leading-relaxed">{descricao}</p>
+              )}
+            </div>
+
+            <div className="mt-6">{children}</div>
+
+            <div className="mt-6 pt-5 border-t border-[var(--login-divider)] flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground">
+              <ShieldCheck className="size-3.5 text-[var(--status-available)] shrink-0" aria-hidden />
+              <span>Autenticação Segura JWT</span>
+            </div>
+          </div>
+
+          <p className="text-center text-[11px] text-muted-foreground">
+            Revalle Controle de Patrimônio • TI & Operações
+          </p>
+        </div>
+      </section>
+    </div>
+  )
+}

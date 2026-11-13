@@ -1,9 +1,21 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { listUsers, createUser, removeUser, updatePassword, type User } from '@/api/users'
+import {
+  listUsers,
+  createUser,
+  removeUser,
+  updatePassword,
+  updateUserEmail,
+  zerar2fa,
+  type User,
+} from '@/api/users'
+import { useAuth } from '@/contexts/AuthContext'
+import { usePageSize } from '@/hooks/usePageSize'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Pagination } from '@/components/ui/Pagination'
+import { StatusPill } from '@/components/ui/StatusPill'
 import {
   Select,
   SelectContent,
@@ -11,6 +23,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { toast } from '@/components/ui/toast'
 import { getErrorMessage } from '@/lib/api-error'
 import {
@@ -25,57 +44,54 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
-import { Trash2, Key, ShieldCheck, Wrench, GraduationCap, X, Check } from 'lucide-react'
+import { Trash2, Key, Mail, ShieldOff, X, Check, Search } from 'lucide-react'
 
 const ROLES = ['Gestor', 'Técnico', 'Jovem Aprendiz'] as const
+const TODAS_AS_FUNCOES = 'todas'
 
-const ROLE_META: Record<
-  string,
-  {
-    label: string
-    sublabel: string
-    description: string
-    icon: typeof ShieldCheck
-  }
-> = {
-  Gestor: {
-    label: 'Gestor',
-    sublabel: 'NÍVEL ADMINISTRADOR',
-    description: 'ACESSO TOTAL: CADASTROS, RELATÓRIOS, ESTORNOS E CONFIGURAÇÕES DO SISTEMA.',
-    icon: ShieldCheck,
-  },
-  Técnico: {
-    label: 'Técnico',
-    sublabel: 'NÍVEL OPERADOR',
-    description: 'OPERAÇÕES DE ESTOQUE: EMPRÉSTIMOS, DEVOLUÇÕES, CADASTRO DE PERIFÉRICOS.',
-    icon: Wrench,
-  },
-  'Jovem Aprendiz': {
-    label: 'Jovem Aprendiz',
-    sublabel: 'NÍVEL ASSISTENTE',
-    description: 'CONSULTA E OPERAÇÕES LIMITADAS SOB SUPERVISÃO DE GESTOR OU TÉCNICO.',
-    icon: GraduationCap,
-  },
+function normalizar(texto: string): string {
+  return texto
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+}
+
+function PilulaDe2fa({ user }: { user: User }) {
+  if (user.totp_ativo) return <StatusPill status="Ativo" />
+  if (user.role === 'Gestor') return <StatusPill status="Pendente" />
+  return <StatusPill status="Inativo" tone="neutral" />
 }
 
 export default function UsersPage() {
   const queryClient = useQueryClient()
+  const { user: logado } = useAuth()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [role, setRole] = useState('')
+  const [email, setEmail] = useState('')
   const [changingPasswordId, setChangingPasswordId] = useState<number | null>(null)
   const [changingUsername, setChangingUsername] = useState<string>('')
   const [newPassword, setNewPassword] = useState('')
 
+  const [busca, setBusca] = useState('')
+  const [filtroFuncao, setFiltroFuncao] = useState(TODAS_AS_FUNCOES)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = usePageSize('usuarios')
+
+  const [editando, setEditando] = useState<User | null>(null)
+  const [emailEdicao, setEmailEdicao] = useState('')
+  const [erroEdicao, setErroEdicao] = useState('')
+
   const { data: users = [] } = useQuery({ queryKey: ['users'], queryFn: listUsers })
 
   const createMutation = useMutation({
-    mutationFn: () => createUser({ username, password, role }),
+    mutationFn: () => createUser({ username, password, role, email: email.trim() || null }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['users'] })
       setUsername('')
       setPassword('')
       setRole('')
+      setEmail('')
       toast('Usuário criado com sucesso!')
     },
     onError: (err: unknown) => toast(getErrorMessage(err, 'Erro ao criar usuário.'), 'error'),
@@ -105,15 +121,51 @@ export default function UsersPage() {
     onError: (err: unknown) => toast(getErrorMessage(err, 'Erro ao alterar senha.'), 'error'),
   })
 
-  // A lista de usuários é pequena e vem inteira de /api/users (sem paginação
-  // no servidor) — agrupar por função no cliente não esconde registros.
-  const byRole = ROLES.reduce<Record<string, User[]>>(
-    (acc, r) => {
-      acc[r] = users.filter((u) => u.role === r)
-      return acc
+  const emailMutation = useMutation({
+    mutationFn: ({ id, valor }: { id: number; valor: string | null }) => updateUserEmail(id, valor),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['users'] })
+      fecharEdicao()
+      toast('E-mail atualizado.')
     },
-    {} as Record<string, User[]>
-  )
+    onError: (err: unknown) => setErroEdicao(getErrorMessage(err, 'Erro ao atualizar o e-mail.')),
+  })
+
+  const zerarMutation = useMutation({
+    mutationFn: (id: number) => zerar2fa(id),
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: ['users'] })
+      toast(data.detail)
+    },
+    onError: (err: unknown) => toast(getErrorMessage(err, 'Erro ao zerar a verificação em duas etapas.'), 'error'),
+  })
+
+  function abrirEdicao(u: User) {
+    setEditando(u)
+    setEmailEdicao(u.email ?? '')
+    setErroEdicao('')
+  }
+
+  function fecharEdicao() {
+    setEditando(null)
+    setEmailEdicao('')
+    setErroEdicao('')
+  }
+
+  // A lista é pequena e vem inteira de /api/users (sem paginação no servidor):
+  // filtramos e paginamos aqui, no cliente.
+  const filtrados = useMemo(() => {
+    const termo = normalizar(busca.trim())
+    return users.filter((u) => {
+      if (filtroFuncao !== TODAS_AS_FUNCOES && u.role !== filtroFuncao) return false
+      if (!termo) return true
+      return normalizar(u.username).includes(termo) || normalizar(u.email ?? '').includes(termo)
+    })
+  }, [users, busca, filtroFuncao])
+
+  const ultimaPagina = Math.max(1, Math.ceil(filtrados.length / pageSize))
+  const paginaAtual = Math.min(page, ultimaPagina) // corrige quando a lista encolhe (remoção, filtro)
+  const visiveis = filtrados.slice((paginaAtual - 1) * pageSize, paginaAtual * pageSize)
 
   return (
     <div className="page-container-reading space-y-8">
@@ -121,7 +173,7 @@ export default function UsersPage() {
         eyebrow="Administração"
         eyebrowDetail="Controle de Acesso"
         title="Usuários"
-        description="Gerencie os usuários do sistema e seus níveis de acesso."
+        description="Gerencie os usuários do sistema, seus e-mails e níveis de acesso."
       />
 
       {/* Criar usuário */}
@@ -134,12 +186,13 @@ export default function UsersPage() {
       >
         <PanelHeader
           title="Cadastro de Usuário"
-          description="Defina usuário, senha e função de acesso."
+          description="Defina usuário, senha, função de acesso e, se houver, o e-mail de recuperação."
         />
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="flex flex-col gap-1.5">
-            <Label>Nome de Usuário *</Label>
+            <Label htmlFor="novo-username">Nome de Usuário *</Label>
             <Input
+              id="novo-username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
@@ -147,8 +200,9 @@ export default function UsersPage() {
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label>Senha *</Label>
+            <Label htmlFor="novo-password">Senha *</Label>
             <Input
+              id="novo-password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -157,9 +211,9 @@ export default function UsersPage() {
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label>Função *</Label>
+            <Label htmlFor="novo-role">Função *</Label>
             <Select value={role} onValueChange={setRole} required>
-              <SelectTrigger>
+              <SelectTrigger id="novo-role">
                 <SelectValue placeholder="Selecione" />
               </SelectTrigger>
               <SelectContent>
@@ -171,10 +225,25 @@ export default function UsersPage() {
               </SelectContent>
             </Select>
           </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="novo-email">E-mail</Label>
+            <Input
+              id="novo-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="nome@revalle.com.br"
+              autoComplete="off"
+            />
+          </div>
         </div>
         <div className="flex justify-end">
-          <Button type="submit" disabled={createMutation.isPending || !username || !password || !role}>
-            {createMutation.isPending ? 'Criando...' : 'Criar Usuário'}
+          <Button
+            type="submit"
+            loading={createMutation.isPending}
+            disabled={!username || !password || !role}
+          >
+            Criar Usuário
           </Button>
         </div>
       </form>
@@ -191,6 +260,7 @@ export default function UsersPage() {
               variant="ghost"
               size="icon"
               className="size-7 text-muted-foreground"
+              aria-label="Cancelar alteração de senha"
               onClick={() => {
                 setChangingPasswordId(null)
                 setChangingUsername('')
@@ -206,86 +276,160 @@ export default function UsersPage() {
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               placeholder="Nova senha"
+              aria-label="Nova senha"
               className="flex-1 h-9"
               autoFocus
             />
             <Button
               size="sm"
-              onClick={() =>
-                passwordMutation.mutate({ id: changingPasswordId, pass: newPassword })
-              }
-              disabled={!newPassword || passwordMutation.isPending}
+              onClick={() => passwordMutation.mutate({ id: changingPasswordId, pass: newPassword })}
+              disabled={!newPassword}
+              loading={passwordMutation.isPending}
               className="h-9"
             >
               <Check size={14} className="mr-1.5" />
-              {passwordMutation.isPending ? 'Salvando...' : 'Salvar'}
+              Salvar
             </Button>
           </div>
         </div>
       )}
 
-      {/* Cards por função */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {ROLES.map((r) => {
-          const meta = ROLE_META[r]
-          const Icon = meta.icon
-          const roleUsers = byRole[r] ?? []
-
-          return (
-            <div
-              key={r}
-              className="surface-panel p-5 flex flex-col gap-4"
+      {/* Lista de usuários */}
+      <section className="surface-panel p-6 space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative w-full sm:max-w-sm">
+            <Search
+              size={16}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+              aria-hidden
+            />
+            <Input
+              value={busca}
+              onChange={(e) => {
+                setBusca(e.target.value)
+                setPage(1)
+              }}
+              placeholder="Buscar por usuário ou e-mail"
+              aria-label="Buscar por usuário ou e-mail"
+              className="pl-9"
+            />
+          </div>
+          <div className="w-full sm:w-52">
+            <Select
+              value={filtroFuncao}
+              onValueChange={(v) => {
+                setFiltroFuncao(v)
+                setPage(1)
+              }}
             >
-              {/* Cabeçalho do card de função */}
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <Icon className="size-4 text-muted-foreground shrink-0" aria-hidden />
-                  <span className="font-semibold text-foreground text-body-sm">{meta.label}</span>
-                </div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                  {meta.sublabel}
-                </p>
-                <p className="text-[11px] text-muted-foreground leading-snug">
-                  {meta.description}
-                </p>
-              </div>
+              <SelectTrigger aria-label="Filtrar por função">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={TODAS_AS_FUNCOES}>Todas as funções</SelectItem>
+                {ROLES.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {r}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
 
-              {/* Lista de usuários */}
-              <div className="flex flex-col gap-1">
-                {roleUsers.length === 0 ? (
-                  <p className="text-caption text-muted-foreground italic py-2">
-                    Nenhum usuário neste nível.
-                  </p>
-                ) : (
-                  roleUsers.map((user) => (
-                    <div
-                      key={user.id}
-                      className="flex items-center justify-between px-3 py-2 rounded border border-border bg-surface-alt hover:bg-surface transition-colors group"
-                    >
-                      <div>
-                        <p className="text-body-sm font-medium text-foreground">{user.username}</p>
-                        <p className="text-[11px] font-mono text-muted-foreground">#{user.id}</p>
-                      </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-body-sm">
+            <thead>
+              <tr className="border-b border-border text-caption uppercase tracking-wider text-muted-foreground">
+                <th className="py-2 pr-4 font-semibold">Usuário</th>
+                <th className="py-2 pr-4 font-semibold">E-mail</th>
+                <th className="py-2 pr-4 font-semibold">Função</th>
+                <th className="py-2 pr-4 font-semibold">2FA</th>
+                <th className="py-2 font-semibold text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visiveis.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-6 text-center text-muted-foreground italic">
+                    Nenhum usuário encontrado.
+                  </td>
+                </tr>
+              ) : (
+                visiveis.map((u) => (
+                  <tr key={u.id} className="border-b border-border last:border-0">
+                    <td className="py-2.5 pr-4">
+                      <p className="font-medium text-foreground">{u.username}</p>
+                      <p className="text-[11px] font-mono text-muted-foreground">#{u.id}</p>
+                    </td>
+                    <td className="py-2.5 pr-4 text-foreground">{u.email ?? '—'}</td>
+                    <td className="py-2.5 pr-4 text-foreground">{u.role}</td>
+                    <td className="py-2.5 pr-4">
+                      <PilulaDe2fa user={u} />
+                    </td>
+                    <td className="py-2.5">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-7 text-muted-foreground hover:text-foreground"
+                          title="Editar e-mail"
+                          aria-label="Editar e-mail"
+                          onClick={() => abrirEdicao(u)}
+                        >
+                          <Mail size={13} />
+                        </Button>
 
-                      {/* `group-focus-within`: além do hover da FT_STC, as ações
-                          aparecem quando recebem foco pelo teclado. */}
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                        {/* Alterar senha */}
                         <Button
                           size="icon"
                           variant="ghost"
                           className="size-7 text-muted-foreground hover:text-foreground"
                           title="Alterar senha"
+                          aria-label="Alterar senha"
                           onClick={() => {
-                            setChangingPasswordId(user.id)
-                            setChangingUsername(user.username)
+                            setChangingPasswordId(u.id)
+                            setChangingUsername(u.username)
                             setNewPassword('')
                           }}
                         >
                           <Key size={13} />
                         </Button>
 
-                        {/* Remover usuário */}
+                        {u.totp_ativo && u.id !== logado?.id && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-7 text-muted-foreground hover:text-foreground"
+                                title="Zerar 2FA"
+                                aria-label="Zerar 2FA"
+                                disabled={zerarMutation.isPending}
+                              >
+                                <ShieldOff size={13} />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>
+                                  Zerar a verificação em duas etapas de "{u.username}"?
+                                </AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  As sessões abertas do usuário serão encerradas. Um Gestor terá de cadastrar
+                                  um novo autenticador no próximo login; os demais voltam a entrar só com a
+                                  senha.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => zerarMutation.mutate(u.id)}>
+                                  Zerar 2FA
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button
@@ -293,6 +437,7 @@ export default function UsersPage() {
                               variant="ghost"
                               className="size-7 text-muted-foreground hover:text-destructive"
                               title="Remover usuário"
+                              aria-label="Remover usuário"
                               disabled={removeMutation.isPending}
                             >
                               <Trash2 size={13} />
@@ -300,41 +445,85 @@ export default function UsersPage() {
                           </AlertDialogTrigger>
                           <AlertDialogContent>
                             <AlertDialogHeader>
-                              <AlertDialogTitle>
-                                Remover usuário "{user.username}"?
-                              </AlertDialogTitle>
+                              <AlertDialogTitle>Remover usuário "{u.username}"?</AlertDialogTitle>
                               <AlertDialogDescription>
-                                Esta ação não pode ser desfeita. Não é possível remover seu
-                                próprio usuário nem o último Gestor do sistema.
+                                Esta ação não pode ser desfeita. Não é possível remover seu próprio usuário
+                                nem o último Gestor do sistema.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => removeMutation.mutate(user.id)}
-                              >
+                              <AlertDialogAction onClick={() => removeMutation.mutate(u.id)}>
                                 Remover
                               </AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
                       </div>
-                    </div>
-                  ))
-                )}
-              </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
 
-              {/* Rodapé do card */}
-              <div className="border-t border-border pt-3 mt-auto">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                  {roleUsers.length}{' '}
-                  {roleUsers.length === 1 ? 'OPERADOR' : 'OPERADORES'}
-                </p>
-              </div>
+        <Pagination
+          page={paginaAtual}
+          pageSize={pageSize}
+          total={filtrados.length}
+          onPageChange={setPage}
+          onPageSizeChange={(n) => {
+            setPageSize(n)
+            setPage(1)
+          }}
+        />
+      </section>
+
+      {/* Editar e-mail */}
+      <Dialog open={editando !== null} onOpenChange={(aberto) => !aberto && fecharEdicao()}>
+        <DialogContent>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (editando) emailMutation.mutate({ id: editando.id, valor: emailEdicao.trim() || null })
+            }}
+            className="space-y-4"
+          >
+            <DialogHeader>
+              <DialogTitle>Editar e-mail — {editando?.username}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-1.5">
+              <Label htmlFor="email-edicao">E-mail</Label>
+              <Input
+                id="email-edicao"
+                type="email"
+                value={emailEdicao}
+                onChange={(e) => setEmailEdicao(e.target.value)}
+                placeholder="nome@revalle.com.br"
+                autoComplete="off"
+                autoFocus
+              />
+              <p className="text-caption text-muted-foreground">
+                É o canal de recuperação de senha. Deixe em branco para remover.
+              </p>
             </div>
-          )
-        })}
-      </div>
+            {erroEdicao && (
+              <p role="alert" className="text-body-sm text-destructive">
+                {erroEdicao}
+              </p>
+            )}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={fecharEdicao}>
+                Cancelar
+              </Button>
+              <Button type="submit" loading={emailMutation.isPending}>
+                Salvar
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

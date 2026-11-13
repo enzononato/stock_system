@@ -20,6 +20,9 @@ from app.routers import inventarios
 from app.routers import etiquetas
 from app.routers import manutencoes
 from app.routers import termos, integracoes_revsign
+from app.services.mfa import mfa_configurado
+from app.routers import auth_senha
+from app.routers import perfil
 
 logger = logging.getLogger(__name__)
 
@@ -115,12 +118,20 @@ _ROTULOS_DE_CAMPO = {
     "previsao_retorno": "Previsão de retorno",
     "item_id": "Equipamento",
     "agendado_para": "Data agendada",
+    # Campos de login (F2)
+    "nova_senha": "Nova senha",
+    "token": "Link",
+    "senha": "Senha",
+    "mfa_token": "Etapa de verificação",
 }
 
 # "nome" vale "Nome da unidade" nas unidades; nas rotas de colaboradores e locais é só "Nome".
 _ROTULOS_POR_ROTA = {
     "/api/colaboradores": {"nome": "Nome"},
     "/api/locais": {"nome": "Nome"},
+    # "identificador" e "codigo" têm outro sentido no login/2FA (F2) que nos equipamentos e no inventário (F6).
+    "/api/auth": {"identificador": "Usuário ou e-mail", "codigo": "Código"},
+    "/api/perfil": {"codigo": "Código"},
 }
 
 
@@ -178,6 +189,8 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(auth_senha.router)
+app.include_router(perfil.router)
 app.include_router(users.router)
 app.include_router(items.router)
 app.include_router(peripherals.router)
@@ -227,6 +240,32 @@ async def parar_agendador() -> None:
         await scheduler.parar()
     except Exception:
         logger.exception("Falha ao parar o agendador de tarefas.")
+
+
+@app.on_event("startup")
+def avisar_2fa_sem_chave() -> None:
+    """Avisa no boot que a verificação em duas etapas está desligada (sem chave TOTP válida)."""
+    if not mfa_configurado():
+        logger.warning(
+            "TOTP_ENCRYPTION_KEY ausente ou inválida: verificação em duas etapas desligada; "
+            "o Gestor entra só com a senha."
+        )
+
+
+@app.on_event("startup")
+def avisar_url_publica_local() -> None:
+    """Em produção, o link do e-mail de redefinição precisa apontar para o endereço público."""
+    from urllib.parse import urlparse
+
+    if settings.ENVIRONMENT != "production":
+        return
+    host = (urlparse(settings.APP_PUBLIC_URL).hostname or "").lower()
+    if host in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
+        logger.warning(
+            "APP_PUBLIC_URL aponta para %s em produção: os links dos e-mails (redefinição de senha) "
+            "não vão funcionar para os usuários. Ajuste no .env.",
+            host,
+        )
 
 
 @app.get("/api/health")

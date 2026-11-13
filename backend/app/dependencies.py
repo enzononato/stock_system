@@ -22,7 +22,10 @@ from app.db.inventario_db import InventarioDBManager
 from app.db.transferencia_db import TransferenciaDBManager
 from app.db.manutencao_db import ManutencaoDBManager
 from app.db.termo_db import TermoDBManager
+from app.db.password_reset_db import PasswordResetDBManager
+from app.db.mfa_db import MfaDBManager
 from app.services.audit import AuditContext
+from app.services.sessao import validar_sessao_ativa
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -44,6 +47,7 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     payload = decode_token(credentials.credentials, expected_type="access")
+    validar_sessao_ativa(payload)
     # O claim "sub" é sempre uma string no token (exigência do próprio padrão
     # JWT/python-jose); convertemos de volta para int, já que o id do
     # usuário no banco é numérico.
@@ -208,6 +212,25 @@ def get_audit_context(
         papel=user.role,
         ip=ip_real_do_cliente(request),
     )
+
+
+def contexto_auditoria_de(usuario: Optional[dict], request: Request) -> AuditContext:
+    """Contexto de auditoria para ações fora de uma sessão normal (redefinição de
+    senha, login em etapas): do próprio usuário, ou anônimo (só o IP) com None."""
+    ip = ip_real_do_cliente(request)
+    if usuario is None:
+        return AuditContext(None, None, None, ip)
+    return AuditContext(usuario["id"], usuario["username"], usuario["role"], ip)
+
+
+@lru_cache
+def get_password_reset_db() -> PasswordResetDBManager:
+    return PasswordResetDBManager()
+
+
+@lru_cache
+def get_mfa_db() -> MfaDBManager:
+    return MfaDBManager()
 
 
 limiter = Limiter(key_func=get_client_ip)

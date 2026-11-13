@@ -250,7 +250,9 @@ def test_criar_e_excluir_usuario_grava_sem_senha(client_gestor):
     )
     assert resp.status_code == 200
     criar = _unica("usuario", "criar")
-    assert criar["depois"] == {"id": int(criar["entidade_id"]), "username": "novo.aud", "role": "Técnico"}
+    assert criar["depois"] == {
+        "id": int(criar["entidade_id"]), "username": "novo.aud", "role": "Técnico", "email": None,
+    }
 
     resp = client_gestor.delete(f"/api/users/{criar['entidade_id']}")
     assert resp.status_code == 200

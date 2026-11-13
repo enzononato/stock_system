@@ -5,6 +5,7 @@ import { QrCode } from 'lucide-react'
 import { ClipboardCheck } from 'lucide-react'
 import { AppWindow, Boxes, KeyRound } from 'lucide-react'
 import { Wrench } from 'lucide-react'
+import { UserCog } from 'lucide-react'
 import {
   DashboardIcon,
   EstoqueIcon,
@@ -110,6 +111,10 @@ export const navGroups: NavGroup[] = [
       { to: '/acessos/sistemas', label: 'Sistemas', icon: AppWindow, roles: ['Gestor'] },
       { to: '/acessos/pacotes', label: 'Pacotes por função', icon: Boxes, roles: ['Gestor'] },
     ],
+  },
+  {
+    title: 'Conta',
+    items: [{ to: '/perfil', label: 'Meu perfil', icon: UserCog }],
   },
 ]
 
