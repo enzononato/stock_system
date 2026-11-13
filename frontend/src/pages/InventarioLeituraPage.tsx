@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { isAxiosError } from 'axios'
 import { Camera, CameraOff } from 'lucide-react'
 import {
   atualizarLeitura,
@@ -12,8 +13,8 @@ import {
   type Leitura,
 } from '@/api/inventarios'
 import { LeitorCamera } from '@/components/inventario/LeitorCamera'
+import { LocalEncontradoSelect } from '@/components/inventario/LocalEncontradoSelect'
 import { UltimaLeituraCard } from '@/components/inventario/UltimaLeituraCard'
-import { LocalSelect } from '@/components/locais/LocalSelect'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/StateBlocks'
@@ -69,20 +70,26 @@ export default function InventarioLeituraPage() {
     campoRef.current?.focus()
   }
 
+  /** Erro de escrita: com 409 o inventário foi encerrado/cancelado por outra pessoa, e a tela precisa saber. */
+  function tratarErro(err: unknown, fallback: string) {
+    toast.error(getErrorMessage(err, fallback))
+    if (isAxiosError(err) && err.response?.status === 409) {
+      void queryClient.invalidateQueries({ queryKey: ['inventario', id] })
+    }
+  }
+
   const registrar = useMutation({
-    mutationFn: (texto: string) => registrarLeitura(id, { codigo: texto, local_id_encontrado: localId }),
-    onMutate: () => {
-      registrando.current = true
-    },
-    onSuccess: (leitura) => {
+    mutationFn: ({ texto }: { texto: string; origem: 'formulario' | 'camera' }) =>
+      registrarLeitura(id, { codigo: texto, local_id_encontrado: localId }),
+    onSuccess: (leitura, { origem }) => {
       setUltima(leitura)
-      setCodigo('')
       invalidar()
-      focarCampo()
+      // Depois da câmera o foco não vai para o campo: abriria o teclado do celular por cima do vídeo.
+      if (origem === 'formulario') focarCampo()
     },
-    onError: (err: unknown) => {
-      toast.error(getErrorMessage(err, 'Erro ao registrar a leitura.'))
-      focarCampo()
+    onError: (err: unknown, { origem }) => {
+      tratarErro(err, 'Erro ao registrar a leitura.')
+      if (origem === 'formulario') focarCampo()
     },
     onSettled: () => {
       registrando.current = false
@@ -95,7 +102,7 @@ export default function InventarioLeituraPage() {
       setUltima({ ...leitura, duplicada: false })
       invalidar()
     },
-    onError: (err: unknown) => toast.error(getErrorMessage(err, 'Erro ao corrigir a leitura.')),
+    onError: (err: unknown) => tratarErro(err, 'Erro ao corrigir a leitura.'),
   })
 
   const desfazer = useMutation({
@@ -106,13 +113,15 @@ export default function InventarioLeituraPage() {
       toast.success('Leitura desfeita.')
       focarCampo()
     },
-    onError: (err: unknown) => toast.error(getErrorMessage(err, 'Erro ao desfazer a leitura.')),
+    onError: (err: unknown) => tratarErro(err, 'Erro ao desfazer a leitura.'),
   })
 
-  function lerDaCamera(texto: string) {
-    // Enquanto uma leitura está sendo gravada, o que a câmera enxergar é ignorado.
-    if (registrando.current) return
-    registrar.mutate(texto)
+  /** `false` = ocupada: a câmera não conta esse código como entregue e o entrega de novo no próximo quadro. */
+  function lerDaCamera(texto: string): boolean {
+    if (registrando.current) return false
+    registrando.current = true
+    registrar.mutate({ texto, origem: 'camera' })
+    return true
   }
 
   function aoErroDaCamera(erro: ErroCamera) {
@@ -165,7 +174,7 @@ export default function InventarioLeituraPage() {
 
       <label className="flex flex-col gap-1 text-caption text-muted-foreground">
         Estou no local
-        <LocalSelect unidadeId={inventario.unidade_id} value={localId} onChange={setLocalId} />
+        <LocalEncontradoSelect unidadeId={inventario.unidade_id} value={localId} onChange={setLocalId} />
       </label>
 
       <div className="space-y-3">
@@ -206,7 +215,11 @@ export default function InventarioLeituraPage() {
         onSubmit={(e) => {
           e.preventDefault()
           const texto = codigo.trim()
-          if (texto) registrar.mutate(texto)
+          if (!texto || registrando.current) return
+          // O campo esvazia ao enviar (não só no sucesso): o próximo código já pode ser digitado ou lido pelo USB.
+          setCodigo('')
+          registrando.current = true
+          registrar.mutate({ texto, origem: 'formulario' })
         }}
       >
         <label className="flex flex-col gap-1 text-caption text-muted-foreground">

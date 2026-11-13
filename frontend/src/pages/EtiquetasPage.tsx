@@ -382,6 +382,7 @@ export default function EtiquetasPage() {
             <>
               <div
                 className="max-h-[70vh] overflow-auto rounded border border-border bg-surface-alt p-2"
+                role="group"
                 aria-label="Prévia da folha"
               >
                 <div

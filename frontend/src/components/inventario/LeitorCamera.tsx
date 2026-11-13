@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react'
 import { ErroCamera, iniciarLeitor, type ControlesLeitor } from '@/features/inventario/scanner'
 
 interface LeitorCameraProps {
-  onCodigo: (texto: string) => void
+  /** `false` = a tela não aceitou o código (ocupada): ele não entra na janela de repetição e será entregue de novo. */
+  onCodigo: (texto: string) => boolean | void
   onErro: (erro: ErroCamera) => void
   /** A aba foi escondida e a câmera foi desligada: o pai avisa o usuário. */
   onPausar: () => void
@@ -37,9 +38,14 @@ export function LeitorCamera({ onCodigo, onErro, onPausar }: LeitorCameraProps) 
     iniciarLeitor(video, (texto) => {
       const agora = Date.now()
       const repetido = texto === ultimo.texto && agora - ultimo.em < JANELA_REPETICAO_MS
-      // Continuar enxergando o mesmo QR renova a janela: segurar a câmera parada não repete a leitura.
-      ultimo = { texto, em: agora }
-      if (!repetido) funcoes.current.onCodigo(texto)
+      if (repetido) {
+        // Continuar enxergando o mesmo QR renova a janela: segurar a câmera parada não repete a leitura.
+        ultimo = { texto, em: agora }
+        return
+      }
+      // Só o que a tela aceitou entra na janela: um código recusado (tela ocupada) segue
+      // à vista e é entregue de novo no quadro seguinte.
+      if (funcoes.current.onCodigo(texto) !== false) ultimo = { texto, em: agora }
     }).then(
       (c) => {
         // `encerrado` vale para desmontagem e para aba escondida: nos dois casos a câmera não deve ficar ligada.

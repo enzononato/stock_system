@@ -27,6 +27,12 @@ function tipoDoErro(e: unknown): TipoErroCamera {
   return 'falha'
 }
 
+function pararFluxo(video: HTMLVideoElement): void {
+  const fluxo = video.srcObject as MediaStream | null
+  fluxo?.getTracks().forEach((trilha) => trilha.stop())
+  video.srcObject = null
+}
+
 /**
  * Liga a câmera traseira e lê QR codes no `video`, chamando `onCodigo` com o texto
  * de cada leitura. O `@zxing/browser` só é carregado aqui, sob demanda. A câmera só
@@ -51,6 +57,8 @@ export async function iniciarLeitor(
       }
     )
   } catch (e) {
+    // O fluxo pode já ter sido ligado ao vídeo antes da falha: solta a câmera.
+    pararFluxo(video)
     throw e instanceof ErroCamera ? e : new ErroCamera(tipoDoErro(e))
   }
 
@@ -62,9 +70,7 @@ export async function iniciarLeitor(
         /* já parado */
       }
       // Garante que o indicador de câmera do navegador apague, mesmo se o leitor não soltou as trilhas.
-      const fluxo = video.srcObject as MediaStream | null
-      fluxo?.getTracks().forEach((trilha) => trilha.stop())
-      video.srcObject = null
+      pararFluxo(video)
     },
   }
 }

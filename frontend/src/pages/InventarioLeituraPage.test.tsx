@@ -116,7 +116,8 @@ describe('InventarioLeituraPage', () => {
     expect(await screen.findByText('Inventário #12 · JUAZEIRO')).toBeInTheDocument()
     expect(screen.getByText('Encontrados 2 de 10 · Faltam 8')).toBeInTheDocument()
     await screen.findByRole('option', { name: 'Recepção' })
-    await user.selectOptions(screen.getByLabelText('Local'), 'Recepção')
+    // O nome acessível do seletor é o mesmo do rótulo visível.
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Estou no local' }), 'Recepção')
     const campo = screen.getByLabelText(CAMPO)
 
     await user.type(campo, '#12{Enter}')
@@ -298,5 +299,98 @@ describe('InventarioLeituraPage', () => {
     expect(screen.getByText(/só funciona em conexão segura \(HTTPS\)/)).toBeInTheDocument()
     await user.type(screen.getByLabelText(CAMPO), '#12{Enter}')
     expect(await screen.findByText('Conferido')).toBeInTheDocument()
+  })
+
+  it('código B visto enquanto A grava não se perde: é enviado uma vez quando A termina', async () => {
+    let abrir: () => void = () => {}
+    const espera = new Promise<void>((r) => (abrir = r))
+    server.use(
+      http.post('/api/inventarios/12/leituras', async ({ request }) => {
+        const corpo = (await request.json()) as { codigo: string }
+        corposPost.push(corpo)
+        if (corpo.codigo === 'A') await espera
+        return HttpResponse.json(leitura({ codigo_lido: corpo.codigo }), { status: 201 })
+      })
+    )
+    let entregar: (t: string) => boolean | void = () => {}
+    mocks.iniciarLeitor.mockImplementation(async (_video, cb) => {
+      entregar = cb
+      return { parar: vi.fn() }
+    })
+    const user = userEvent.setup()
+    renderRota()
+    await user.click(await screen.findByRole('button', { name: 'Ler com a câmera' }))
+    await screen.findByLabelText('Imagem da câmera')
+
+    await act(async () => {
+      entregar('A')
+    })
+    await waitFor(() => expect(corposPost).toHaveLength(1))
+    await act(async () => {
+      entregar('B') // A ainda está gravando: B é recusado, sem POST
+    })
+    expect(corposPost).toHaveLength(1)
+
+    await act(async () => abrir())
+    await screen.findByText('Conferido')
+    await act(async () => {
+      entregar('B') // B continua à vista: agora passa
+      entregar('B') // e o quadro seguinte é só repetição
+    })
+
+    await waitFor(() => expect(corposPost.map((c) => (c as { codigo: string }).codigo)).toEqual(['A', 'B']))
+  })
+
+  it('409 (encerrado por outra pessoa) mostra que o inventário não está aberto e para de ler', async () => {
+    server.use(
+      http.post('/api/inventarios/12/leituras', () => {
+        status = 'encerrado'
+        return HttpResponse.json(
+          { detail: 'Este inventário não está aberto: não aceita leituras.' },
+          { status: 409 }
+        )
+      })
+    )
+    const user = userEvent.setup()
+    renderRota()
+
+    await user.type(await screen.findByLabelText(CAMPO), '#12{Enter}')
+
+    expect(await screen.findByText('Este inventário não está aberto.')).toBeInTheDocument()
+    expect(screen.queryByLabelText(CAMPO)).not.toBeInTheDocument()
+  })
+
+  it('o campo esvazia ao enviar, mesmo quando a gravação falha', async () => {
+    server.use(
+      http.post('/api/inventarios/12/leituras', () => HttpResponse.json({ detail: 'Falha ao gravar.' }, { status: 500 }))
+    )
+    const user = userEvent.setup()
+    renderRota()
+    const campo = await screen.findByLabelText(CAMPO)
+
+    await user.type(campo, 'SN-1{Enter}')
+
+    expect(campo).toHaveValue('')
+    expect(await screen.findByText('Falha ao gravar.')).toBeInTheDocument()
+    expect(campo).toHaveFocus()
+  })
+
+  it('depois de uma leitura pela câmera o foco não vai para o campo (não abre o teclado sobre o vídeo)', async () => {
+    let entregar: (t: string) => boolean | void = () => {}
+    mocks.iniciarLeitor.mockImplementation(async (_video, cb) => {
+      entregar = cb
+      return { parar: vi.fn() }
+    })
+    const user = userEvent.setup()
+    renderRota()
+    await user.click(await screen.findByRole('button', { name: 'Ler com a câmera' }))
+    await screen.findByLabelText('Imagem da câmera')
+
+    await act(async () => {
+      entregar('https://p.revalle.com.br/e/12')
+    })
+
+    expect(await screen.findByText('Conferido')).toBeInTheDocument()
+    expect(screen.getByLabelText(CAMPO)).not.toHaveFocus()
   })
 })

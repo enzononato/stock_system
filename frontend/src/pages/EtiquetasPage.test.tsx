@@ -110,7 +110,7 @@ describe('EtiquetasPage (/etiquetas)', () => {
     await gerarDosDoisItens(user)
 
     expect(corpoGerar).toEqual({ item_ids: [3, 5] })
-    const previa = screen.getByLabelText('Prévia da folha')
+    const previa = screen.getByRole('group', { name: 'Prévia da folha' })
     expect(within(previa).getByText('#3')).toBeInTheDocument()
     expect(screen.getByText('2 etiqueta(s) em 1 folha(s)')).toBeInTheDocument()
   })

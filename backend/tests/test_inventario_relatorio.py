@@ -220,3 +220,21 @@ def test_auditoria_encerrar(client_tecnico, unidade, criar_item, executar_sql):
     depois = json.loads(linha["depois"])
     assert linha["entidade_id"] == str(inv) and linha["username"] == "tecnico.teste"
     assert depois["status"] == "encerrado" and depois["nao_encontrados"] == 2
+
+
+def test_aprendiz_403_em_encerrar_relatorio_exportar_e_cancelar(client_aprendiz, client_tecnico, unidade):
+    inv = _abrir(client_tecnico, unidade["id"])
+    respostas = [
+        client_aprendiz.post(f"/api/inventarios/{inv}/encerrar"),
+        client_aprendiz.get(f"/api/inventarios/{inv}/relatorio"),
+        client_aprendiz.get(f"/api/inventarios/{inv}/relatorio/exportar?formato=xlsx"),
+        client_aprendiz.get(f"/api/inventarios/{inv}/relatorio/exportar?formato=pdf"),
+    ]
+    for resp in respostas:
+        assert resp.status_code == 403
+        assert resp.json()["detail"] == "Acesso restrito a Gestor ou Técnico."
+    cancelar = client_aprendiz.post(f"/api/inventarios/{inv}/cancelar", json={"motivo": "Teste"})
+    assert cancelar.status_code == 403
+    assert cancelar.json()["detail"] == "Acesso restrito ao Gestor."
+    # Nada mudou: o inventário continua aberto.
+    assert client_tecnico.get(f"/api/inventarios/{inv}").json()["status"] == "aberto"

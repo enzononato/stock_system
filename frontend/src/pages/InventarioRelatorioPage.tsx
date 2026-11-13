@@ -210,7 +210,15 @@ export default function InventarioRelatorioPage() {
           <Button asChild>
             <Link to={`/inventarios/${id}/leitura`}>Continuar leitura</Link>
           </Button>
-          <Button variant="outline" onClick={() => setConfirmandoEncerrar(true)}>
+          <Button
+            variant="outline"
+            loading={encerrar.isPending}
+            onClick={() => {
+              // O texto do aviso conta os não lidos: atualiza o resumo antes de o usuário confirmar.
+              void refetch()
+              setConfirmandoEncerrar(true)
+            }}
+          >
             Encerrar inventário
           </Button>
           {isGestor && (

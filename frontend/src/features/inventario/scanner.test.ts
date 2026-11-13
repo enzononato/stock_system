@@ -101,4 +101,16 @@ describe('iniciarLeitor', () => {
     expect(trilha.stop).toHaveBeenCalled()
     expect(video.srcObject).toBeNull()
   })
+
+  it('se a abertura falha depois de o fluxo ser ligado ao vídeo, solta a câmera', async () => {
+    const trilha = { stop: vi.fn() }
+    const video = document.createElement('video')
+    definir(video, 'srcObject', { getTracks: () => [trilha] })
+    mocks.decodeFromConstraints.mockRejectedValue(new DOMException('x', 'NotAllowedError'))
+
+    await expect(iniciarLeitor(video, vi.fn())).rejects.toMatchObject({ tipo: 'negada' })
+
+    expect(trilha.stop).toHaveBeenCalled()
+    expect(video.srcObject).toBeNull()
+  })
 })

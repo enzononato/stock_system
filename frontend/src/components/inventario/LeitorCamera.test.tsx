@@ -130,4 +130,26 @@ describe('LeitorCamera', () => {
 
     expect(p.onErro.mock.calls[0][0]).toMatchObject({ tipo: 'falha' })
   })
+
+  it('código recusado pela tela (ocupada) não entra na janela e é entregue de novo', async () => {
+    const p = props()
+    p.onCodigo.mockReturnValueOnce(false)
+    let entregar: (t: string) => void = () => {}
+    mocks.iniciarLeitor.mockImplementation(async (_video, cb) => {
+      entregar = cb
+      return { parar: vi.fn() }
+    })
+    vi.spyOn(Date, 'now').mockReturnValue(2_000_000)
+    render(<LeitorCamera {...p} />)
+    await act(async () => {})
+
+    entregar('https://x/e/2')
+    expect(p.onCodigo).toHaveBeenCalledTimes(1)
+    // Segue à vista no quadro seguinte: como foi recusado, passa de novo.
+    entregar('https://x/e/2')
+    expect(p.onCodigo).toHaveBeenCalledTimes(2)
+    // Agora foi aceito: o próximo quadro com o mesmo código é repetição.
+    entregar('https://x/e/2')
+    expect(p.onCodigo).toHaveBeenCalledTimes(2)
+  })
 })

@@ -40,10 +40,12 @@ const inventario = {
 }
 
 let consultas: string[] = []
+let totalDaApi = 2
 
 beforeEach(() => {
   role = 'Técnico'
   consultas = []
+  totalDaApi = 2
   localStorage.clear()
   server.use(
     http.get('/api/unidades', () => HttpResponse.json(unidades)),
@@ -51,7 +53,7 @@ beforeEach(() => {
       consultas.push(new URL(request.url).search)
       return HttpResponse.json({
         items: [inventario, { ...inventario, id: 6, status: 'encerrado', encerrado_em: '2026-11-09T18:00:00' }],
-        total: 2,
+        total: totalDaApi,
       })
     })
   )
@@ -84,14 +86,19 @@ describe('InventariosPage', () => {
     expect(within(tabela).getByRole('link', { name: 'Ler' })).toHaveAttribute('href', '/inventarios/7/leitura')
   })
 
-  it('filtro de status volta à página 1', async () => {
+  it('filtro de status volta à página 1 (partindo da página 2)', async () => {
+    totalDaApi = 60
     const user = userEvent.setup()
     renderPagina()
     await screen.findByRole('table')
 
+    await user.click(screen.getByRole('button', { name: 'Próxima' }))
+    await waitFor(() => expect(consultas[consultas.length - 1]).toBe('?limit=25&offset=25'))
+
     await user.selectOptions(screen.getByLabelText('Status'), 'Aberto')
 
-    await waitFor(() => expect(consultas.some((c) => c.includes('status=aberto') && c.includes('offset=0'))).toBe(true))
+    await waitFor(() => expect(consultas[consultas.length - 1]).toBe('?status=aberto&limit=25&offset=0'))
+    expect(screen.getByText('1 / 3')).toBeInTheDocument()
   })
 
   it('abrir inventário vai para a leitura', async () => {

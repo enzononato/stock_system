@@ -202,4 +202,38 @@ describe('InventarioRelatorioPage', () => {
     await waitFor(() => expect(query).toBe('?formato=xlsx'))
     await waitFor(() => expect(criar).toHaveBeenCalled())
   })
+
+  it('ao abrir a confirmação o resumo é atualizado e o botão fica ocupado durante o encerramento', async () => {
+    status = 'aberto'
+    let chamadas = 0
+    server.use(
+      http.get('/api/inventarios/12/relatorio', () => {
+        chamadas += 1
+        const r = relatorio('aberto')
+        return HttpResponse.json(
+          chamadas > 1 ? { ...r, inventario: { ...r.inventario, resumo: { ...resumoBase, nao_encontrados: 5 } } } : r
+        )
+      })
+    )
+    let abrir: () => void = () => {}
+    const espera = new Promise<void>((r) => (abrir = r))
+    server.use(
+      http.post('/api/inventarios/12/encerrar', async () => {
+        await espera
+        return HttpResponse.json(relatorio('encerrado').inventario)
+      })
+    )
+    const user = userEvent.setup()
+    renderRota()
+
+    await user.click(await screen.findByRole('button', { name: 'Encerrar inventário' }))
+    const dialogo = await screen.findByRole('alertdialog')
+    expect(await within(dialogo).findByText(/5 equipamento\(s\) ainda não lido\(s\)/)).toBeInTheDocument()
+    expect(chamadas).toBeGreaterThan(1)
+
+    await user.click(within(dialogo).getByRole('button', { name: 'Encerrar' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Encerrar inventário' })).toBeDisabled())
+    abrir()
+    expect(await screen.findByText('Inventário encerrado.')).toBeInTheDocument()
+  })
 })

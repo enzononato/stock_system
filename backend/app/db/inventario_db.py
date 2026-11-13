@@ -340,13 +340,18 @@ class InventarioDBManager:
             except pymysql.MySQLError as e:
                 if not _erro_de_duplicado(e):
                     raise
-                # Defesa: a trava do inventário já serializa, mas a chave única é a garantia final.
+                # Defesa: a trava do inventário já serializa quem escreve, e a `chave` cobre
+                # também a unicidade por item (`item:<id>`). A releitura é com FOR UPDATE
+                # (leitura de bloqueio enxerga a linha já confirmada, a consistente não);
+                # sem linha com essa chave, o erro é outro e sobe.
                 cur.execute(
-                    "SELECT id FROM inventario_leituras WHERE inventario_id = %s "
-                    "AND (chave = %s OR item_id <=> %s)",
-                    (inventario_id, chave, item["id"] if item else None),
+                    "SELECT id FROM inventario_leituras WHERE inventario_id = %s AND chave = %s FOR UPDATE",
+                    (inventario_id, chave),
                 )
-                return self._leitura(cur, cur.fetchone()["id"]), True
+                existente = cur.fetchone()
+                if not existente:
+                    raise
+                return self._leitura(cur, existente["id"]), True
             return self._leitura(cur, cur.lastrowid), False
 
     def atualizar_leitura(

@@ -316,3 +316,88 @@ def test_aprendiz_403_nas_leituras(client_aprendiz, client_tecnico, unidade):
     ):
         assert resp.status_code == 403
         assert resp.json()["detail"] == "Acesso restrito a Gestor ou Técnico."
+
+
+class _CursorQueEscondeAChave:
+    """Faz a primeira consulta de duplicidade (sem FOR UPDATE) parecer vazia, para
+    forçar o caminho defensivo do erro 1062 no INSERT."""
+
+    def __init__(self, cur):
+        self._cur = cur
+        self._esconder = False
+        self._feito = False
+
+    def execute(self, sql, params=None):
+        if (
+            not self._feito
+            and sql.startswith("SELECT id FROM inventario_leituras")
+            and "FOR UPDATE" not in sql
+        ):
+            self._feito = True
+            self._esconder = True
+            return 0
+        self._esconder = False
+        return self._cur.execute(sql, params)
+
+    def fetchone(self):
+        return None if self._esconder else self._cur.fetchone()
+
+    def __getattr__(self, nome):
+        return getattr(self._cur, nome)
+
+
+def _manager_com_cursor_que_esconde(monkeypatch):
+    from contextlib import contextmanager
+
+    from app.db import inventario_db
+
+    real = inventario_db.get_cursor
+
+    @contextmanager
+    def falso(*args, **kwargs):
+        with real(*args, **kwargs) as cur:
+            yield _CursorQueEscondeAChave(cur)
+
+    monkeypatch.setattr(inventario_db, "get_cursor", falso)
+    return inventario_db.InventarioDBManager()
+
+
+def _ler_direto(db, inv, codigo):
+    return db.registrar_leitura(
+        inv, codigo=codigo, local_id_encontrado=None, colaborador_id_encontrado=None,
+        usuario_conferido=False, observacao=None, por="x",
+    )
+
+
+def test_1062_no_insert_rele_pela_chave_com_bloqueio(client_tecnico, unidade, criar_item, monkeypatch):
+    item = criar_item(revenda=unidade["nome"])
+    inv = _abrir(client_tecnico, unidade["id"])
+    primeira = _ler(client_tecnico, inv, f"#{item['id']}").json()
+    db = _manager_com_cursor_que_esconde(monkeypatch)
+
+    leitura, duplicada = _ler_direto(db, inv, f"#{item['id']}")
+
+    assert duplicada is True and leitura["id"] == primeira["id"]
+    assert _contar_leituras() == 1
+
+
+def test_1062_por_item_com_outra_chave_nao_e_confundido_com_duplicada(
+    client_tecnico, unidade, criar_item, executar_sql
+):
+    """Linha antiga do mesmo item com chave diferente: o INSERT bate no UNIQUE do item e o
+    erro sobe (nunca devolve uma leitura qualquer)."""
+    import pymysql
+
+    from app.db.inventario_db import InventarioDBManager
+
+    item = criar_item(revenda=unidade["nome"])
+    inv = _abrir(client_tecnico, unidade["id"])
+    executar_sql(
+        "INSERT INTO inventario_leituras (inventario_id, item_id, chave, codigo_lido, lido_por, "
+        "lido_em, resultado) VALUES (%s, %s, 'codigo:LEGADO', 'x', 'x', NOW(), 'ok')",
+        (inv, item["id"]),
+    )
+
+    with pytest.raises(pymysql.err.IntegrityError):
+        _ler_direto(InventarioDBManager(), inv, f"#{item['id']}")
+    assert _contar_leituras() == 1
