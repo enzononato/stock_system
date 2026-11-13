@@ -6,6 +6,8 @@ from datetime import datetime
 
 import pytest
 
+from tests.dados_baixa import APAGAMENTO_OK
+
 pytestmark = pytest.mark.integration
 
 ARQUIVO_PDF = {"signed_pdf": ("termo.pdf", b"conteudo-fake-pdf", "application/pdf")}
@@ -86,8 +88,9 @@ def test_editar_item_grava_diff(client_gestor, item_disponivel):
 
 
 def test_excluir_item_grava_motivo(client_gestor, item_disponivel):
+    # MUDANÇA INTENCIONAL (F4): Notebook exige registro de apagamento (LGPD)
     resp = client_gestor.request(
-        "DELETE", f"/api/items/{item_disponivel['id']}", data={"reason": "Doação"}
+        "DELETE", f"/api/items/{item_disponivel['id']}", data={"reason": "Doação", **APAGAMENTO_OK}
     )
     assert resp.status_code == 200
     linha = _unica("item", "excluir")

@@ -6,11 +6,15 @@ from datetime import datetime
 from app.schemas.items import ItemCreate, ItemUpdate, ItemResponse, TransferenciaCreate
 from app.schemas.common import Paginated
 from app.db.inventory_manager_db import InventoryDBManager
+from app.db.manutencao_db import ManutencaoDBManager
 from app.db.transferencia_db import erro_local, TransferenciaDBManager, TransferenciaErro
 from app.schemas.validators import data_br_para_date
-from app.services.anexos import CATEGORIA_NF, resposta_anexo, salvar_anexo
+from app.services.anexos import (
+    CATEGORIA_APAGAMENTO, CATEGORIA_NF, resposta_anexo, salvar_anexo, validar_anexo,
+)
+from app.services.baixa import motivo_bloqueio_baixa, validar_apagamento
 from app.dependencies import (
-    get_current_user, gestor_or_tecnico, gestor_only, get_inventory_db, get_audit_context, get_transferencia_db, CurrentUser,
+    get_current_user, gestor_or_tecnico, gestor_only, get_inventory_db, get_audit_context, get_transferencia_db, get_manutencao_db, CurrentUser,
 )
 from app.services import audit
 from app.services.audit import AuditContext
@@ -207,8 +211,14 @@ async def remove_item(
     item_id: int,
     reason: str = Form(...),
     attachment: Optional[UploadFile] = File(default=None),
+    dados_apagados: Optional[str] = Form(default=None),
+    metodo_apagamento: Optional[str] = Form(default=None),
+    apagado_por: Optional[str] = Form(default=None),
+    apagado_em: Optional[str] = Form(default=None),
+    comprovante_apagamento: Optional[UploadFile] = File(default=None),
     current_user: CurrentUser = Depends(gestor_only),
     inv: InventoryDBManager = Depends(get_inventory_db),
+    man: ManutencaoDBManager = Depends(get_manutencao_db),
     ctx: AuditContext = Depends(get_audit_context),
 ):
     # Checagem de existência antes de gravar o anexo, por dois motivos: manter o
@@ -219,20 +229,62 @@ async def remove_item(
     if not existing:
         raise HTTPException(status_code=404, detail="Item não encontrado.")
 
-    storage_key = None
+    bloqueio = motivo_bloqueio_baixa(existing, man.tem_em_andamento(item_id))
+    if bloqueio:
+        raise HTTPException(status_code=400, detail=bloqueio)
+    # Os campos do apagamento são Form (não passam pelo handler de 422): erro = 400 com a mensagem pura.
+    try:
+        apagamento = validar_apagamento(
+            tipo=existing.get("tipo"), motivo=reason, dados_apagados=dados_apagados,
+            metodo=metodo_apagamento, apagado_por=apagado_por, apagado_em=apagado_em,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Todos os arquivos são lidos e validados ANTES de gravar qualquer um no storage.
+    conteudo_anexo = None
     if attachment:
-        content = await attachment.read()
-        if len(content) > MAX_UPLOAD_SIZE:
+        conteudo_anexo = await attachment.read()
+        if len(conteudo_anexo) > MAX_UPLOAD_SIZE:
             raise HTTPException(status_code=413, detail="Arquivo excede o tamanho máximo de 20MB.")
+    enviar_comprovante = (
+        apagamento.dados_apagados == "sim"
+        and comprovante_apagamento is not None
+        and bool(comprovante_apagamento.filename)
+    )
+    if enviar_comprovante:
+        validar_anexo(await comprovante_apagamento.read())
+        await comprovante_apagamento.seek(0)
+
+    storage_key = None
+    if conteudo_anexo is not None:
         storage_key = storage.save(
-            "notas_remocao", f"remocao_{item_id}_{_safe_filename(attachment.filename)}", content
+            "notas_remocao", f"remocao_{item_id}_{_safe_filename(attachment.filename)}", conteudo_anexo
+        )
+    comprovante_key = None
+    if enviar_comprovante:
+        comprovante_key = await salvar_anexo(
+            comprovante_apagamento, CATEGORIA_APAGAMENTO, f"apagamento_{item_id}"
         )
 
-    ok, msg = inv.remove(item_id, current_user.username, reason, storage_key)
+    ok, msg = inv.remove(
+        item_id, current_user.username, reason, storage_key,
+        apagamento=apagamento, comprovante_key=comprovante_key,
+    )
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
     audit.record(
         ctx, "item", item_id, "excluir",
-        antes=existing, depois={"is_active": 0, "motivo": reason},
+        antes=existing,
+        depois={
+            "is_active": 0,
+            "motivo": reason,
+            "apagamento": {
+                "dados_apagados": apagamento.dados_apagados,
+                "metodo": apagamento.metodo,
+                "apagado_por": apagamento.apagado_por,
+                "apagado_em": apagamento.apagado_em,
+            },
+        },
     )
     return {"detail": msg}
