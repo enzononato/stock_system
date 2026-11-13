@@ -19,6 +19,8 @@ from app.db.audit_db import AuditDBManager
 from app.db.local_db import LocalDBManager
 from app.db.linha_db import LinhaDBManager
 from app.db.inventario_db import InventarioDBManager
+from app.db.transferencia_db import TransferenciaDBManager
+from app.db.manutencao_db import ManutencaoDBManager
 from app.services.audit import AuditContext
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -130,6 +132,16 @@ def get_linha_db() -> LinhaDBManager:
 @lru_cache
 def get_inventario_db() -> InventarioDBManager:
     return InventarioDBManager()
+
+
+@lru_cache
+def get_transferencia_db() -> TransferenciaDBManager:
+    return TransferenciaDBManager()
+
+
+@lru_cache
+def get_manutencao_db() -> ManutencaoDBManager:
+    return ManutencaoDBManager()
 
 
 # ── Rate limiting (T2) ──────────────────────────────────────────────────────

@@ -3,6 +3,8 @@ from datetime import datetime
 
 import pytest
 
+from tests.dados_baixa import APAGAMENTO_OK
+
 pytestmark = pytest.mark.integration
 
 
@@ -203,8 +205,9 @@ class TestAtualizarItem:
 
 class TestRemoverItem:
     def test_remover_item_disponivel(self, client_gestor, item_disponivel):
+        # MUDANÇA INTENCIONAL (F4): Notebook exige registro de apagamento (LGPD)
         resp = client_gestor.request(
-            "DELETE", f"/api/items/{item_disponivel['id']}", data={"reason": "Doação"}
+            "DELETE", f"/api/items/{item_disponivel['id']}", data={"reason": "Doação", **APAGAMENTO_OK}
         )
         assert resp.status_code == 200
         assert resp.json()["detail"] == f"Aparelho {item_disponivel['id']} removido do estoque."

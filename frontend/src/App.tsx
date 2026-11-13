@@ -34,6 +34,7 @@ import SistemasPage from '@/pages/acessos/SistemasPage'
 import PacotesPage from '@/pages/acessos/PacotesPage'
 import AcessoEventosPage from '@/pages/acessos/AcessoEventosPage'
 import AcessoEventoDetailPage from '@/pages/acessos/AcessoEventoDetailPage'
+import ManutencoesPage from '@/pages/ManutencoesPage'
 import { ToastContainer } from '@/components/ui/toast'
 
 /**
@@ -205,6 +206,15 @@ export default function App() {
             element={
               <RequireRole roles={['Gestor', 'Técnico']}>
                 <LinhasRelatorioPage />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="manutencoes"
+            element={
+              <RequireRole roles={['Gestor', 'Técnico']}>
+                <ManutencoesPage />
               </RequireRole>
             }
           />

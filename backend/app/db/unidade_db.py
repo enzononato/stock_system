@@ -19,13 +19,14 @@ import logging
 
 import pymysql
 
+from app.core.config import ITEM_STATUSES
 from app.db.database_mysql import get_cursor
 
 logger = logging.getLogger(__name__)
 
-# As 4 chaves que `itens_por_status` sempre traz, mesmo com contagem zero —
-# mantém o mesmo conjunto do ENUM `items.status` (ver InventoryDBManager).
-_STATUS_ITEM = ("Disponível", "Indisponível", "Pendente", "Pendente Devolução")
+# As 5 chaves que `itens_por_status` sempre traz, mesmo com contagem zero —
+# mantém o mesmo conjunto do ENUM `items.status` (ver ITEM_STATUSES em app.core.config).
+_STATUS_ITEM = tuple(ITEM_STATUSES)
 
 
 class UnidadeDBManager:

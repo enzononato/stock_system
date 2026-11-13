@@ -201,6 +201,9 @@ PERIPHERAL_TYPES = [
     "Outro",
 ]
 
+# Status possíveis de um equipamento (espelha o ENUM items.status).
+ITEM_STATUSES = ["Disponível", "Indisponível", "Pendente", "Pendente Devolução", "Em Manutenção"]
+
 REMOVAL_REASONS = {
     "Roubo": True,
     "Perda": False,

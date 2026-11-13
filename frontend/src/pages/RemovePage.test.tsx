@@ -1,12 +1,13 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { server } from '@/test/server'
 import { renderWithClient } from '@/test/render'
 import { ToastContainer } from '@/components/ui/toast'
 import RemovePage from '@/pages/RemovePage'
+import { hojeBR } from '@/features/ciclo-vida/format'
 
 // jsdom não implementa a Pointer Events API que o Select (Radix) usa — sem
 // estes stubs, abrir o dropdown de motivo lançaria "hasPointerCapture is not
@@ -62,9 +63,9 @@ function mockServidor() {
 // MemoryRouter: o layout da FT_STC trouxe os botões "Cancelar e Voltar" e
 // "Cancelar", que usam `useNavigate` — sem um roteador em volta a página nem
 // monta. Não altera nada do que o teste verifica.
-function renderPage() {
+function renderPage(inicial = '/remove') {
   return renderWithClient(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[inicial]}>
       <RemovePage />
       <ToastContainer />
     </MemoryRouter>
@@ -127,5 +128,180 @@ describe('RemovePage — checkbox de ciência de irreversibilidade', () => {
 
     expect(inputOculto).toBeChecked()
     expect(botaoConfirmar).not.toBeDisabled()
+  })
+})
+
+// ── F4: apagamento de dados (LGPD) na baixa ──────────────────────────────────
+
+const metodosApagamento = {
+  formatacao_segura: 'Formatação segura',
+  reset_fabrica: 'Reset de fábrica',
+  destruicao_fisica: 'Destruição física',
+}
+
+function mockServidorApagamento(item: Record<string, unknown> = itemDisponivel) {
+  server.use(
+    http.get('/api/constants', () =>
+      HttpResponse.json({
+        center_costs: [],
+        revendas: [],
+        setores: [],
+        equipment_types: [],
+        peripheral_types: [],
+        removal_reasons: ['Doação', 'Roubo'],
+        removal_reasons_attachment: { Doação: false, Roubo: false },
+        tipos_exigem_apagamento: ['Notebook'],
+        motivos_sem_posse: ['Roubo'],
+        metodos_apagamento: metodosApagamento,
+      })
+    ),
+    http.get('/api/items', () => HttpResponse.json({ items: [item], total: 1 })),
+    http.get('/api/items/:id', () => HttpResponse.json(item))
+  )
+}
+
+async function selecionarItem(user: ReturnType<typeof userEvent.setup>, rotulo: RegExp) {
+  await user.click(await screen.findByRole('button', { name: /Pesquisar por marca, modelo ou identificador/i }))
+  await user.click(await screen.findByRole('button', { name: rotulo }))
+  await screen.findByText('Ficha do Ativo Selecionado')
+}
+
+async function escolherMotivo(user: ReturnType<typeof userEvent.setup>, motivo: string) {
+  await user.click(screen.getByRole('combobox'))
+  await user.click(await screen.findByRole('option', { name: motivo }))
+}
+
+async function marcarCiencia(user: ReturnType<typeof userEvent.setup>) {
+  const quadrado = screen.getByRole('checkbox').nextElementSibling as HTMLLabelElement
+  await user.click(quadrado)
+}
+
+describe('RemovePage — apagamento de dados', () => {
+  it('Notebook com Doação exige o apagamento antes de destravar', async () => {
+    mockServidorApagamento()
+    let campos: Record<string, string> = {}
+    server.use(
+      http.delete('/api/items/77', async ({ request }) => {
+        const form = await request.formData()
+        campos = Object.fromEntries([...form.entries()].map(([k, v]) => [k, String(v)]))
+        return HttpResponse.json({ detail: 'Aparelho 77 removido do estoque.' })
+      })
+    )
+    const user = userEvent.setup()
+    renderPage()
+
+    await selecionarItem(user, /Notebook Dell Latitude/i)
+    await escolherMotivo(user, 'Doação')
+    await marcarCiencia(user)
+
+    const botao = screen.getByRole('button', { name: /Confirmar Baixa Definitiva/i })
+    expect(botao).toBeDisabled()
+    expect(
+      screen.getByRole('group', { name: 'Apagamento de dados (LGPD) — obrigatório para Notebook' })
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: 'Sim, os dados foram apagados' }))
+    expect(botao).toBeDisabled()
+    await user.selectOptions(screen.getByLabelText('Método de apagamento'), 'Formatação segura')
+    expect(botao).toBeDisabled()
+    await user.type(screen.getByLabelText('Quem apagou os dados'), 'Ana TI')
+    expect(botao).toBeEnabled()
+
+    await user.click(botao)
+
+    await waitFor(() => expect(campos.reason).toBe('Doação'))
+    expect(campos.dados_apagados).toBe('sim')
+    expect(campos.metodo_apagamento).toBe('formatacao_segura')
+    expect(campos.apagado_por).toBe('Ana TI')
+    expect(campos.apagado_em).toBe(hojeBR())
+  })
+
+  it('"Não se aplica" só aparece para Roubo', async () => {
+    mockServidorApagamento()
+    const user = userEvent.setup()
+    renderPage()
+
+    await selecionarItem(user, /Notebook Dell Latitude/i)
+    await escolherMotivo(user, 'Doação')
+    expect(screen.queryByRole('radio', { name: /Não se aplica/ })).not.toBeInTheDocument()
+
+    await escolherMotivo(user, 'Roubo')
+    const naoAplica = await screen.findByRole('radio', {
+      name: 'Não se aplica — equipamento fora de posse (roubo ou perda)',
+    })
+    await marcarCiencia(user)
+    const botao = screen.getByRole('button', { name: /Confirmar Baixa Definitiva/i })
+    expect(botao).toBeDisabled()
+    await user.click(naoAplica)
+    expect(botao).toBeEnabled()
+
+    // Voltar para um motivo sem posse zera a escolha "não se aplica".
+    await escolherMotivo(user, 'Doação')
+    expect(screen.queryByRole('radio', { name: /Não se aplica/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Sim, os dados foram apagados' })).not.toBeChecked()
+    expect(screen.getByRole('button', { name: /Confirmar Baixa Definitiva/i })).toBeDisabled()
+  })
+
+  it('Impressora não pede apagamento', async () => {
+    mockServidorApagamento({ ...itemDisponivel, tipo: 'Impressora', brand: 'HP', model: 'LaserJet' })
+    let campos: string[] = []
+    server.use(
+      http.delete('/api/items/77', async ({ request }) => {
+        campos = [...(await request.formData()).keys()]
+        return HttpResponse.json({ detail: 'ok' })
+      })
+    )
+    const user = userEvent.setup()
+    renderPage()
+
+    await selecionarItem(user, /Impressora HP LaserJet/i)
+    await escolherMotivo(user, 'Doação')
+    await marcarCiencia(user)
+
+    expect(
+      screen.getByText(
+        'Este tipo de equipamento não armazena dados pessoais: o apagamento será registrado como "não se aplica".'
+      )
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: /Apagamento de dados/ })).not.toBeInTheDocument()
+    const botao = screen.getByRole('button', { name: /Confirmar Baixa Definitiva/i })
+    expect(botao).toBeEnabled()
+    await user.click(botao)
+
+    await waitFor(() => expect(campos).toContain('reason'))
+    expect(campos).not.toContain('dados_apagados')
+  })
+
+  it('?item=77 abre com o equipamento selecionado', async () => {
+    mockServidorApagamento()
+    renderPage('/remove?item=77')
+
+    expect(await screen.findByText('Ficha do Ativo Selecionado')).toBeInTheDocument()
+    expect(screen.getByText('Disponível')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /#77 — Notebook Dell Latitude/ })).toBeInTheDocument()
+  })
+
+  it('?item=77 de equipamento sem conserto (fora da busca de Disponível) também abre', async () => {
+    const semConserto = { ...itemDisponivel, status: 'Em Manutenção' }
+    server.use(
+      http.get('/api/constants', () =>
+        HttpResponse.json({
+          center_costs: [],
+          revendas: [],
+          setores: [],
+          equipment_types: [],
+          peripheral_types: [],
+          removal_reasons: ['Doação'],
+          removal_reasons_attachment: {},
+        })
+      ),
+      http.get('/api/items', () => HttpResponse.json({ items: [], total: 0 })),
+      http.get('/api/items/:id', () => HttpResponse.json(semConserto))
+    )
+    renderPage('/remove?item=77')
+
+    expect(await screen.findByText('Ficha do Ativo Selecionado')).toBeInTheDocument()
+    expect(screen.getByText('Em Manutenção')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /#77 — Notebook Dell Latitude/ })).toBeInTheDocument()
   })
 })

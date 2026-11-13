@@ -1,4 +1,4 @@
-import api, { type Paginated } from './client'
+import api, { downloadAuthenticated, type Paginated } from './client'
 
 export interface Item {
   id: number
@@ -42,6 +42,11 @@ export interface Item {
   colaborador_setor?: string | null
   colaborador_cargo?: string | null
   superior_nome?: string | null
+  /** Compra (F4): valor como texto (`"4599.90"`), datas só-dia `AAAA-MM-DD`. */
+  valor_compra?: string | null
+  data_compra?: string | null
+  garantia_ate?: string | null
+  nf_anexo_key?: string | null
 }
 
 export interface ListItemsParams {
@@ -84,10 +89,80 @@ export async function updateItem(id: number, data: Record<string, unknown>) {
   return res.data
 }
 
-export async function removeItem(id: number, reason: string, attachment?: File) {
+/** Registro de apagamento de dados (LGPD) exigido na baixa de equipamentos com armazenamento. */
+export interface ApagamentoInput {
+  dados_apagados: 'sim' | 'nao_aplica'
+  metodo_apagamento?: string
+  apagado_por?: string
+  /** dd/mm/aaaa */
+  apagado_em?: string
+  comprovante?: File | null
+}
+
+export async function removeItem(id: number, reason: string, attachment?: File, apagamento?: ApagamentoInput) {
   const form = new FormData()
   form.append('reason', reason)
   if (attachment) form.append('attachment', attachment)
+  if (apagamento) {
+    form.append('dados_apagados', apagamento.dados_apagados)
+    if (apagamento.metodo_apagamento) form.append('metodo_apagamento', apagamento.metodo_apagamento)
+    if (apagamento.apagado_por) form.append('apagado_por', apagamento.apagado_por)
+    if (apagamento.apagado_em) form.append('apagado_em', apagamento.apagado_em)
+    if (apagamento.comprovante) form.append('comprovante_apagamento', apagamento.comprovante)
+  }
   const res = await api.delete(`/items/${id}`, { data: form })
   return res.data
+}
+
+/** `POST /items/{id}/nota-fiscal` (multipart, campo `arquivo`; PDF/PNG/JPG até 10 MB). */
+export async function uploadNotaFiscal(
+  id: number,
+  arquivo: File
+): Promise<{ detail: string; nf_anexo_key: string }> {
+  const form = new FormData()
+  form.append('arquivo', arquivo)
+  const res = await api.post(`/items/${id}/nota-fiscal`, form)
+  return res.data
+}
+
+/** Baixa a nota fiscal anexada (autenticado); o nome usa a extensão da chave do storage. */
+export async function baixarNotaFiscal(item: Pick<Item, 'id' | 'nf_anexo_key'>): Promise<void> {
+  const extensao = item.nf_anexo_key?.split('.').pop() ?? 'pdf'
+  await downloadAuthenticated(`/items/${item.id}/nota-fiscal`, `nota_fiscal_item_${item.id}.${extensao}`)
+}
+
+export interface TransferenciaInput {
+  para_unidade_id: number
+  para_local_id: number | null
+  motivo: string
+}
+
+export async function transferirItem(
+  id: number,
+  data: TransferenciaInput
+): Promise<{ detail: string; id: number }> {
+  const res = await api.post(`/items/${id}/transferir`, data)
+  return res.data
+}
+
+export interface EventoLinhaDoTempo {
+  ocorrido_em: string
+  origem: string
+  tipo: string
+  titulo: string
+  descricao?: string | null
+  usuario?: string | null
+  referencia_id?: number | null
+}
+
+export interface LinhaDoTempo {
+  item_id: number
+  eventos: EventoLinhaDoTempo[]
+  fontes_com_erro: string[]
+}
+
+/** `GET /items/{id}/linha-do-tempo` — eventos em ordem cronológica (Gestor e Técnico). */
+export async function getLinhaDoTempo(id: number): Promise<LinhaDoTempo> {
+  const res = await api.get(`/items/${id}/linha-do-tempo`)
+  return res.data as LinhaDoTempo
 }

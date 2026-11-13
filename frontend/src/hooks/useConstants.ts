@@ -35,6 +35,10 @@ export function useConstants(): {
   peripheralTypes: string[]
   removalReasons: string[]
   removalReasonsAttachment: Record<string, boolean>
+  itemStatuses: string[]
+  tiposExigemApagamento: string[]
+  motivosSemPosse: string[]
+  metodosApagamento: Record<string, string>
 } {
   const { data, isLoading } = useQuery({
     queryKey: ['constants'],
@@ -52,5 +56,9 @@ export function useConstants(): {
     peripheralTypes: data?.peripheral_types ?? [],
     removalReasons: data?.removal_reasons ?? [],
     removalReasonsAttachment: data?.removal_reasons_attachment ?? {},
+    itemStatuses: data?.item_statuses ?? [],
+    tiposExigemApagamento: data?.tipos_exigem_apagamento ?? [],
+    motivosSemPosse: data?.motivos_sem_posse ?? [],
+    metodosApagamento: data?.metodos_apagamento ?? {},
   }
 }

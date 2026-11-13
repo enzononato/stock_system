@@ -18,6 +18,7 @@ from app.routers import auth, users, items, peripherals, loans, documents, histo
 from app.routers import linhas
 from app.routers import inventarios
 from app.routers import etiquetas
+from app.routers import manutencoes
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +101,18 @@ _ROTULOS_DE_CAMPO = {
     "cargo_anterior": "Cargo anterior",
     "cargo_novo": "Cargo novo",
     "motivo_cancelamento": "Motivo do cancelamento",
+    # Compra do equipamento (F4)
+    "valor_compra": "Valor de compra",
+    "data_compra": "Data da compra",
+    "garantia_ate": "Fim da garantia",
+    # Transferência do equipamento (F4)
+    "para_unidade_id": "Unidade de destino",
+    "para_local_id": "Local de destino",
+    # Manutenção do equipamento (F4)
+    "defeito": "Defeito",
+    "assistencia": "Assistência técnica",
+    "previsao_retorno": "Previsão de retorno",
+    "item_id": "Equipamento",
 }
 
 # "nome" vale "Nome da unidade" nas unidades; nas rotas de colaboradores e locais é só "Nome".
@@ -180,6 +193,7 @@ app.include_router(inventarios.router)
 app.include_router(etiquetas.router)
 app.include_router(acessos.router)
 app.include_router(acesso_eventos.router)
+app.include_router(manutencoes.router)
 
 
 @app.on_event("startup")

@@ -23,6 +23,7 @@ from app.db.database_mysql import get_cursor
 from app.core.config import TERMO_MODELOS, TERMO_DEVOLUCAO_MODELOS
 from app.db.utils import format_cpf, format_date
 from app.db.unidade_db import get_unidade_manager
+from app.services.baixa import Apagamento, motivo_bloqueio_baixa
 
 logger = logging.getLogger(__name__)
 
@@ -317,31 +318,54 @@ class InventoryDBManager:
             logger.exception("Erro de banco de dados")
             return False, "Erro ao processar a operação. Tente novamente."
 
-    def update_item(self, item_id: int, item_data: dict, logged_user: str):
+    def update_item(self, item_id: int, item_data: dict, logged_user: str, details: str | None = None):
         sets = ", ".join([f"{k}=%s" for k in item_data.keys()])
         values = list(item_data.values()) + [item_id]
         try:
             with get_cursor(dict_cursor=False) as cur:
                 cur.execute(f"UPDATE items SET {sets} WHERE id=%s", values)
                 cur.execute(
-                    "INSERT INTO history (item_id, operador, data_operacao, operation) VALUES (%s,%s,%s,'Edição')",
-                    (item_id, logged_user, datetime.now()),
+                    "INSERT INTO history (item_id, operador, data_operacao, operation, details) "
+                    "VALUES (%s,%s,%s,'Edição',%s)",
+                    (item_id, logged_user, datetime.now(), details),
                 )
             return True, f"Item {item_id} atualizado."
         except pymysql.MySQLError:
             logger.exception("Erro de banco de dados")
             return False, "Erro ao processar a operação. Tente novamente."
 
-    def remove(self, item_id: int, logged_user: str, reason: str, storage_key: str = None):
-        """Remove (soft-delete) um item. storage_key é a chave do anexo no storage backend."""
-        item = self.find(item_id)
-        if not item:
-            return False, "ID não encontrado."
-        if item["status"] != "Disponível":
-            return False, "Não é possível remover produto emprestado."
+    def remove(
+        self,
+        item_id: int,
+        logged_user: str,
+        reason: str,
+        storage_key: str = None,
+        apagamento: Apagamento | None = None,
+        comprovante_key: str | None = None,
+    ):
+        """Remove (soft-delete) um item. storage_key é a chave do anexo no storage backend.
 
+        Com `apagamento` (F4), o registro de apagamento de dados entra em
+        `baixas_apagamento` na MESMA transação da baixa, ligado à linha de
+        histórico `Exclusão`. Chamadas antigas sem `apagamento` continuam valendo."""
         try:
-            with get_cursor(dict_cursor=False) as cur:
+            with get_cursor() as cur:
+                cur.execute(
+                    "SELECT * FROM items WHERE id=%s AND is_active=1 FOR UPDATE", (item_id,)
+                )
+                item = cur.fetchone()
+                if not item:
+                    return False, "ID não encontrado."
+                cur.execute(
+                    "SELECT COUNT(*) AS total FROM manutencoes "
+                    "WHERE item_id=%s AND status IN ('aberta','enviada','em_reparo')",
+                    (item_id,),
+                )
+                bloqueio = motivo_bloqueio_baixa(item, cur.fetchone()["total"] > 0)
+                if bloqueio:
+                    return False, bloqueio
+
+                agora = datetime.now()
                 cur.execute("UPDATE items SET is_active=0 WHERE id=%s", (item_id,))
                 cur.execute(
                     """INSERT INTO history
@@ -350,13 +374,25 @@ class InventoryDBManager:
                      operacao_anexo, poe, quantidade_portas)
                     VALUES (%s,%s,%s,'Exclusão',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     (
-                        item_id, logged_user, datetime.now(), reason,
+                        item_id, logged_user, agora, reason,
                         item.get("tipo"), item.get("brand"), item.get("model"),
                         item.get("identificador"), item.get("nota_fiscal"),
                         item.get("fornecedor"), storage_key,
                         item.get("poe"), item.get("quantidade_portas"),
                     ),
                 )
+                if apagamento is not None:
+                    history_id = cur.lastrowid
+                    cur.execute(
+                        "INSERT INTO baixas_apagamento (item_id, history_id, dados_apagados, metodo, "
+                        "apagado_por, apagado_em, comprovante_key, registrado_por, registrado_em) "
+                        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                        (
+                            item_id, history_id, apagamento.dados_apagados, apagamento.metodo,
+                            apagamento.apagado_por, apagamento.apagado_em, comprovante_key,
+                            logged_user, agora,
+                        ),
+                    )
             return True, f"Aparelho {item_id} removido do estoque."
         except pymysql.MySQLError:
             logger.exception("Erro de banco de dados")

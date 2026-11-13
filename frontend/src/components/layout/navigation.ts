@@ -4,6 +4,7 @@ import { Smartphone } from 'lucide-react'
 import { QrCode } from 'lucide-react'
 import { ClipboardCheck } from 'lucide-react'
 import { AppWindow, Boxes, KeyRound } from 'lucide-react'
+import { Wrench } from 'lucide-react'
 import {
   DashboardIcon,
   EstoqueIcon,
@@ -86,6 +87,7 @@ export const navGroups: NavGroup[] = [
       { to: '/return', label: 'Devoluções', icon: DevolucoesIcon, roles: ['Gestor', 'Técnico'] },
       { to: '/peripherals', label: 'Periféricos', icon: PerifericosIcon, roles: ['Gestor', 'Técnico'] },
       { to: '/link', label: 'Vincular Periférico', icon: MovimentacoesIcon, roles: ['Gestor', 'Técnico'] },
+      { to: '/manutencoes', label: 'Manutenções', icon: Wrench, roles: ['Gestor', 'Técnico'] },
     ],
   },
   {

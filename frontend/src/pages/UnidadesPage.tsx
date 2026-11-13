@@ -106,11 +106,11 @@ export function maskUfInput(value: string): string {
 // --- Indicadores ---------------------------------------------------------------
 
 /**
- * Ordem fixa dos 4 status de item exibidos no painel de indicadores — o
- * contrato da API garante que `itens_por_status` sempre traz essas 4 chaves,
+ * Ordem fixa dos 5 status de item exibidos no painel de indicadores — o
+ * contrato da API garante que `itens_por_status` sempre traz essas 5 chaves,
  * mas ainda assim usamos `?? 0` como defesa caso alguma falte.
  */
-const STATUS_ORDER = ['Disponível', 'Indisponível', 'Pendente', 'Pendente Devolução']
+const STATUS_ORDER = ['Disponível', 'Indisponível', 'Pendente', 'Pendente Devolução', 'Em Manutenção']
 
 // StatBlock é compartilhado e pinta rótulo/valor em cinza: dentro da caixa azul tudo vai para o texto da caixa.
 const BLOCO_AZUL = '[&_span]:text-brand-soft-foreground'

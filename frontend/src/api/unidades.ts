@@ -39,8 +39,8 @@ export interface UnidadeInput {
 
 /**
  * Indicadores por unidade (ver GET /api/unidades/{id}/indicadores). `itens_por_status`
- * sempre traz as 4 chaves de status possíveis (Disponível, Indisponível, Pendente,
- * Pendente Devolução) mesmo quando a contagem é zero — nenhuma delas some por falta
+ * sempre traz as 5 chaves de status possíveis (Disponível, Indisponível, Pendente,
+ * Pendente Devolução, Em Manutenção) mesmo quando a contagem é zero — nenhuma delas some por falta
  * de itens naquele status.
  */
 export interface IndicadoresUnidade {

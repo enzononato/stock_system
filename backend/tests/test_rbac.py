@@ -19,6 +19,8 @@ from datetime import datetime
 
 import pytest
 
+from tests.dados_baixa import APAGAMENTO_OK
+
 pytestmark = pytest.mark.integration
 
 # CORREÇÃO DE TESTE (não é bug de produto — ver Grupo D do relatório de triagem):
@@ -98,7 +100,10 @@ class TestRbacItems:
         assert resp_aprendiz.json()["detail"] == MSG_SO_GESTOR
 
         # Gestor por último: é quem de fato consegue remover o item.
-        resp_gestor = client_gestor.request("DELETE", f"/api/items/{item_disponivel['id']}", data=form)
+        # MUDANÇA INTENCIONAL (F4): Notebook exige registro de apagamento (LGPD)
+        resp_gestor = client_gestor.request(
+            "DELETE", f"/api/items/{item_disponivel['id']}", data={**form, **APAGAMENTO_OK}
+        )
         assert resp_gestor.status_code == 200
 
 
