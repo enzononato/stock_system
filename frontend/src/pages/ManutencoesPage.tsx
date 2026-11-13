@@ -3,11 +3,13 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Plus, X } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { listManutencoes, type StatusManutencao } from '@/api/manutencoes'
+import { BotoesExportar } from '@/components/exportacao/BotoesExportar'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Pagination } from '@/components/ui/Pagination'
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/StateBlocks'
+import { exportarManutencoes } from '@/features/exportacoes/api'
 import { AbrirManutencaoDialog } from '@/features/manutencoes/AbrirManutencaoDialog'
 import { ManutencoesLista } from '@/features/manutencoes/ManutencoesLista'
 import { ROTULO_STATUS_MANUTENCAO } from '@/features/manutencoes/status'
@@ -94,10 +96,29 @@ export default function ManutencoesPage() {
         title="Manutenções"
         description="Ordens de manutenção dos equipamentos, com custo por ordem e por equipamento."
         actions={
-          <Button type="button" size="sm" onClick={() => setNovaAberta(true)}>
-            <Plus className="mr-1.5 size-3.5" />
-            Nova manutenção
-          </Button>
+          <>
+            <BotoesExportar
+              disabled={periodoInvalido || total === 0}
+              onExportar={(f) =>
+                exportarManutencoes(
+                  {
+                    status: status || undefined,
+                    item_id: itemId,
+                    revenda: revenda || undefined,
+                    tipo: tipo || undefined,
+                    de: de || undefined,
+                    ate: ate || undefined,
+                    busca: buscaAplicada || undefined,
+                  },
+                  f
+                )
+              }
+            />
+            <Button type="button" size="sm" onClick={() => setNovaAberta(true)}>
+              <Plus className="mr-1.5 size-3.5" />
+              Nova manutenção
+            </Button>
+          </>
         }
       />
 

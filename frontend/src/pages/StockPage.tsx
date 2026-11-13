@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { type Item } from '@/api/items'
 import { listUnidades } from '@/api/unidades'
 import { ColaboradorSelect } from '@/components/colaboradores/ColaboradorSelect'
+import { BotoesExportar } from '@/components/exportacao/BotoesExportar'
 import { ItemDetailsModal } from '@/components/equipment/ItemDetailsModal'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/button'
@@ -25,6 +26,7 @@ import {
   type SortDir,
 } from '@/features/estoque/api'
 import { SortableHeader } from '@/features/estoque/SortableHeader'
+import { exportarEstoque } from '@/features/exportacoes/api'
 import { useConstants } from '@/hooks/useConstants'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { usePageSize } from '@/hooks/usePageSize'
@@ -153,6 +155,25 @@ export default function StockPage() {
               {!isFetching && <RefreshCw />}
               Atualizar
             </Button>
+            {hasRole('Gestor', 'Técnico') && (
+              <BotoesExportar
+                disabled={total === 0}
+                onExportar={(f) =>
+                  exportarEstoque(
+                    {
+                      tipo: filterTipo !== 'all' ? filterTipo : undefined,
+                      status: filterStatus !== 'all' ? filterStatus : undefined,
+                      revenda: filterRevenda !== 'all' ? filterRevenda : undefined,
+                      colaborador_id: colaboradorId ?? undefined,
+                      search: busca || undefined,
+                      sort: ordem.sort,
+                      dir: ordem.dir,
+                    },
+                    f
+                  )
+                }
+              />
+            )}
             {hasRole('Gestor', 'Técnico') && (
               <Button size="sm" onClick={() => navigate('/register')}>
                 <Plus />

@@ -12,6 +12,7 @@ import {
 
 import { listHistoryPaginated, reverseEntryWithPassword, type HistoryEntry } from '@/api/history'
 import { downloadAuthenticated } from '@/api/client'
+import { BotoesExportar } from '@/components/exportacao/BotoesExportar'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Pagination } from '@/components/ui/Pagination'
@@ -26,6 +27,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useAuth } from '@/contexts/AuthContext'
+import { exportarHistorico } from '@/features/exportacoes/api'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { usePageSize } from '@/hooks/usePageSize'
 import { getErrorMessage } from '@/lib/api-error'
@@ -200,6 +202,7 @@ export default function HistoryPage() {
         title="Histórico de Operações"
         description="Registro cronológico e imutável de todas as ações realizadas no sistema patrimonial."
         actions={
+        <>
         <Button
           variant="outline"
           size="sm"
@@ -223,6 +226,11 @@ export default function HistoryPage() {
           <Download />
           Exportar CSV
         </Button>
+        <BotoesExportar
+          disabled={(data?.total ?? 0) === 0}
+          onExportar={(f) => exportarHistorico({ search: busca || undefined }, f)}
+        />
+        </>
         }
       />
 
