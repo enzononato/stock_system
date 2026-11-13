@@ -50,6 +50,19 @@ class UserDBManager:
             )
             return cur.fetchone()
 
+    def get_estado_sessao(self, user_id: int) -> dict | None:
+        """`role`, `sessao_versao` e `totp_ativo` pela PK (1 SELECT por requisição autenticada)."""
+        with get_cursor(commit=False) as cur:
+            cur.execute(
+                "SELECT role, sessao_versao, totp_ativo FROM usuarios WHERE id = %s", (user_id,)
+            )
+            return cur.fetchone()
+
+    def revogar_sessoes(self, user_id: int) -> None:
+        """Encerra todas as sessões abertas do usuário (tokens antigos deixam de valer)."""
+        with get_cursor(dict_cursor=False) as cur:
+            cur.execute("UPDATE usuarios SET sessao_versao = sessao_versao + 1 WHERE id = %s", (user_id,))
+
     def count_gestores(self) -> int:
         """Quantidade de usuários ativos com role='Gestor'. Útil para impedir
         remover/rebaixar o último Gestor do sistema."""

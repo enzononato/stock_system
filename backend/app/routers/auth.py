@@ -8,6 +8,7 @@ from app.core.security import verify_password, create_access_token, create_refre
 from app.core.config import settings
 from app.db.user_manager_db import UserDBManager
 from app.db.token_db import TokenDBManager
+from app.services.sessao import dados_do_token, validar_sessao_ativa
 from app.dependencies import get_current_user, get_user_db, get_token_db, limiter, CurrentUser
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -43,7 +44,7 @@ def login(
     # O claim "sub" precisa ser string: é exigência do próprio JWT (RFC 7519)
     # e o python-jose valida isso ao decodificar. get_current_user converte
     # de volta para int ao montar o CurrentUser.
-    token_data = {"sub": str(user["id"]), "username": user["username"], "role": user["role"]}
+    token_data = dados_do_token(user)
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
 
@@ -68,7 +69,12 @@ def refresh(
             detail="Sessão encerrada. Faça login novamente.",
         )
 
-    token_data = {"sub": payload["sub"], "username": payload["username"], "role": payload["role"]}
+    validar_sessao_ativa(payload)
+
+    token_data = {
+        "sub": payload["sub"], "username": payload["username"], "role": payload["role"],
+        "sv": payload.get("sv", 0),
+    }
     new_access = create_access_token(token_data)
     new_refresh = create_refresh_token(token_data)
 

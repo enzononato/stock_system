@@ -18,6 +18,7 @@ from app.db.colaborador_db import ColaboradorDBManager
 from app.db.audit_db import AuditDBManager
 from app.db.local_db import LocalDBManager
 from app.services.audit import AuditContext
+from app.services.sessao import validar_sessao_ativa
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -39,6 +40,7 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     payload = decode_token(credentials.credentials, expected_type="access")
+    validar_sessao_ativa(payload)
     # O claim "sub" é sempre uma string no token (exigência do próprio padrão
     # JWT/python-jose); convertemos de volta para int, já que o id do
     # usuário no banco é numérico.
