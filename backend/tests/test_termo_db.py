@@ -129,3 +129,31 @@ def test_listar_por_colaborador_pagina(termos, criar_item, colaborador):
     assert len(linhas) == 2 and total == 3
     linhas, total = termos.listar_por_item(item["id"], limit=10, offset=2)
     assert len(linhas) == 1 and total == 3
+
+
+def test_migracao_0300_vai_e_volta(_test_schema):
+    """O `.down.sql` derruba a tabela e reaplicar o `.sql` a recria (idempotente)."""
+    from app.db import migrations
+    from app.db.database_mysql import get_cursor
+
+    por_versao = {m.versao: m for m in migrations.listar_migracoes()}
+    mig = por_versao[300]
+    assert mig.down_path is not None
+
+    def existe() -> bool:
+        with get_cursor(commit=False) as cur:
+            cur.execute(
+                "SELECT COUNT(*) AS n FROM information_schema.tables "
+                "WHERE table_schema = DATABASE() AND table_name = 'termo_solicitacoes'"
+            )
+            return cur.fetchone()["n"] == 1
+
+    assert existe()
+    try:
+        with get_cursor() as cur:
+            migrations.executar_sql(cur, mig.down_path.read_text(encoding="utf-8"))
+        assert not existe()
+    finally:
+        with get_cursor() as cur:
+            migrations.executar_sql(cur, mig.up_path.read_text(encoding="utf-8"))
+    assert existe()
