@@ -11,7 +11,7 @@ from slowapi.errors import RateLimitExceeded
 from app.core.config import settings
 from app.db.migrations import aplicar_pendentes, garantir_baseline
 from app.dependencies import limiter, get_inventory_db
-from app.routers import auth, users, items, peripherals, loans, documents, history, reports, constants, unidades, audit
+from app.routers import auth, users, items, peripherals, loans, documents, history, reports, constants, unidades, audit, colaboradores
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +61,10 @@ _ROTULOS_DE_CAMPO = {
     "cep": "CEP",
     "cidade": "Cidade",
     "uf": "UF",
+    # Campos de Colaborador
+    "email": "E-mail",
+    "telefone": "Telefone",
+    "superior_id": "Superior",
 }
 
 
@@ -122,6 +126,7 @@ app.include_router(reports.router)
 app.include_router(constants.router)
 app.include_router(unidades.router)
 app.include_router(audit.router)
+app.include_router(colaboradores.router)
 
 
 @app.on_event("startup")

@@ -87,6 +87,9 @@ def update_unidade(
         raise HTTPException(status_code=404, detail="Unidade não encontrada.")
 
     data = body.model_dump(exclude_none=True)
+    # `alias_rh` enviado ("" ou null) limpa o alias; o exclude_none acima o descartaria.
+    if "alias_rh" in body.model_fields_set:
+        data["alias_rh"] = body.alias_rh
     if not data:
         raise HTTPException(status_code=400, detail="Nenhum campo para atualizar.")
 

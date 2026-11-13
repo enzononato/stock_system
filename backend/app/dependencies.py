@@ -14,6 +14,7 @@ from app.db.inventory_manager_db import InventoryDBManager
 from app.db.user_manager_db import UserDBManager
 from app.db.token_db import TokenDBManager
 from app.db.unidade_db import UnidadeDBManager
+from app.db.colaborador_db import ColaboradorDBManager
 from app.db.audit_db import AuditDBManager
 from app.services.audit import AuditContext
 
@@ -106,6 +107,11 @@ def get_unidade_db() -> UnidadeDBManager:
 @lru_cache
 def get_audit_db() -> AuditDBManager:
     return AuditDBManager()
+
+
+@lru_cache
+def get_colaborador_db() -> ColaboradorDBManager:
+    return ColaboradorDBManager()
 
 
 # ── Rate limiting (T2) ──────────────────────────────────────────────────────
