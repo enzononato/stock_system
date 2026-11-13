@@ -133,11 +133,12 @@ export function ConfirmacaoTermo({
       <FileUpload onFile={setSignedPdf} label={uploadLabel} />
       <div className="flex gap-3">
         <Button
-          disabled={!signedPdf || confirmMutation.isPending}
+          disabled={!signedPdf}
+          loading={confirmMutation.isPending}
           onClick={() => signedPdf && confirmMutation.mutate(signedPdf)}
         >
           <CheckCircle size={14} />
-          {confirmMutation.isPending ? 'Confirmando...' : 'Confirmar Empréstimo'}
+          Confirmar Empréstimo
         </Button>
         {onCancel && (
           <Button variant="ghost" onClick={onCancel}>
