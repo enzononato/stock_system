@@ -3,7 +3,7 @@
 Cada rota recebe os mesmos filtros da tela correspondente e exige `formato` (`xlsx` ou `pdf`).
 Consultas acima do limite do formato respondem 400 com a orientação de refinar os filtros.
 """
-from datetime import date
+from datetime import date, datetime
 from typing import Callable, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -12,6 +12,7 @@ from app.db.colaborador_db import ColaboradorDBManager
 from app.db.inventory_manager_db import InventoryDBManager, montar_order_by_items
 from app.db.linha_db import LinhaDBManager
 from app.db.manutencao_db import ManutencaoDBManager
+from app.db.painel_db import PainelDBManager
 from app.db.unidade_db import UnidadeDBManager
 from app.dependencies import (
     CurrentUser,
@@ -19,7 +20,9 @@ from app.dependencies import (
     get_inventory_db,
     get_linha_db,
     get_manutencao_db,
+    get_painel_db,
     get_unidade_db,
+    gestor_only,
     gestor_or_tecnico,
 )
 from app.services import exportacoes_telas as telas
@@ -121,4 +124,34 @@ def exportar_linhas(
             unidade_nome=unidade["nome"] if unidade else None, operadora=operadora, formato=formato,
         ),
         formato,
+    )
+
+
+@router.get("/termos-pendentes")
+def exportar_termos_pendentes(
+    formato: FormatoQuery = Query(...),
+    busca: Optional[str] = None,
+    _: CurrentUser = Depends(gestor_or_tecnico),
+    painel: PainelDBManager = Depends(get_painel_db),
+):
+    return _entregar(
+        lambda: telas.planilha_termos_pendentes(painel, busca=busca, formato=formato), formato
+    )
+
+
+@router.get("/relatorio-mensal")
+def exportar_relatorio_mensal(
+    formato: FormatoQuery = Query(...),
+    year: Optional[int] = None,
+    month: Optional[int] = None,
+    _: CurrentUser = Depends(gestor_only),
+    inv: InventoryDBManager = Depends(get_inventory_db),
+):
+    agora = datetime.now()
+    ano = year or agora.year
+    mes = month or agora.month
+    if not (1 <= mes <= 12):
+        raise HTTPException(status_code=400, detail="Mês inválido.")
+    return _entregar(
+        lambda: telas.planilha_relatorio_mensal(inv, ano=ano, mes=mes, formato=formato), formato
     )

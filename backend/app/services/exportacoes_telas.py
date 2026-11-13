@@ -365,3 +365,134 @@ def planilha_linhas(
         filtros=filtros,
         nome_base="linhas",
     )
+
+
+# ── Termos pendentes de assinatura ──────────────────────────────────────────
+
+ROTULO_TIPO_TERMO = {"entrega": "Entrega", "devolucao": "Devolução", "uso": "Uso"}
+
+
+def planilha_termos_pendentes(db, *, busca: Optional[str], formato: Formato) -> Planilha:
+    from app.core.tempo import agora_local
+    from app.services.painel import ROTULO_STATUS_TERMO
+
+    registros, total = db.termos_pendentes(busca=busca, limit=LIMITE_LINHAS[formato] + 1)
+    checar_limite(total, formato)
+    agora, agora_termos = datetime.now(), agora_local()
+    linhas: list[dict] = []
+    for t in registros:
+        referencia = t.get("referencia")
+        relogio = agora if t["legado"] else agora_termos
+        equipamento = " ".join(
+            p for p in (t.get("item_tipo"), t.get("item_brand"), t.get("item_model")) if p
+        )
+        linhas.append({
+            "solicitacao": t["termo_id"] if t["termo_id"] is not None else "—",
+            "equipamento": f"#{t['item_id']} {equipamento}".strip(),
+            "identificador": t.get("item_identificador"),
+            "revenda": t.get("item_revenda"),
+            "colaborador": t.get("colaborador_nome"),
+            "termo": ROTULO_TIPO_TERMO.get(t["tipo"], t["tipo"]),
+            "status": ROTULO_STATUS_TERMO.get(t["status"], t["status"]),
+            "solicitado_por": t.get("solicitado_por"),
+            "solicitado_em": data_hora_br(t.get("solicitado_em")),
+            "enviado_em": data_hora_br(t.get("enviado_em")),
+            "agendado_para": data_hora_br(t.get("agendado_para")),
+            "dias": (relogio - referencia).days if referencia else None,
+            "motivo": t.get("motivo"),
+        })
+    colunas = [
+        Coluna("solicitacao", "Solicitação", 12, "numero"),
+        Coluna("equipamento", "Equipamento", 34),
+        Coluna("identificador", "Identificador", 18),
+        Coluna("revenda", "Unidade", 20, maiusculas=True),
+        Coluna("colaborador", "Colaborador", 26),
+        Coluna("termo", "Termo", 11),
+        Coluna("status", "Status", 17),
+        Coluna("solicitado_por", "Solicitado por", 16),
+        Coluna("solicitado_em", "Solicitado em", 17),
+        Coluna("enviado_em", "Enviado em", 17),
+        Coluna("agendado_para", "Agendado para", 17),
+        Coluna("dias", "Dias pendente", 13, "numero"),
+    ]
+    return Planilha(
+        titulo="Termos pendentes de assinatura",
+        colunas_excel=[*colunas, Coluna("motivo", "Motivo", 40)],
+        colunas_pdf=colunas,
+        linhas=linhas,
+        filtros=_preenchidos(Busca=(busca or "").strip()),
+        nome_base="termos_pendentes",
+    )
+
+
+# ── Relatório mensal ────────────────────────────────────────────────────────
+
+# Mesmos cabeçalhos do CSV de `routers/reports.py` (copiados: aquele arquivo não muda).
+HEADERS_PT = {
+    "history_id": "ID Histórico",
+    "item_id": "ID Item",
+    "peripheral_id": "ID Periférico",
+    "operador": "Operador",
+    "usuario": "Usuário",
+    "cpf": "CPF",
+    "cargo": "Cargo",
+    "center_cost": "Centro de Custo",
+    "setor": "Setor",
+    "fornecedor": "Fornecedor",
+    "revenda": "Revenda",
+    "details": "Detalhes",
+    "data_emprestimo": "Data Empréstimo",
+    "data_confirmacao": "Data Confirmação",
+    "data_devolucao": "Data Devolução",
+    "operation_type": "Operação",
+    "tipo": "Tipo",
+    "brand": "Marca",
+    "model": "Modelo",
+    "identificador": "Identificador",
+    "nota_fiscal": "Nota Fiscal",
+}
+_CHAVES_COM_DATA = ("data_emprestimo", "data_confirmacao", "data_devolucao")
+_CHAVES_NUMERICAS = ("history_id", "item_id", "peripheral_id")
+_CHAVES_PDF = (
+    "operation_type", "data_emprestimo", "data_devolucao", "usuario", "cargo", "setor",
+    "center_cost", "revenda", "tipo", "brand", "model", "identificador", "operador",
+)
+
+
+def mascarar_cpf(valor) -> Optional[str]:
+    """`***.456.789-**`; formato inesperado vira `***`; vazio vira `None`."""
+    if valor is None or str(valor).strip() == "":
+        return None
+    digitos = "".join(ch for ch in str(valor) if ch.isdigit())
+    if len(digitos) != 11:
+        return "***"
+    return f"***.{digitos[3:6]}.{digitos[6:9]}-**"
+
+
+def planilha_relatorio_mensal(
+    inv: InventoryDBManager, *, ano: int, mes: int, formato: Formato
+) -> Planilha:
+    registros = inv.generate_monthly_report(ano, mes)
+    checar_limite(len(registros), formato)
+    linhas = []
+    for r in registros:
+        linha = dict(r)
+        linha["cpf"] = mascarar_cpf(r.get("cpf"))
+        for chave in _CHAVES_COM_DATA:
+            linha[chave] = data_hora_br(r.get(chave))
+        linhas.append(linha)
+
+    def coluna(chave: str) -> Coluna:
+        return Coluna(
+            chave, HEADERS_PT[chave], 12 if chave in _CHAVES_NUMERICAS else 18,
+            "numero" if chave in _CHAVES_NUMERICAS else "texto", maiusculas=(chave == "revenda"),
+        )
+
+    return Planilha(
+        titulo=f"Relatório mensal {mes:02d}/{ano}",
+        colunas_excel=[coluna(c) for c in HEADERS_PT],
+        colunas_pdf=[coluna(c) for c in _CHAVES_PDF],
+        linhas=linhas,
+        filtros={"Período": f"{mes:02d}/{ano}"},
+        nome_base=f"relatorio_mensal_{ano}_{mes:02d}",
+    )
