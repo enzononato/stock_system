@@ -13,7 +13,7 @@ from app.core.config import settings
 from app.db.migrations import aplicar_pendentes, garantir_baseline
 from app.dependencies import limiter, get_inventory_db
 from app.services import scheduler
-from app.routers import auth, users, items, peripherals, loans, documents, history, reports, constants, unidades, audit, colaboradores, locais
+from app.routers import auth, users, items, peripherals, loans, documents, history, reports, constants, unidades, audit, colaboradores, locais, manutencoes
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +82,12 @@ _ROTULOS_DE_CAMPO = {
     "motivo": "Motivo",
     "para_unidade_id": "Unidade de destino",
     "para_local_id": "Local de destino",
+    # Manutenção do equipamento (F4)
+    "defeito": "Defeito",
+    "assistencia": "Assistência técnica",
+    "observacoes": "Observações",
+    "previsao_retorno": "Previsão de retorno",
+    "item_id": "Equipamento",
 }
 
 # "nome" vale "Nome da unidade" nas unidades; nas rotas de colaboradores e locais é só "Nome".
@@ -157,6 +163,7 @@ app.include_router(unidades.router)
 app.include_router(audit.router)
 app.include_router(colaboradores.router)
 app.include_router(locais.router)
+app.include_router(manutencoes.router)
 
 
 @app.on_event("startup")

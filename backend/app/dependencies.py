@@ -18,6 +18,7 @@ from app.db.colaborador_db import ColaboradorDBManager
 from app.db.audit_db import AuditDBManager
 from app.db.local_db import LocalDBManager
 from app.db.transferencia_db import TransferenciaDBManager
+from app.db.manutencao_db import ManutencaoDBManager
 from app.services.audit import AuditContext
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -124,6 +125,11 @@ def get_colaborador_db() -> ColaboradorDBManager:
 @lru_cache
 def get_transferencia_db() -> TransferenciaDBManager:
     return TransferenciaDBManager()
+
+
+@lru_cache
+def get_manutencao_db() -> ManutencaoDBManager:
+    return ManutencaoDBManager()
 
 
 # ── Rate limiting (T2) ──────────────────────────────────────────────────────
