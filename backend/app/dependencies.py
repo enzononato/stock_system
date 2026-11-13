@@ -190,3 +190,10 @@ def get_acesso_db():
     from app.db.acesso_db import AcessoDBManager
 
     return AcessoDBManager()
+
+
+@lru_cache
+def get_acesso_evento_db():
+    from app.db.acesso_evento_db import AcessoEventoDBManager
+
+    return AcessoEventoDBManager(get_acesso_db())

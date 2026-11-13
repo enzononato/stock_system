@@ -13,7 +13,7 @@ from app.core.config import settings
 from app.db.migrations import aplicar_pendentes, garantir_baseline
 from app.dependencies import limiter, get_inventory_db
 from app.services import scheduler
-from app.routers import acessos
+from app.routers import acessos, acesso_eventos
 from app.routers import auth, users, items, peripherals, loans, documents, history, reports, constants, unidades, audit, colaboradores, locais
 
 logger = logging.getLogger(__name__)
@@ -158,6 +158,7 @@ app.include_router(audit.router)
 app.include_router(colaboradores.router)
 app.include_router(locais.router)
 app.include_router(acessos.router)
+app.include_router(acesso_eventos.router)
 
 
 @app.on_event("startup")
