@@ -8,9 +8,11 @@ from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
+from app import jobs
 from app.core.config import settings
 from app.db.migrations import aplicar_pendentes, garantir_baseline
 from app.dependencies import limiter, get_inventory_db
+from app.services import scheduler
 from app.routers import auth, users, items, peripherals, loans, documents, history, reports, constants, unidades, audit, colaboradores
 
 logger = logging.getLogger(__name__)
@@ -151,6 +153,24 @@ def aplicar_migracoes_no_boot() -> None:
         aplicar_pendentes()
     except Exception:
         logger.exception("Falha ao aplicar as migrações do banco no boot.")
+
+
+@app.on_event("startup")
+async def iniciar_agendador() -> None:
+    """Registra os jobs e liga o agendador (só com SCHEDULER_ENABLED). Nunca impede o boot."""
+    try:
+        jobs.registrar_jobs()
+        scheduler.iniciar()
+    except Exception:
+        logger.exception("Falha ao iniciar o agendador de tarefas.")
+
+
+@app.on_event("shutdown")
+async def parar_agendador() -> None:
+    try:
+        await scheduler.parar()
+    except Exception:
+        logger.exception("Falha ao parar o agendador de tarefas.")
 
 
 @app.get("/api/health")
