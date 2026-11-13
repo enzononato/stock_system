@@ -162,7 +162,7 @@ def test_confirmacoes_simultaneas_geram_uma_so_confirmacao(item_pendente):
     from tests.fixtures_termos import linhas_audit
 
     item_id = item_pendente["id"]
-    largada = threading.Barrier(2)
+    largada = threading.Barrier(2, timeout=10)
 
     def confirmar(i):
         largada.wait()

@@ -228,7 +228,7 @@ def _em_paralelo(funcoes):
     import threading
     from concurrent.futures import ThreadPoolExecutor
 
-    largada = threading.Barrier(len(funcoes))
+    largada = threading.Barrier(len(funcoes), timeout=10)
 
     def _rodar(f):
         largada.wait()

@@ -334,7 +334,7 @@ def test_resolver_tarefas_diferentes_ao_mesmo_tempo_conclui_o_evento(_fastapi_ap
         c = criar_colaborador(f"Pessoa {rodada}", cpf=f"9000000000{rodada}")
         ev = _abrir(client_tecnico, c, "admissao")
         ids = [_tarefa(ev, "AD")["id"], _tarefa(ev, "E-mail")["id"]]
-        largada = Barrier(2)
+        largada = Barrier(2, timeout=10)
 
         def chamar(i, ids=ids, largada=largada):
             outro = TestClient(_fastapi_app)
@@ -379,7 +379,7 @@ def test_resolver_criar_e_registrar_acesso_ao_mesmo_tempo_nao_da_500(_fastapi_ap
         c = criar_colaborador(f"Pessoa {rodada}", cpf=f"8000000000{rodada}")
         ev = _abrir(client_tecnico, c, "admissao")
         tarefa_id = _tarefa(ev, "AD")["id"]
-        largada = Barrier(2)
+        largada = Barrier(2, timeout=10)
         login_ficha = "mesmo.login" if rodada % 2 else "outro.login"
 
         def resolver():

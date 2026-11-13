@@ -265,7 +265,7 @@ def test_dois_eventos_abertos_ao_mesmo_tempo_so_um_vale(_fastapi_app, client_tec
     _montar_vendedor()
     c = criar_colaborador()
     cabecalho = {"Authorization": client_tecnico.headers["Authorization"]}
-    largada = Barrier(2)
+    largada = Barrier(2, timeout=10)
 
     def chamar(_):
         outro = TestClient(_fastapi_app)
