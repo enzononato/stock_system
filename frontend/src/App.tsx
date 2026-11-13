@@ -26,6 +26,7 @@ import EtiquetasPage from '@/pages/EtiquetasPage'
 import EtiquetaRedirectPage from '@/pages/EtiquetaRedirectPage'
 import InventariosPage from '@/pages/InventariosPage'
 import InventarioLeituraPage from '@/pages/InventarioLeituraPage'
+import InventarioRelatorioPage from '@/pages/InventarioRelatorioPage'
 import { PosLoginRedirect } from '@/features/etiquetas/PosLoginRedirect'
 import { ToastContainer } from '@/components/ui/toast'
 
@@ -180,6 +181,14 @@ export default function App() {
             element={
               <RequireRole roles={['Gestor', 'Técnico']}>
                 <InventarioLeituraPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="inventarios/:id"
+            element={
+              <RequireRole roles={['Gestor', 'Técnico']}>
+                <InventarioRelatorioPage />
               </RequireRole>
             }
           />
