@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -462,5 +462,57 @@ describe('UnidadesPage — locais', () => {
 
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByText(/Locais — JUAZEIRO/)).toBeInTheDocument()
+  })
+})
+
+describe("UnidadesPage — listagem (F1)", () => {
+  beforeEach(() => localStorage.clear())
+
+  it("pagina no cliente com 25 por padrão", async () => {
+    const muitas = Array.from({ length: 30 }, (_, i) => ({
+      ...unidadeJuazeiro,
+      id: 100 + i,
+      nome: `Filial ${i + 1}`,
+    }))
+    mockListUnidades(muitas)
+    renderPage()
+    expect(await screen.findByText("Mostrando 1–25 de 30")).toBeInTheDocument()
+  })
+
+  it("ativa e inativa em pílula com cor própria", async () => {
+    mockListUnidadesComFiltro([unidadeJuazeiro, unidadeRecife])
+    const user = userEvent.setup()
+    renderPage()
+    const ativa = await screen.findByText("Ativa")
+    expect(ativa).toHaveClass("font-bold")
+    expect(ativa.style.color).toBe("var(--status-available)")
+    await user.click(screen.getByLabelText("Mostrar unidades inativas"))
+    const inativa = await screen.findByText("Inativa")
+    expect(inativa.style.color).toBe("var(--status-retired)")
+  })
+
+  it("reativar com duplo clique envia uma requisição só", async () => {
+    mockListUnidadesComFiltro([unidadeJuazeiro, unidadeRecife])
+    let liberar!: () => void
+    const pendente = new Promise<void>((r) => {
+      liberar = r
+    })
+    let chamadas = 0
+    server.use(
+      http.post("/api/unidades/5/reativar", async () => {
+        chamadas += 1
+        await pendente
+        return HttpResponse.json({ detail: "Unidade reativada." })
+      })
+    )
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByLabelText("Mostrar unidades inativas"))
+    const botao = await screen.findByLabelText("Reativar unidade Recife")
+    await user.click(botao)
+    await user.click(botao)
+    await waitFor(() => expect(chamadas).toBe(1))
+    expect(botao).toHaveAttribute("aria-busy", "true")
+    liberar()
   })
 })
