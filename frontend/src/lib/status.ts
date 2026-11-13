@@ -33,7 +33,11 @@ const LOOKUP = new Map<string, StatusTone>(
   )
 )
 
-/** Mapeia o status (pt-BR, como vem do backend) para o tom semântico usado nos tokens `--status-<tom>`. */
+/**
+ * Mapeia o status (pt-BR, como vem do backend) para o tom semântico usado nos tokens `--status-<tom>`.
+ * Casamento exato (sem acento, caixa e espaços nas pontas); "Pendente …" desconhecido não herda o tom
+ * de "Pendente" e fica neutro — status novo entra na tabela `TONE_BY_STATUS`.
+ */
 export function statusTone(status: string | null | undefined): StatusTone {
   if (!status) return 'neutral'
   return LOOKUP.get(normalize(status)) ?? 'neutral'

@@ -92,4 +92,20 @@ describe('Pagination', () => {
     setup({ isFetching: true })
     expect(screen.getByRole('navigation', { name: 'Paginação' })).toHaveAttribute('aria-busy', 'true')
   })
+
+  it('página além da última mostra a última (nunca "126–120")', () => {
+    const { onPageChange } = setup({ page: 6 })
+    expect(screen.getByText('Mostrando 101–120 de 120')).toBeInTheDocument()
+    expect(screen.getByText('5 / 5')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Próxima' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Anterior' }))
+    expect(onPageChange).toHaveBeenCalledWith(4)
+  })
+
+  it.each(['1e2', '2.5', '-1', '0x3'])('"Ir para" com %s não chama onPageChange', (valor) => {
+    const { onPageChange } = setup()
+    fireEvent.change(screen.getByLabelText('Ir para a página'), { target: { value: valor } })
+    fireEvent.click(screen.getByRole('button', { name: 'Ir' }))
+    expect(onPageChange).not.toHaveBeenCalled()
+  })
 })

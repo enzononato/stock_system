@@ -9,7 +9,7 @@ interface StatusPillProps {
 }
 
 export function StatusPill({ status, tone, className }: StatusPillProps) {
-  const empty = !status
+  const empty = !status?.trim()
   const resolved: StatusTone = empty ? 'neutral' : (tone ?? statusTone(status))
   return (
     <span
