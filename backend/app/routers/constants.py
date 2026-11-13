@@ -4,7 +4,7 @@ from app.dependencies import get_current_user, get_unidade_db, CurrentUser
 from app.db.unidade_db import UnidadeDBManager
 from app.core.config import (
     CENTER_COST_OPTIONS, SETORES_OPTIONS,
-    EQUIPMENT_TYPES, PERIPHERAL_TYPES, REMOVAL_REASONS,
+    EQUIPMENT_TYPES, PERIPHERAL_TYPES, REMOVAL_REASONS, ITEM_STATUSES,
 )
 
 router = APIRouter(prefix="/api/constants", tags=["constants"])
@@ -29,4 +29,5 @@ def get_constants(
         "peripheral_types": PERIPHERAL_TYPES,
         "removal_reasons": list(REMOVAL_REASONS.keys()),
         "removal_reasons_attachment": REMOVAL_REASONS,
+        "item_statuses": ITEM_STATUSES,
     }

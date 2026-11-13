@@ -27,6 +27,7 @@ managers em `app/db/`; as migrações partem delas.
 | 0100-0199 | Fase 1 |
 | 0200-0299 | Fase 2 |
 | 0300-0399 | Fase 3 |
+| 0400-0499 | Fase 4 |
 
 ## Como roda
 
