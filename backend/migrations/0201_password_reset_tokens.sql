@@ -10,4 +10,4 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
     UNIQUE KEY uq_password_reset_token_hash (token_hash),
     INDEX idx_password_reset_usuario (usuario_id, criado_em),
     CONSTRAINT fk_password_reset_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
-) CHARACTER SET utf8mb4;
+);

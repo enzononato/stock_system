@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS mfa_falhas (
     INDEX idx_mfa_falhas_usuario (usuario_id, criado_em),
     INDEX idx_mfa_falhas_jti (jti),
     CONSTRAINT fk_mfa_falhas_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
-) CHARACTER SET utf8mb4;
+);
 SET @faltando := (SELECT COUNT(*) = 0 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'usuarios' AND column_name = 'mfa_bloqueado_ate');
 SET @sql := IF(@faltando, 'ALTER TABLE usuarios ADD COLUMN mfa_bloqueado_ate DATETIME NULL', 'DO 0');
 PREPARE passo FROM @sql;

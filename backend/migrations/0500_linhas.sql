@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS linhas (
     CONSTRAINT fk_linhas_unidade FOREIGN KEY (unidade_id) REFERENCES unidades (id),
     CONSTRAINT fk_linhas_item FOREIGN KEY (item_id) REFERENCES items (id) ON DELETE SET NULL,
     CONSTRAINT fk_linhas_colaborador FOREIGN KEY (colaborador_id) REFERENCES colaboradores (id) ON DELETE SET NULL
-) CHARACTER SET utf8mb4;
+);
 
 -- Histórico da linha. item_id (aparelho depois do evento) e item_id_anterior não têm FK: são registro histórico.
 CREATE TABLE IF NOT EXISTS linha_eventos (
@@ -38,4 +38,4 @@ CREATE TABLE IF NOT EXISTS linha_eventos (
     KEY idx_linha_eventos_item (item_id),
     KEY idx_linha_eventos_item_anterior (item_id_anterior),
     CONSTRAINT fk_linha_eventos_linha FOREIGN KEY (linha_id) REFERENCES linhas (id) ON DELETE CASCADE
-) CHARACTER SET utf8mb4;
+);

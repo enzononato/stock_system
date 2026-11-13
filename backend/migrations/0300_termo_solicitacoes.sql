@@ -29,4 +29,4 @@ CREATE TABLE IF NOT EXISTS termo_solicitacoes (
     CONSTRAINT fk_termo_item FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE,
     CONSTRAINT fk_termo_colaborador FOREIGN KEY (colaborador_id) REFERENCES colaboradores(id) ON DELETE SET NULL,
     CONSTRAINT fk_termo_history FOREIGN KEY (history_id) REFERENCES history(id) ON DELETE SET NULL
-) CHARACTER SET utf8mb4;
+);

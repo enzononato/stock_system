@@ -196,6 +196,18 @@ def test_colaborador_desligado_por_vinculo_e_por_cpf_legado(
         assert x["descricao"].endswith("· Indisponível")
 
 
+def test_colaborador_desligado_por_cpf_normaliza_os_dois_lados(
+    client_gestor, criar_colaborador, criar_item, executar_sql
+):
+    criar_colaborador(situacao="desligado", cpf="52998224725")
+    item = criar_item()
+    executar_sql(
+        "UPDATE items SET status='Indisponível', colaborador_id=NULL, cpf='529 982 247/25' WHERE id=%s",
+        (item["id"],),
+    )
+    assert [x["item_id"] for x in _alertas(client_gestor, "colaborador_desligado")] == [item["id"]]
+
+
 def test_colaborador_ativo_nao_alerta(client_gestor, criar_colaborador, criar_item, executar_sql):
     colab = criar_colaborador(situacao="ativo")
     a = criar_item()

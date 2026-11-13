@@ -14,4 +14,4 @@ CREATE TABLE IF NOT EXISTS transferencias (
     CONSTRAINT fk_transferencias_item FOREIGN KEY (item_id) REFERENCES items (id),
     CONSTRAINT fk_transferencias_de_local FOREIGN KEY (de_local_id) REFERENCES locais (id) ON DELETE SET NULL,
     CONSTRAINT fk_transferencias_para_local FOREIGN KEY (para_local_id) REFERENCES locais (id) ON DELETE SET NULL
-) CHARACTER SET utf8mb4;
+);

@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS sistemas (
     descricao VARCHAR(255) NULL,
     ativo TINYINT(1) NOT NULL DEFAULT 1,
     UNIQUE KEY uq_sistemas_nome (nome)
-) CHARACTER SET utf8mb4;
+);
 
 CREATE TABLE IF NOT EXISTS pacotes_funcao (
     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS pacotes_funcao (
     UNIQUE KEY uq_pacotes_funcao (cargo, sistema_id),
     INDEX idx_pacotes_funcao_sistema (sistema_id),
     CONSTRAINT fk_pacotes_funcao_sistema FOREIGN KEY (sistema_id) REFERENCES sistemas (id)
-) CHARACTER SET utf8mb4;
+);
 
 CREATE TABLE IF NOT EXISTS colaborador_acessos (
     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS colaborador_acessos (
     CONSTRAINT fk_colaborador_acessos_colaborador FOREIGN KEY (colaborador_id) REFERENCES colaboradores (id),
     CONSTRAINT fk_colaborador_acessos_sistema FOREIGN KEY (sistema_id) REFERENCES sistemas (id),
     CONSTRAINT fk_colaborador_acessos_item FOREIGN KEY (item_id) REFERENCES items (id) ON DELETE SET NULL
-) CHARACTER SET utf8mb4;
+);
 
 CREATE TABLE IF NOT EXISTS acesso_eventos (
     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS acesso_eventos (
     INDEX idx_acesso_eventos_colaborador (colaborador_id, status),
     INDEX idx_acesso_eventos_status (status, aberto_em),
     CONSTRAINT fk_acesso_eventos_colaborador FOREIGN KEY (colaborador_id) REFERENCES colaboradores (id)
-) CHARACTER SET utf8mb4;
+);
 
 CREATE TABLE IF NOT EXISTS acesso_tarefas (
     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS acesso_tarefas (
     CONSTRAINT fk_acesso_tarefas_evento FOREIGN KEY (evento_id) REFERENCES acesso_eventos (id) ON DELETE CASCADE,
     CONSTRAINT fk_acesso_tarefas_sistema FOREIGN KEY (sistema_id) REFERENCES sistemas (id),
     CONSTRAINT fk_acesso_tarefas_acesso FOREIGN KEY (acesso_id) REFERENCES colaborador_acessos (id) ON DELETE SET NULL
-) CHARACTER SET utf8mb4;
+);
 
 INSERT IGNORE INTO sistemas (nome, descricao, ativo) VALUES
     ('AD', 'Active Directory (usuário de rede)', 1),

@@ -221,10 +221,18 @@ class PainelDBManager:
             f"AND i.status IN ({_lista_sql(STATUS_COM_COLABORADOR)})"
         )
         por_vinculo = base.format(juncao="c.id = i.colaborador_id")
+        # Os dois lados só com dígitos e convertidos para o mesmo conjunto de caracteres:
+        # `items` (legada) e `colaboradores` (nova) podem ter collations diferentes num
+        # banco antigo, e comparar colunas de collations distintas dá "Illegal mix of
+        # collations". Como só sobram dígitos, a collation não muda o resultado.
+        so_digitos = (
+            "CONVERT(REPLACE(REPLACE(REPLACE(REPLACE({col}, '.', ''), '-', ''), ' ', ''), '/', '') "
+            "USING utf8mb4)"
+        )
         por_cpf = base.format(
             juncao=(
-                "i.colaborador_id IS NULL AND i.cpf IS NOT NULL AND i.cpf <> '' AND c.cpf = "
-                "REPLACE(REPLACE(REPLACE(REPLACE(i.cpf, '.', ''), '-', ''), ' ', ''), '/', '')"
+                "i.colaborador_id IS NULL AND i.cpf IS NOT NULL AND i.cpf <> '' AND "
+                f"{so_digitos.format(col='c.cpf')} = {so_digitos.format(col='i.cpf')}"
             )
         )
         with get_cursor(commit=False) as cur:

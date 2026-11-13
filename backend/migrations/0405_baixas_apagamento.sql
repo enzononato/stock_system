@@ -14,4 +14,4 @@ CREATE TABLE IF NOT EXISTS baixas_apagamento (
     KEY idx_baixas_apagamento_item (item_id),
     CONSTRAINT fk_baixas_apagamento_item FOREIGN KEY (item_id) REFERENCES items (id),
     CONSTRAINT fk_baixas_apagamento_history FOREIGN KEY (history_id) REFERENCES history (id)
-) CHARACTER SET utf8mb4;
+);

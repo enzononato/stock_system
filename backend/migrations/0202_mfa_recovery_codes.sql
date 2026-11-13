@@ -6,4 +6,4 @@ CREATE TABLE IF NOT EXISTS mfa_recovery_codes (
     usado_em DATETIME NULL,
     UNIQUE KEY uq_mfa_recovery (usuario_id, code_hash),
     CONSTRAINT fk_mfa_recovery_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
-) CHARACTER SET utf8mb4;
+);

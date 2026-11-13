@@ -7,4 +7,4 @@ CREATE TABLE IF NOT EXISTS locais (
     ativo TINYINT(1) NOT NULL DEFAULT 1,
     UNIQUE KEY uq_locais_unidade_nome (unidade_id, nome),
     CONSTRAINT fk_locais_unidade FOREIGN KEY (unidade_id) REFERENCES unidades (id)
-) CHARACTER SET utf8mb4;
+);

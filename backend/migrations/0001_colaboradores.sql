@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS colaboradores (
     INDEX idx_colaboradores_unidade (unidade_id),
     CONSTRAINT fk_colaboradores_unidade FOREIGN KEY (unidade_id) REFERENCES unidades (id),
     CONSTRAINT fk_colaboradores_superior FOREIGN KEY (superior_id) REFERENCES colaboradores (id) ON DELETE SET NULL
-) CHARACTER SET utf8mb4;
+);
 
 -- Histórico das sincronizações com a base de RH (a última aparece na tela de colaboradores).
 CREATE TABLE IF NOT EXISTS colaboradores_sync (
@@ -41,4 +41,4 @@ CREATE TABLE IF NOT EXISTS colaboradores_sync (
     ignorados INT NOT NULL DEFAULT 0,
     duplicados INT NOT NULL DEFAULT 0,
     erro VARCHAR(500) NULL
-) CHARACTER SET utf8mb4;
+);

@@ -5,4 +5,4 @@ CREATE TABLE IF NOT EXISTS scheduler_execucoes (
     ultima_execucao DATETIME NULL,
     ultimo_status ENUM('ok','erro') NULL,
     ultimo_erro VARCHAR(500) NULL
-) CHARACTER SET utf8mb4;
+);

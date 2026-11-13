@@ -14,4 +14,4 @@ CREATE TABLE IF NOT EXISTS audit_log (
     depois JSON NULL,
     INDEX idx_audit_entidade (entidade, entidade_id),
     INDEX idx_audit_ocorrido_em (ocorrido_em)
-) CHARACTER SET utf8mb4;
+);

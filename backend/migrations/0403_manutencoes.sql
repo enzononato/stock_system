@@ -20,4 +20,4 @@ CREATE TABLE IF NOT EXISTS manutencoes (
     KEY idx_manutencoes_status (status),
     KEY idx_manutencoes_aberta_em (aberta_em),
     CONSTRAINT fk_manutencoes_item FOREIGN KEY (item_id) REFERENCES items (id)
-) CHARACTER SET utf8mb4;
+);
