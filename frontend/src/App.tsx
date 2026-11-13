@@ -23,6 +23,8 @@ import ColaboradorDetailPage from '@/pages/ColaboradorDetailPage'
 import AuditPage from '@/pages/AuditPage'
 import LocaisPage from '@/pages/LocaisPage'
 import EtiquetasPage from '@/pages/EtiquetasPage'
+import EtiquetaRedirectPage from '@/pages/EtiquetaRedirectPage'
+import { PosLoginRedirect } from '@/features/etiquetas/PosLoginRedirect'
 import { ToastContainer } from '@/components/ui/toast'
 
 /**
@@ -45,6 +47,7 @@ export default function App() {
     <>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/e/:id" element={<EtiquetaRedirectPage />} />
 
         {/* Todas as rotas protegidas dentro do AppLayout */}
         <Route element={<AppLayout />}>
@@ -203,6 +206,7 @@ export default function App() {
         </Route>
       </Routes>
 
+      <PosLoginRedirect />
       <ToastContainer />
     </>
   )
