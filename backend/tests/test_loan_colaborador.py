@@ -361,3 +361,41 @@ def test_estorno_da_confirmacao_reabre_a_solicitacao_assinada(
     assert client_gestor.post(f"/api/termos/{termo_id}/assinado", files=ARQUIVO_PDF).status_code == 200
     assert _item(client_gestor, item_id)["status"] == "Indisponível"
     assert get_termo_db().obter(termo_id)["status"] == "assinado"
+
+
+def test_devolucao_de_item_vinculado_nao_confere_cpf(
+    client_gestor, item_disponivel, colaborador, executar_sql, termo_devolucao_disponivel
+):
+    """A regra do CPF vale só para item legado (sem vínculo): o vinculado já está ligado ao colaborador."""
+    if not termo_devolucao_disponivel:
+        pytest.skip("Modelo do termo de devolução ausente neste ambiente.")
+    item_id = item_disponivel["id"]
+    assert client_gestor.post(
+        "/api/loans", json=corpo_emprestimo_colaborador(item_id, colaborador["id"])
+    ).status_code == 200
+    assert client_gestor.post(f"/api/loans/{item_id}/confirm", files=ARQUIVO_PDF).status_code == 200
+    executar_sql("UPDATE items SET cpf=%s WHERE id=%s", ("11144477735", item_id))
+
+    resp = client_gestor.post(f"/api/loans/{item_id}/return/initiate", json={"colaborador_id": colaborador["id"]})
+    assert resp.status_code == 200, resp.text
+
+
+def test_estorno_da_devolucao_normaliza_o_cpf_do_historico(
+    client_gestor, inv_manager, item_disponivel, colaborador, executar_sql, forcar_devolucao_iniciada
+):
+    item_id = item_disponivel["id"]
+    assert client_gestor.post(
+        "/api/loans", json=corpo_emprestimo_colaborador(item_id, colaborador["id"])
+    ).status_code == 200
+    assert client_gestor.post(f"/api/loans/{item_id}/confirm", files=ARQUIVO_PDF).status_code == 200
+    forcar_devolucao_iniciada(item_id)
+    assert client_gestor.post(f"/api/loans/{item_id}/return/confirm", files=ARQUIVO_PDF).status_code == 200
+    # CPF gravado com máscara no histórico do empréstimo
+    executar_sql(
+        "UPDATE history SET cpf=%s WHERE item_id=%s AND operation='Empréstimo'", ("529.982.247-25", item_id)
+    )
+
+    devolucao_id = inv_manager.ultimo_history_id(item_id, "Devolução")
+    resp = client_gestor.post(f"/api/history/{devolucao_id}/reverse", json={"password": "SenhaForte#123"})
+    assert resp.status_code == 200, resp.text
+    assert _item(client_gestor, item_id)["colaborador_id"] == colaborador["id"]

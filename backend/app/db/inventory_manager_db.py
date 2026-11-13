@@ -1143,8 +1143,9 @@ class InventoryDBManager:
                     # O vínculo de cadastro (zerado por confirm_return) volta quando o CPF
                     # do empréstimo ainda corresponde a um colaborador.
                     colaborador_id = None
-                    if last_loan["cpf"]:
-                        cur.execute("SELECT id FROM colaboradores WHERE cpf=%s", (last_loan["cpf"],))
+                    cpf_digitos = "".join(ch for ch in (last_loan["cpf"] or "") if ch.isdigit())
+                    if cpf_digitos:
+                        cur.execute("SELECT id FROM colaboradores WHERE cpf=%s", (cpf_digitos,))
                         achado = cur.fetchone()
                         colaborador_id = achado["id"] if achado else None
                     cur.execute(

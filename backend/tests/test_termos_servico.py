@@ -243,3 +243,83 @@ def test_para_resposta_remove_chaves_internas(emprestimo, revsign_fake):
     assert resposta["tem_documento"] is True
     assert resposta["tem_assinado"] is False
     assert resposta["legado"] is False
+
+
+# ── Solicitação em processamento (trava ocupada) ─────────────────────────────
+
+
+@pytest.mark.integration
+def test_solicitar_nao_cria_outra_enquanto_a_pendente_esta_em_processamento(emprestimo):
+    from app.db.database_mysql import get_cursor
+    from app.services import termos
+    from app.services.termos_trava import MSG_PROCESSANDO, nome_da_trava
+
+    primeira = termos.solicitar(emprestimo, "entrega", CTX)
+    with get_cursor(commit=False) as cur:
+        cur.execute("SELECT GET_LOCK(%s, 0)", (nome_da_trava(primeira["id"]),))
+        with pytest.raises(termos.TermoErro) as erro:
+            termos.solicitar(emprestimo, "entrega", CTX)
+        assert str(erro.value) == MSG_PROCESSANDO
+        cur.execute("SELECT RELEASE_LOCK(%s)", (nome_da_trava(primeira["id"]),))
+    linhas, total = termos.get_termo_db().listar_por_item(emprestimo, limit=10, offset=0)
+    assert total == 1 and linhas[0]["status"] == "manual"
+
+
+@pytest.mark.integration
+def test_solicitar_cancela_a_nova_se_a_anterior_ficou_ocupada_no_intervalo(emprestimo, monkeypatch):
+    """Corrida: a pré-checagem não viu a trava, mas ela estava ocupada na hora de cancelar."""
+    from app.db.database_mysql import get_cursor
+    from app.services import termos
+    from app.services.termos_trava import MSG_PROCESSANDO, nome_da_trava
+
+    primeira = termos.solicitar(emprestimo, "entrega", CTX)
+    monkeypatch.setattr(termos, "_em_processamento", lambda pendentes: [])
+    with get_cursor(commit=False) as cur:
+        cur.execute("SELECT GET_LOCK(%s, 0)", (nome_da_trava(primeira["id"]),))
+        with pytest.raises(termos.TermoErro, match=MSG_PROCESSANDO):
+            termos.solicitar(emprestimo, "entrega", CTX)
+        cur.execute("SELECT RELEASE_LOCK(%s)", (nome_da_trava(primeira["id"]),))
+    linhas, _ = termos.get_termo_db().listar_por_item(emprestimo, limit=10, offset=0)
+    por_status = sorted(t["status"] for t in linhas)
+    assert por_status == ["cancelado", "manual"]  # a nova foi cancelada; a anterior segue pendente
+
+
+@pytest.mark.integration
+def test_cancelar_por_estorno_registra_aviso_quando_a_trava_esta_ocupada(emprestimo, inv_manager, caplog):
+    import logging
+
+    from app.db.database_mysql import get_cursor
+    from app.services import termos
+    from app.services.termos_trava import nome_da_trava
+
+    historico = inv_manager.ultimo_history_id(emprestimo, "Empréstimo")
+    termo = termos.solicitar(emprestimo, "entrega", CTX, history_id=historico)
+    with get_cursor(commit=False) as cur:
+        cur.execute("SELECT GET_LOCK(%s, 0)", (nome_da_trava(termo["id"]),))
+        with caplog.at_level(logging.WARNING):
+            assert termos.cancelar_por_estorno(historico, CTX) == []
+        cur.execute("SELECT RELEASE_LOCK(%s)", (nome_da_trava(termo["id"]),))
+    assert termos.get_termo_db().obter(termo["id"])["status"] == "manual"
+    assert any(str(termo["id"]) in r.getMessage() and "processamento" in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.integration
+def test_reabrir_por_estorno_so_reabre_a_solicitacao_com_o_mesmo_pdf(emprestimo):
+    from app.services import termos
+    from app.services.termos_confirmacao import anexar_assinado
+
+    termo = termos.solicitar(emprestimo, "entrega", CTX)
+    assinado = anexar_assinado(termo["id"], b"%PDF-1.4 x", "a.pdf", "tecnico.teste", CTX)
+    chave = assinado["arquivo_assinado_key"]
+
+    outra = {"id": 1, "operation": "Confirmação Empréstimo", "item_id": emprestimo, "termo_assinado_anexo": "termos_assinados/outro.pdf"}
+    assert termos.reabrir_por_estorno(outra, CTX) is None
+    assert termos.get_termo_db().obter(termo["id"])["status"] == "assinado"
+
+    sem_chave = {**outra, "termo_assinado_anexo": None}
+    assert termos.reabrir_por_estorno(sem_chave, CTX) is None
+    assert termos.get_termo_db().obter(termo["id"])["status"] == "assinado"
+
+    igual = {**outra, "termo_assinado_anexo": chave}
+    assert termos.reabrir_por_estorno(igual, CTX) == termo["id"]
+    assert termos.get_termo_db().obter(termo["id"])["status"] == "manual"

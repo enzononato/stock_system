@@ -15,7 +15,7 @@ import { confirmReturn, initiateReturn } from '@/api/loans'
 import { usePageSize } from '@/hooks/usePageSize'
 import { getErrorMessage } from '@/lib/api-error'
 import { upper } from '@/lib/format'
-import { formatDate } from '@/lib/utils'
+import { formatCpf, formatDate } from '@/lib/utils'
 import { ColaboradorSelect } from '@/components/colaboradores/ColaboradorSelect'
 import { ColaboradorEmailField } from '@/components/termos/ColaboradorEmailField'
 import { garantirEmailDoColaborador } from '@/components/termos/colaboradorEmail'
@@ -42,6 +42,9 @@ import { toast } from '@/components/ui/toast'
 // de página do backend.
 
 const MSG_CPF_NAO_CONFERE = 'O CPF do colaborador escolhido não confere com o do responsável pelo equipamento.'
+
+const MSG_FORA_DO_CADASTRO = (cpf: string) =>
+  `O responsável pelo equipamento (CPF ${formatCpf(cpf)}) não está no cadastro de colaboradores. Sincronize ou cadastre-o antes da devolução.`
 
 type ResultadoDevolucao = Awaited<ReturnType<typeof initiateReturn>>
 
@@ -81,12 +84,16 @@ function IniciarDevolucaoDialog({ item, onClose, onConcluido }: IniciarDevolucao
     enabled: vinculadoId === null && cpfDoItem !== '',
     retry: false,
   })
+  // Só o colaborador já cadastrado (id) pode ser escolhido; o que existe apenas na base de RH
+  // (`id: null`) não tem cadastro para receber o termo.
+  const doCpfCadastrado = doCpf && doCpf.id != null ? doCpf : null
+  const responsavelForaDoCadastro = !!doCpf && doCpf.id == null
   useEffect(() => {
-    if (doCpf) {
-      setEscolhido((atual) => atual ?? doCpf)
-      setEmail((atual) => atual || (doCpf.email ?? ''))
+    if (doCpfCadastrado) {
+      setEscolhido((atual) => atual ?? doCpfCadastrado)
+      setEmail((atual) => atual || (doCpfCadastrado.email ?? ''))
     }
-  }, [doCpf])
+  }, [doCpfCadastrado])
 
   function escolher(c: Colaborador | null) {
     setEscolhido(c)
@@ -103,6 +110,7 @@ function IniciarDevolucaoDialog({ item, onClose, onConcluido }: IniciarDevolucao
     mutationFn: async () => {
       if (!colaborador) throw new Error('Selecione o colaborador.')
       if (cpfNaoConfere) throw new Error(MSG_CPF_NAO_CONFERE)
+      if (responsavelForaDoCadastro) throw new Error(MSG_FORA_DO_CADASTRO(cpfDoItem))
       const atualizado = await garantirEmailDoColaborador(colaborador, email)
       const resultado = await initiateReturn(item.id, { colaborador_id: atualizado.id })
       return { resultado, atualizado }
@@ -140,6 +148,11 @@ function IniciarDevolucaoDialog({ item, onClose, onConcluido }: IniciarDevolucao
                 disabled={vinculadoId !== null || mutation.isPending}
               />
             </div>
+            {responsavelForaDoCadastro && (
+              <p role="alert" className="text-xs text-destructive">
+                {MSG_FORA_DO_CADASTRO(cpfDoItem)}
+              </p>
+            )}
             {cpfNaoConfere && (
               <p role="alert" className="text-xs text-destructive">
                 {MSG_CPF_NAO_CONFERE}
@@ -162,7 +175,7 @@ function IniciarDevolucaoDialog({ item, onClose, onConcluido }: IniciarDevolucao
             size="sm"
             onClick={() => mutation.mutate()}
             loading={mutation.isPending}
-            disabled={cpfNaoConfere}
+            disabled={cpfNaoConfere || responsavelForaDoCadastro}
           >
             Gerar termo e iniciar
           </Button>

@@ -101,6 +101,16 @@ def _descricao_do_item(item: dict) -> str:
     return " ".join(p for p in (item.get("tipo"), item.get("brand"), item.get("model")) if p)
 
 
+def _em_processamento(pendentes: list[dict]) -> list[int]:
+    """Ids das solicitações cuja trava está com outra rotina agora."""
+    ocupadas: list[int] = []
+    for termo in pendentes:
+        with trava(termo["id"]) as pegou:
+            if not pegou:
+                ocupadas.append(termo["id"])
+    return ocupadas
+
+
 def solicitar(
     item_id: int,
     tipo: TipoTermo,
@@ -115,6 +125,14 @@ def solicitar(
     if not item:
         raise TermoErro("Equipamento não encontrado.")
     termos = get_termo_db()
+    # Uma solicitação anterior em processamento (assinatura chegando) não pode ser cancelada agora:
+    # não cria outra por cima dela.
+    em_processamento = _em_processamento(termos.pendentes_do_item(item_id))
+    if em_processamento:
+        logger.warning(
+            "Solicitação nova do item %s adiada: pendente(s) %s em processamento.", item_id, em_processamento
+        )
+        raise TermoErro(MSG_PROCESSANDO)
     colaborador = _resolver_colaborador(item)
     novo_id = termos.criar(
         item_id=item_id,
@@ -128,9 +146,14 @@ def solicitar(
         destinatario_nome=colaborador["nome"] if colaborador else None,
         destinatario_email=colaborador.get("email") if colaborador else None,
     )
+    ocupadas: list[int] = []
     cancelar_pendentes_do_item(
-        item_id, ctx, f"Substituída pela solicitação #{novo_id}.", exceto=novo_id
+        item_id, ctx, f"Substituída pela solicitação #{novo_id}.", exceto=novo_id, ocupadas=ocupadas
     )
+    if ocupadas:
+        # Uma anterior foi pegar a trava no intervalo: não deixa duas solicitações abertas.
+        cancelar(novo_id, ctx, "Solicitação anterior em processamento.", travado=True)
+        raise TermoErro(MSG_PROCESSANDO)
     audit.record(
         ctx, "termo", novo_id, "criar", None,
         {
@@ -301,8 +324,15 @@ def cancelar(termo_id: int, ctx: AuditContext, motivo: str, *, travado: bool = F
 
 
 def cancelar_pendentes_do_item(
-    item_id: int, ctx: AuditContext, motivo: str, *, exceto: Optional[int] = None
+    item_id: int,
+    ctx: AuditContext,
+    motivo: str,
+    *,
+    exceto: Optional[int] = None,
+    ocupadas: Optional[list[int]] = None,
 ) -> list[int]:
+    """Cancela as pendentes do item. As que estão em processamento (trava ocupada) ficam de
+    fora: são registradas em `ocupadas`, quando informada, e no log."""
     cancelados: list[int] = []
     for termo in get_termo_db().pendentes_do_item(item_id):
         if termo["id"] == exceto:
@@ -310,8 +340,12 @@ def cancelar_pendentes_do_item(
         try:
             cancelar(termo["id"], ctx, motivo)
             cancelados.append(termo["id"])
-        except TermoErro:
-            continue  # já deixou de ser pendente
+        except TermoErro as e:
+            if str(e) == MSG_PROCESSANDO:
+                logger.warning("Solicitação %s não cancelada: em processamento.", termo["id"])
+                if ocupadas is not None:
+                    ocupadas.append(termo["id"])
+            # senão, já deixou de ser pendente
     return cancelados
 
 
@@ -323,8 +357,12 @@ def cancelar_por_estorno(history_id: int, ctx: AuditContext) -> list[int]:
         try:
             cancelar(termo["id"], ctx, MOTIVO_ESTORNO)
             cancelados.append(termo["id"])
-        except TermoErro:
-            continue
+        except TermoErro as e:
+            if str(e) == MSG_PROCESSANDO:
+                logger.warning(
+                    "Solicitação %s não cancelada no estorno do lançamento %s: em processamento.",
+                    termo["id"], history_id,
+                )
     return cancelados
 
 
@@ -375,8 +413,8 @@ def reabrir_por_estorno(entrada: dict, ctx: AuditContext) -> Optional[int]:
     """Estorno de uma `Confirmação Empréstimo`/`Confirmação Devolução`: a solicitação que foi
     assinada por ela volta a `manual`, para o card voltar a oferecer "Anexar assinado".
 
-    Acha a solicitação pelo PDF guardado na confirmação (ou, na falta dele, a última assinada
-    do mesmo tipo do item). Devolve o id reaberto, ou None.
+    Acha a solicitação pelo PDF guardado na confirmação (`termo_assinado_anexo`); sem correspondência
+    exata nada é reaberto (só log). Devolve o id reaberto, ou None.
     """
     tipo = {"Confirmação Empréstimo": "entrega", "Confirmação Devolução": "devolucao"}.get(
         entrada.get("operation")
@@ -387,8 +425,11 @@ def reabrir_por_estorno(entrada: dict, ctx: AuditContext) -> Optional[int]:
     assinadas = termos.assinadas_do_item(entrada["item_id"], tipo)
     chave = entrada.get("termo_assinado_anexo")
     alvo = next((t for t in assinadas if chave and t["arquivo_assinado_key"] == chave), None)
-    alvo = alvo or (assinadas[0] if assinadas else None)
     if alvo is None:
+        logger.warning(
+            "Estorno do lançamento %s: nenhuma solicitação assinada com o PDF dessa confirmação; nada reaberto.",
+            entrada.get("id"),
+        )
         return None
     if not termos.atualizar(
         alvo["id"], somente_se_status=("assinado",),

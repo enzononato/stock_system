@@ -300,4 +300,27 @@ describe('ReturnPage — devolução com colaborador do cadastro', () => {
     await user.click(await screen.findByRole('button', { name: /Iniciar Devolução/i }))
     expect(await screen.findByRole('group', { name: 'Colaborador *' })).toBeInTheDocument()
   })
+
+  it('responsável que só existe na base de RH não é pré-selecionado e bloqueia a devolução', async () => {
+    mockItens([itemEmCampo()]) // cpf 52998224725
+    server.use(
+      http.get('/api/colaboradores', () => HttpResponse.json({ items: [], total: 0 })),
+      http.get('/api/colaboradores/cpf/52998224725', () =>
+        HttpResponse.json({ ...maria, id: null, local: false })
+      )
+    )
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: /Iniciar Devolução/i }))
+
+    expect(
+      await screen.findByText(
+        'O responsável pelo equipamento (CPF 529.982.247-25) não está no cadastro de colaboradores. Sincronize ou cadastre-o antes da devolução.'
+      )
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Selecione um colaborador/i })).toBeInTheDocument()
+    expect(screen.queryByLabelText(/E-mail do colaborador/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Gerar termo e iniciar' })).toBeDisabled()
+  })
 })

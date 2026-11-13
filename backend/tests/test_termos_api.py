@@ -224,3 +224,22 @@ def test_termos_do_colaborador(client_gestor, item_disponivel, criar_item, colab
     assert dados["total"] == 2 and len(dados["items"]) == 1
     assert dados["items"][0]["item_descricao"] == "Notebook Dell Latitude 5420"
     assert client_gestor.get("/api/colaboradores/9999/termos").status_code == 404
+
+
+def test_solicitar_responde_409_com_a_pendente_em_processamento(
+    client_gestor, item_disponivel, colaborador, unidade_juazeiro
+):
+    from app.db.database_mysql import get_cursor
+    from app.services.termos_trava import MSG_PROCESSANDO, nome_da_trava
+
+    item_id = item_disponivel["id"]
+    termo = _indisponivel_com_colaborador(client_gestor, item_id, colaborador["id"])
+    uso = client_gestor.post(f"/api/items/{item_id}/termos").json()
+    with get_cursor(commit=False) as cur:
+        cur.execute("SELECT GET_LOCK(%s, 0)", (nome_da_trava(uso["id"]),))
+        resp = client_gestor.post(f"/api/items/{item_id}/termos")
+        assert resp.status_code == 409
+        assert resp.json()["detail"] == MSG_PROCESSANDO
+        assert client_gestor.post(f"/api/termos/{uso['id']}/cancelar").status_code == 409
+        cur.execute("SELECT RELEASE_LOCK(%s)", (nome_da_trava(uso["id"]),))
+    assert termo is not None

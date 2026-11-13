@@ -29,6 +29,7 @@ from app.schemas.termos import (
 from app.services import termos
 from app.services.audit import AuditContext
 from app.services.termos_confirmacao import anexar_assinado
+from app.services.termos_trava import MSG_PROCESSANDO
 
 router = APIRouter(tags=["termos"])
 
@@ -46,7 +47,9 @@ def _chamar(func, *args, **kwargs):
     try:
         return func(*args, **kwargs)
     except termos.TermoErro as e:
-        raise HTTPException(status_code=400, detail=str(e)) from None
+        # Trava ocupada (assinatura sendo processada): 409, como nas rotas de confirmação.
+        status = 409 if str(e) == MSG_PROCESSANDO else 400
+        raise HTTPException(status_code=status, detail=str(e)) from None
 
 
 @router.get("/api/items/{item_id}/termos", response_model=TermosDoItemResponse)
