@@ -5,6 +5,7 @@ cada um com uma lista de tarefas (criar/desativar acesso em cada sistema).
 Reaproveita `AcessoDBManager` (catálogo, pacotes, ficha) no mesmo cursor/transação. Toda
 escrita grava `audit.record(..., cur=cur)`. Nenhuma coluna guarda senha.
 """
+import re
 from typing import Optional
 
 from app.db.acesso_db import (
@@ -95,7 +96,9 @@ class AcessoEventoDBManager:
             parte = "c.nome LIKE %s"
             params.append(f"%{_escapar_like(busca)}%")
             digitos = "".join(ch for ch in busca if ch.isdigit())
-            if digitos:
+            # CPF só entra quando o termo é número/pontuação (com ≥ 3 dígitos): "silva 7" ou "7"
+            # não devem listar todo CPF que contém esse dígito.
+            if len(digitos) >= 3 and re.fullmatch(r"[\d.\-\s/]+", busca):
                 parte += " OR c.cpf LIKE %s"
                 params.append(f"%{digitos}%")
             condicoes.append(f"({parte})")
@@ -203,6 +206,10 @@ class AcessoEventoDBManager:
         observacao: Optional[str],
     ) -> dict:
         with get_cursor() as cur:
+            # "Um evento aberto por colaborador" depende da ORDEM destas instruções: a trava do
+            # colaborador vem primeiro (leitura com trava não fixa o snapshot), então só depois
+            # da espera a consulta abaixo enxerga o evento que outra requisição acabou de abrir.
+            # Não troque a ordem nem coloque uma leitura comum antes da trava.
             colaborador = obter_colaborador(cur, colaborador_id, travar=True)
             if colaborador is None:
                 raise NaoEncontrado("Colaborador não encontrado.")
@@ -331,22 +338,32 @@ class AcessoEventoDBManager:
         observacao: Optional[str],
     ) -> dict:
         with get_cursor() as cur:
-            cur.execute("SELECT evento_id FROM acesso_tarefas WHERE id = %s", (tarefa_id,))
+            # Concorrência: a PRIMEIRA instrução da transação precisa ser uma leitura com
+            # trava. Uma leitura comum fixaria o snapshot do REPEATABLE READ antes de esperar
+            # a trava do evento, e as leituras seguintes (acesso, pendências, conclusão)
+            # enxergariam o estado de antes do outro técnico. Com a trava primeiro, o snapshot
+            # só nasce depois que o outro commit já está visível; quem escreve nas tarefas de
+            # um evento sempre passa pela trava do evento, então esse estado não muda mais
+            # durante a transação. (Não trave as OUTRAS tarefas do evento: quem espera a trava
+            # do evento já segura a da própria tarefa, e travá-las geraria deadlock.)
+            cur.execute(
+                "SELECT id, evento_id FROM acesso_tarefas WHERE id = %s FOR UPDATE", (tarefa_id,)
+            )
             achada = cur.fetchone()
             if achada is None:
                 raise NaoEncontrado("Tarefa não encontrada.")
-            # Evento primeiro, depois a tarefa: quem chega em segundo espera aqui e relê o
-            # estado já gravado pelo primeiro (dois cliques/dois técnicos não duplicam acesso).
             evento = self._travar_evento(cur, achada["evento_id"])
+            # Relê a tarefa com trava: leitura com trava devolve o último estado confirmado.
             cur.execute(
-                "SELECT t.id, t.sistema_id, t.acesso_id, t.acao, t.status, t.login, "
-                "s.nome AS sistema_nome FROM acesso_tarefas t "
-                "JOIN sistemas s ON s.id = t.sistema_id WHERE t.id = %s FOR UPDATE",
+                "SELECT id, sistema_id, acesso_id, acao, status, login "
+                "FROM acesso_tarefas WHERE id = %s FOR UPDATE",
                 (tarefa_id,),
             )
             tarefa = cur.fetchone()
             if tarefa is None:
                 raise NaoEncontrado("Tarefa não encontrada.")
+            sistema = self.acessos.obter_sistema(tarefa["sistema_id"], cur)
+            tarefa["sistema_nome"] = sistema["nome"] if sistema else ""
             if evento["status"] != "aberto":
                 raise Conflito("O evento não está aberto.")
             if tarefa["status"] != "pendente":
@@ -389,7 +406,12 @@ class AcessoEventoDBManager:
                         )
                         acesso_id, login_final = acesso["id"], acesso["login"]
                 elif acesso_id is not None:
-                    atual = self.acessos.obter_acesso(acesso_id, cur)
+                    # Leitura com trava: outro técnico pode ter desativado o acesso agora mesmo.
+                    cur.execute(
+                        "SELECT status FROM colaborador_acessos WHERE id = %s FOR UPDATE",
+                        (acesso_id,),
+                    )
+                    atual = cur.fetchone()
                     if atual is not None and atual["status"] == "ativo":
                         self.acessos.desativar_acesso(ctx, acesso_id, cur=cur)
 
@@ -417,7 +439,7 @@ class AcessoEventoDBManager:
     def _acesso_ativo_com_login(cur, colaborador_id: int, sistema_id: int, login: str):
         cur.execute(
             "SELECT id, login FROM colaborador_acessos WHERE colaborador_id = %s AND "
-            "sistema_id = %s AND status = 'ativo' AND LOWER(login) = LOWER(%s) LIMIT 1",
+            "sistema_id = %s AND status = 'ativo' AND LOWER(login) = LOWER(%s) LIMIT 1 FOR UPDATE",
             (colaborador_id, sistema_id, login),
         )
         return cur.fetchone()

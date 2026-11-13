@@ -147,6 +147,10 @@ def atualizar_acesso(
     ctx: AuditContext = Depends(get_audit_context),
 ):
     dados = body.model_dump(exclude_unset=True)
+    # `login` não é anulável: null (ou só espaços, que o schema reduz a null) não muda nada.
+    # Só `item_id: null` é um pedido válido (limpa o equipamento).
+    if "login" in dados and dados["login"] is None:
+        del dados["login"]
     if not dados:
         raise HTTPException(status_code=400, detail=MSG_NADA_PARA_ATUALIZAR)
     try:

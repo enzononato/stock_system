@@ -316,3 +316,48 @@ def test_tarefa_inexistente_404_e_aprendiz_403(client_tecnico, client_aprendiz):
     assert r.status_code == 403
     r = client_aprendiz.post("/api/acessos/eventos/1/concluir")
     assert r.status_code == 403
+
+
+def test_resolver_tarefas_diferentes_ao_mesmo_tempo_conclui_o_evento(_fastapi_app, client_tecnico):
+    """As duas últimas tarefas do evento resolvidas em paralelo: nenhuma das duas pode ler o
+    estado antigo, então o evento termina `concluido` (e nunca fica aberto sem pendência)."""
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    from fastapi.testclient import TestClient
+
+    ad, email = criar_sistema("AD"), criar_sistema("E-mail")
+    definir_pacote("Vendedor", ad, email)
+    cabecalho = {"Authorization": client_tecnico.headers["Authorization"]}
+
+    for rodada in range(4):
+        c = criar_colaborador(f"Pessoa {rodada}", cpf=f"9000000000{rodada}")
+        ev = _abrir(client_tecnico, c, "admissao")
+        ids = [_tarefa(ev, "AD")["id"], _tarefa(ev, "E-mail")["id"]]
+        largada = Barrier(2)
+
+        def chamar(i, ids=ids, largada=largada):
+            outro = TestClient(_fastapi_app)
+            largada.wait()
+            return outro.post(
+                f"/api/acessos/tarefas/{ids[i]}/resolver",
+                json={"status": "feito", "login": f"login{i}"},
+                headers=cabecalho,
+            ).status_code
+
+        with ThreadPoolExecutor(2) as pool:
+            assert list(pool.map(chamar, range(2))) == [200, 200]
+        final = client_tecnico.get(f"/api/acessos/eventos/{ev['id']}").json()
+        assert final["status"] == "concluido", f"rodada {rodada}: {final['pendencias']}"
+        assert final["tarefas_pendentes"] == 0
+
+
+def test_manter_com_observacao_longa_422(client_tecnico):
+    _, _, ev = _mudanca(client_tecnico)
+    tarefa_id = _tarefa(ev, "Promax")["id"]
+    r = _resolver(client_tecnico, tarefa_id, status="manter", observacao="x" * 485)
+    assert r.status_code == 422
+    assert "máximo 484 caracteres" in r.json()["detail"]
+    r = _resolver(client_tecnico, tarefa_id, status="manter", observacao="x" * 484)
+    assert r.status_code == 200
+    assert len(_tarefa(r.json(), "Promax")["observacao"]) == 500

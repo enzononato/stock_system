@@ -209,3 +209,13 @@ def test_equipamentos_inclui_legado_por_cpf_com_mascara(client_tecnico, criar_it
     r = client_tecnico.get("/api/acessos/colaboradores/999/equipamentos")
     assert r.status_code == 404
     assert r.json()["detail"] == "Colaborador não encontrado."
+
+
+def test_editar_com_login_nulo_ou_em_branco_e_400(client_tecnico):
+    c, ad = criar_colaborador(), criar_sistema("AD")
+    acesso_id = criar_acesso(c, ad, "maria.silva")
+    for corpo in ({"login": None}, {"login": "   "}):
+        r = client_tecnico.put(f"/api/acessos/ficha/{acesso_id}", json=corpo)
+        assert r.status_code == 400
+        assert r.json()["detail"] == "Nenhum campo para atualizar."
+    assert client_tecnico.get(f"/api/acessos/ficha?colaborador_id={c}").json()[0]["login"] == "maria.silva"

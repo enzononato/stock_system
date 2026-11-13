@@ -254,3 +254,44 @@ def test_eventos_404_e_aprendiz_403(client_tecnico, client_aprendiz):
     assert r.json()["detail"] == "Evento não encontrado."
     r = client_aprendiz.get("/api/acessos/eventos")
     assert r.status_code == 403
+
+
+def test_dois_eventos_abertos_ao_mesmo_tempo_so_um_vale(_fastapi_app, client_tecnico):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    from fastapi.testclient import TestClient
+
+    _montar_vendedor()
+    c = criar_colaborador()
+    cabecalho = {"Authorization": client_tecnico.headers["Authorization"]}
+    largada = Barrier(2)
+
+    def chamar(_):
+        outro = TestClient(_fastapi_app)
+        largada.wait()
+        return outro.post(
+            "/api/acessos/eventos", json={"colaborador_id": c, "tipo": "admissao"}, headers=cabecalho
+        ).status_code
+
+    with ThreadPoolExecutor(2) as pool:
+        codigos = sorted(pool.map(chamar, range(2)))
+    assert codigos == [201, 409]
+    assert contar("acesso_eventos") == 1
+
+
+def test_busca_so_casa_cpf_quando_o_termo_e_numerico(client_tecnico):
+    _montar_vendedor()
+    c = criar_colaborador()  # CPF 11144477735, nome "Maria Silva"
+    assert client_tecnico.post(
+        "/api/acessos/eventos", json={"colaborador_id": c, "tipo": "admissao"}
+    ).status_code == 201
+    total = lambda busca: client_tecnico.get(  # noqa: E731
+        "/api/acessos/eventos", params={"busca": busca}
+    ).json()["total"]
+    assert total("444") == 1  # CPF parcial com 3 dígitos
+    assert total("111.444.777-35") == 1  # CPF com máscara
+    assert total("7") == 0  # um dígito só não vira busca por CPF
+    assert total("44") == 0
+    assert total("silva 7") == 0  # texto misturado com dígito: só nome
+    assert total("silva") == 1

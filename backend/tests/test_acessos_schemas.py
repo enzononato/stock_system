@@ -84,3 +84,11 @@ def test_cancelar_exige_motivo():
     with pytest.raises(ValidationError) as exc:
         EventoCancelar(motivo_cancelamento="  ")
     assert "Informe o motivo do cancelamento." in str(exc.value)
+
+
+def test_manter_limita_a_observacao_para_caber_no_prefixo():
+    assert TarefaResolver(status="manter", observacao="x" * 484).status == "manter"
+    with pytest.raises(ValidationError) as exc:
+        TarefaResolver(status="manter", observacao="x" * 485)
+    assert "máximo 484 caracteres" in str(exc.value)
+    assert TarefaResolver(status="nao_se_aplica", observacao="x" * 500).status == "nao_se_aplica"

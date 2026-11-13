@@ -201,6 +201,14 @@ class TarefaResolver(EntradaSemSenha):
     def _v_observacao(cls, v):
         return _texto_max(v, 500, "Observação")
 
+    @model_validator(mode="after")
+    def _manter_cabe_no_prefixo(self):
+        # A tarefa grava "Acesso mantido: <motivo>" em VARCHAR(500).
+        limite = 500 - len("Acesso mantido: ")
+        if self.status == "manter" and self.observacao and len(self.observacao) > limite:
+            raise ValueError(f"Motivo muito longo (máximo {limite} caracteres).")
+        return self
+
 
 class EventoCancelar(EntradaSemSenha):
     motivo_cancelamento: str
