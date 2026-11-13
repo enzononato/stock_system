@@ -16,6 +16,7 @@ from app.services import scheduler
 from app.services.mfa import mfa_configurado
 from app.routers import auth, users, items, peripherals, loans, documents, history, reports, constants, unidades, audit, colaboradores, locais
 from app.routers import auth_senha
+from app.routers import perfil
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,7 @@ _ROTULOS_DE_CAMPO = {
     "nova_senha": "Nova senha",
     "token": "Link",
     "codigo": "Código",
+    "senha": "Senha",
     "mfa_token": "Etapa de verificação",
 }
 
@@ -146,6 +148,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(auth_senha.router)
+app.include_router(perfil.router)
 app.include_router(users.router)
 app.include_router(items.router)
 app.include_router(peripherals.router)
