@@ -20,7 +20,7 @@ def linhas_auditoria(entidade: str, acao: str | None = None) -> list[dict]:
     sql += " ORDER BY id"
     with get_cursor(commit=False) as cur:
         cur.execute(sql, tuple(params))
-        linhas = cur.fetchall()
+        linhas = list(cur.fetchall())
     for linha in linhas:
         for chave in ("antes", "depois"):
             valor = linha.get(chave)

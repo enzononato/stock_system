@@ -4,8 +4,9 @@ from fastapi import APIRouter, HTTPException, Depends
 
 from app.schemas.users import UserCreate, UserResponse, UserUpdate, PasswordUpdate
 from app.db.user_manager_db import UserDBManager
-from app.dependencies import gestor_only, get_user_db, get_audit_context, CurrentUser
-from app.services import audit
+from app.db.mfa_db import MfaDBManager
+from app.dependencies import gestor_only, get_user_db, get_mfa_db, get_audit_context, CurrentUser
+from app.services import audit, segundo_fator
 from app.services.audit import AuditContext
 
 logger = logging.getLogger(__name__)
@@ -72,6 +73,34 @@ def update_user(
         email=atual.get("email"),
         totp_ativo=bool(atual.get("totp_ativo")),
     )
+
+
+@router.delete("/{user_id}/2fa")
+def zerar_2fa_do_usuario(
+    user_id: int,
+    current_user: CurrentUser = Depends(gestor_only),
+    user_db: UserDBManager = Depends(get_user_db),
+    mfa_db: MfaDBManager = Depends(get_mfa_db),
+    ctx: AuditContext = Depends(get_audit_context),
+):
+    """O Gestor zera o 2FA de outro usuário (perdeu o celular e os códigos). Não precisa da chave TOTP."""
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Você não pode zerar a sua própria verificação em duas etapas. "
+                "Peça a outro Gestor ou use o comando no servidor."
+            ),
+        )
+    alvo = user_db.get_user_by_id(user_id)
+    if not alvo:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    if not alvo.get("totp_ativo"):
+        raise HTTPException(
+            status_code=400, detail="Este usuário não tem a verificação em duas etapas ativa."
+        )
+    segundo_fator.zerar_2fa(mfa_db, alvo, ctx, origem="tela de usuários")
+    return {"detail": "Verificação em duas etapas zerada."}
 
 
 @router.delete("/{user_id}")

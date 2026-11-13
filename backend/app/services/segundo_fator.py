@@ -112,3 +112,14 @@ def desativar_2fa(db: MfaDBManager, usuario: dict, ctx: AuditContext) -> None:
         ctx, "usuario", usuario["id"], "desativar_2fa",
         antes={"totp_ativo": True}, depois={"totp_ativo": False},
     )
+
+
+def zerar_2fa(db: MfaDBManager, usuario: dict, ctx: AuditContext, origem: str) -> None:
+    """Zera o 2FA do usuário (segredo, códigos) e encerra as sessões dele. Quem chama
+    decide quem pode (Gestor na tela de usuários, ou o script no servidor)."""
+    antes = {"totp_ativo": bool(usuario.get("totp_ativo"))}
+    db.zerar(usuario["id"])
+    audit.record(
+        ctx, "usuario", usuario["id"], "zerar_2fa",
+        antes=antes, depois={"totp_ativo": False, "origem": origem},
+    )
