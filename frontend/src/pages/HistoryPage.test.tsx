@@ -204,6 +204,28 @@ describe('HistoryPage — listagem', () => {
     liberar()
   })
 
+  it('limpar a busca não ressuscita a página antiga (pedido com offset 0 e sem termo)', async () => {
+    const pedidos: URLSearchParams[] = []
+    server.use(
+      http.get('/api/history', ({ request }) => {
+        pedidos.push(new URL(request.url).searchParams)
+        return HttpResponse.json({ items: [entradaCadastro], total: 60 })
+      })
+    )
+    const user = userEvent.setup()
+    renderWithClient(<HistoryPage />)
+    await screen.findByText('Mostrando 1–25 de 60')
+    await user.click(screen.getByRole('button', { name: 'Próxima' }))
+    await waitFor(() => expect(pedidos.some((p) => p.get('offset') === '25')).toBe(true))
+    const campo = screen.getByLabelText('Busca geral')
+    await user.type(campo, 'ana')
+    await waitFor(() => expect(pedidos.some((p) => p.get('search') === 'ana')).toBe(true))
+    const antes = pedidos.length
+    await user.clear(campo)
+    await waitFor(() => expect(pedidos.slice(antes).some((p) => p.get('search') === null)).toBe(true))
+    expect(pedidos.slice(antes).every((p) => p.get('offset') === '0')).toBe(true)
+  })
+
   it('busca com atraso volta à página 1 sem pedir (novo termo, página antiga)', async () => {
     const pedidos: URLSearchParams[] = []
     server.use(

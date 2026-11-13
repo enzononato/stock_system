@@ -83,6 +83,9 @@ export default function HistoryPage() {
   // atraso, para não disparar uma requisição por tecla.
   const [search, setSearch] = useState('')
   const busca = useDebouncedValue(search.trim(), 400)
+  // Termo (já com atraso) mudou: descarta a página guardada na própria renderização (sem efeito, sem pedido
+  // com página antiga); voltar ao termo anterior não ressuscita a página antiga.
+  if (paginaEscolhida.busca !== busca) setPaginaEscolhida({ n: 1, busca })
   const page = paginaEscolhida.busca === busca ? paginaEscolhida.n : 1
   const setPage = useCallback((n: number) => setPaginaEscolhida({ n, busca }), [busca])
   const [downloadingKey, setDownloadingKey] = useState<string | null>(null)

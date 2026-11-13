@@ -65,6 +65,9 @@ export default function StockPage() {
   // A página vale só para o termo de busca em que foi escolhida: ao mudar o termo (já com atraso) a
   // página efetiva volta a 1 no mesmo render, sem pedido com (termo novo, página antiga).
   const [paginaEscolhida, setPaginaEscolhida] = useState({ n: 1, busca: '' })
+  // Termo (já com atraso) mudou: descarta a página guardada na própria renderização (sem efeito, sem pedido
+  // com página antiga); voltar ao termo anterior não ressuscita a página antiga.
+  if (paginaEscolhida.busca !== busca) setPaginaEscolhida({ n: 1, busca })
   const page = paginaEscolhida.busca === busca ? paginaEscolhida.n : 1
   const setPage = useCallback((n: number) => setPaginaEscolhida({ n, busca }), [busca])
   const [pageSize, setPageSize] = usePageSize('estoque')

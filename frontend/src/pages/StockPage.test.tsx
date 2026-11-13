@@ -211,6 +211,22 @@ describe('StockPage', () => {
     expect(pedidos.filter((p) => p.get('search') === 'dell').every((p) => p.get('offset') === '0')).toBe(true)
   })
 
+  it('limpar a busca não ressuscita a página antiga (pedido com offset 0 e sem termo)', async () => {
+    mockServidor({ total: () => 60 })
+    renderPage()
+    const user = userEvent.setup()
+    await screen.findByText('Mostrando 1–25 de 60')
+    await user.click(screen.getByRole('button', { name: 'Próxima' }))
+    await waitFor(() => expect(ultimo().get('offset')).toBe('25'))
+    const campo = screen.getByLabelText('Buscar equipamentos')
+    await user.type(campo, 'dell')
+    await waitFor(() => expect(pedidos.some((p) => p.get('search') === 'dell')).toBe(true))
+    const antes = pedidos.length
+    await user.clear(campo)
+    await waitFor(() => expect(pedidos.slice(antes).some((p) => p.get('search') === null)).toBe(true))
+    expect(pedidos.slice(antes).every((p) => p.get('offset') === '0')).toBe(true)
+  })
+
   it('enquanto a página se corrige não mostra "Não há equipamentos" (total > 0)', async () => {
     let total = 60
     mockServidor({ total: () => total })
