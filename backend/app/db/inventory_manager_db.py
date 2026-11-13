@@ -32,6 +32,9 @@ logger = logging.getLogger(__name__)
 MSG_EMPRESTIMO_JA_CONFIRMADO = "O empréstimo já foi confirmado."
 MSG_DEVOLUCAO_JA_CONFIRMADA = "A devolução já foi confirmada."
 
+# Motivo gravado em `transferencias` quando o empréstimo muda a unidade do equipamento (F7).
+MOTIVO_TRANSFERENCIA_EMPRESTIMO = "Empréstimo para colaborador de outra unidade"
+
 # ── Geração de termos (.docx) — utilitários compartilhados ─────────────────────
 #
 # Nomes dos meses em português para "{{data_hoje_extenso}}". Propositalmente NÃO
@@ -694,12 +697,32 @@ class InventoryDBManager:
         if item.get("date_registered") and dt_issue.date() < item["date_registered"].date():
             return False, f"Data de empréstimo não pode ser anterior ao cadastro ({format_date(str(item['date_registered']))})."
 
+        # Ruling 23: empréstimo para colaborador de outra unidade muda `items.revenda`;
+        # a mudança é registrada em `transferencias` na MESMA transação e o local antigo
+        # (que é da unidade anterior) é limpo.
+        nova_unidade = (revenda or "").strip()
+        muda_unidade = bool(nova_unidade) and (
+            (item.get("revenda") or "").strip().casefold() != nova_unidade.casefold()
+        )
+
         try:
             with get_cursor(dict_cursor=False) as cur:
                 cur.execute(
-                    "UPDATE items SET status='Pendente', assigned_to=%s, cpf=%s, date_issued=%s, revenda=%s, pessoa_juridica=%s, colaborador_id=%s WHERE id=%s",
+                    "UPDATE items SET status='Pendente', assigned_to=%s, cpf=%s, date_issued=%s, revenda=%s, pessoa_juridica=%s, colaborador_id=%s"
+                    + (", local_id=NULL" if muda_unidade else "")
+                    + " WHERE id=%s",
                     (user, cpf, dt_issue, revenda, pessoa_juridica, colaborador_id, pid),
                 )
+                if muda_unidade:
+                    cur.execute(
+                        "INSERT INTO transferencias (item_id, de_unidade, para_unidade, de_local_id, "
+                        "para_local_id, motivo, transferido_por, transferido_em) "
+                        "VALUES (%s,%s,%s,%s,NULL,%s,%s,%s)",
+                        (
+                            pid, item.get("revenda") or None, revenda, item.get("local_id"),
+                            MOTIVO_TRANSFERENCIA_EMPRESTIMO, logged_user, dt_issue,
+                        ),
+                    )
                 # pessoa_juridica também vai para o histórico (não só para items):
                 # é o que permite reverse_history_entry() restaurar o valor correto
                 # se uma Devolução for estornada depois (ver esse método mais abaixo).
