@@ -13,10 +13,12 @@ from app.dependencies import (
 )
 from app.routers.acessos import erro_http
 from app.schemas.acessos import (
+    EventoCancelar,
     EventoCreate,
     EventoDetalhe,
     EventoResumo,
     StatusEvento,
+    TarefaResolver,
     TipoEvento,
 )
 from app.schemas.common import Paginated
@@ -75,3 +77,48 @@ def obter_evento(
     if evento is None:
         raise HTTPException(status_code=404, detail=MSG_EVENTO_NAO_ENCONTRADO)
     return evento
+
+
+@router.post("/tarefas/{tarefa_id}/resolver", response_model=EventoDetalhe)
+def resolver_tarefa(
+    tarefa_id: int,
+    body: TarefaResolver,
+    _: CurrentUser = Depends(gestor_or_tecnico),
+    db: AcessoEventoDBManager = Depends(get_acesso_evento_db),
+    ctx: AuditContext = Depends(get_audit_context),
+):
+    try:
+        return db.resolver_tarefa(
+            ctx, tarefa_id,
+            status=body.status, login=body.login,
+            item_id=body.item_id, observacao=body.observacao,
+        )
+    except AcessoErro as e:
+        raise erro_http(e)
+
+
+@router.post("/eventos/{evento_id}/concluir", response_model=EventoDetalhe)
+def concluir_evento(
+    evento_id: int,
+    _: CurrentUser = Depends(gestor_or_tecnico),
+    db: AcessoEventoDBManager = Depends(get_acesso_evento_db),
+    ctx: AuditContext = Depends(get_audit_context),
+):
+    try:
+        return db.concluir(ctx, evento_id)
+    except AcessoErro as e:
+        raise erro_http(e)
+
+
+@router.post("/eventos/{evento_id}/cancelar", response_model=EventoDetalhe)
+def cancelar_evento(
+    evento_id: int,
+    body: EventoCancelar,
+    _: CurrentUser = Depends(gestor_or_tecnico),
+    db: AcessoEventoDBManager = Depends(get_acesso_evento_db),
+    ctx: AuditContext = Depends(get_audit_context),
+):
+    try:
+        return db.cancelar(ctx, evento_id, motivo=body.motivo_cancelamento)
+    except AcessoErro as e:
+        raise erro_http(e)

@@ -306,3 +306,146 @@ class AcessoEventoDBManager:
             antes={"status": "aberto"}, depois={"status": "concluido"}, cur=cur,
         )
         return True
+
+    # ── Resolução de tarefas, conclusão e cancelamento ──────────────────────
+
+    @staticmethod
+    def _travar_evento(cur, evento_id: int) -> dict:
+        cur.execute(
+            "SELECT id, colaborador_id, tipo, status FROM acesso_eventos WHERE id = %s FOR UPDATE",
+            (evento_id,),
+        )
+        evento = cur.fetchone()
+        if evento is None:
+            raise NaoEncontrado("Evento não encontrado.")
+        return evento
+
+    def resolver_tarefa(
+        self,
+        ctx: AuditContext,
+        tarefa_id: int,
+        *,
+        status: str,
+        login: Optional[str],
+        item_id: Optional[int],
+        observacao: Optional[str],
+    ) -> dict:
+        with get_cursor() as cur:
+            cur.execute("SELECT evento_id FROM acesso_tarefas WHERE id = %s", (tarefa_id,))
+            achada = cur.fetchone()
+            if achada is None:
+                raise NaoEncontrado("Tarefa não encontrada.")
+            # Evento primeiro, depois a tarefa: quem chega em segundo espera aqui e relê o
+            # estado já gravado pelo primeiro (dois cliques/dois técnicos não duplicam acesso).
+            evento = self._travar_evento(cur, achada["evento_id"])
+            cur.execute(
+                "SELECT t.id, t.sistema_id, t.acesso_id, t.acao, t.status, t.login, "
+                "s.nome AS sistema_nome FROM acesso_tarefas t "
+                "JOIN sistemas s ON s.id = t.sistema_id WHERE t.id = %s FOR UPDATE",
+                (tarefa_id,),
+            )
+            tarefa = cur.fetchone()
+            if tarefa is None:
+                raise NaoEncontrado("Tarefa não encontrada.")
+            if evento["status"] != "aberto":
+                raise Conflito("O evento não está aberto.")
+            if tarefa["status"] != "pendente":
+                raise Conflito("Esta tarefa já foi resolvida.")
+
+            acesso_id = tarefa["acesso_id"]
+            login_final = tarefa["login"]
+            nota = observacao
+            if status == "manter":
+                if tarefa["acao"] != "desativar" or evento["tipo"] != "mudanca_funcao":
+                    raise Invalido(
+                        "Manter só vale para tarefas de desativar em mudança de função."
+                    )
+                if not observacao:
+                    raise Invalido("Informe o motivo para manter o acesso.")
+                novo_status = "nao_se_aplica"
+                nota = f"Acesso mantido: {observacao}"
+            elif status == "nao_se_aplica":
+                if not observacao:
+                    raise Invalido("Informe a observação para marcar como não se aplica.")
+                novo_status = "nao_se_aplica"
+            else:
+                novo_status = "feito"
+                if tarefa["acao"] == "criar":
+                    if not login:
+                        raise Invalido("Informe o login criado no sistema.")
+                    existente = self._acesso_ativo_com_login(
+                        cur, evento["colaborador_id"], tarefa["sistema_id"], login
+                    )
+                    if existente is not None:
+                        acesso_id, login_final = existente["id"], existente["login"]
+                    else:
+                        acesso = self.acessos.criar_acesso(
+                            ctx,
+                            colaborador_id=evento["colaborador_id"],
+                            sistema_id=tarefa["sistema_id"],
+                            login=login,
+                            item_id=item_id,
+                            cur=cur,
+                        )
+                        acesso_id, login_final = acesso["id"], acesso["login"]
+                elif acesso_id is not None:
+                    atual = self.acessos.obter_acesso(acesso_id, cur)
+                    if atual is not None and atual["status"] == "ativo":
+                        self.acessos.desativar_acesso(ctx, acesso_id, cur=cur)
+
+            cur.execute(
+                "UPDATE acesso_tarefas SET status = %s, login = %s, acesso_id = %s, "
+                "feito_por = %s, feito_em = %s, observacao = COALESCE(%s, observacao) WHERE id = %s",
+                (novo_status, login_final, acesso_id, ctx.username, agora(), nota, tarefa_id),
+            )
+            audit.record(
+                ctx, "acesso_evento", evento["id"], "resolver_tarefa",
+                depois={
+                    "tarefa_id": tarefa_id,
+                    "sistema": tarefa["sistema_nome"],
+                    "acao": tarefa["acao"],
+                    "status": novo_status,
+                    "login": login_final,
+                    "observacao": nota,
+                },
+                cur=cur,
+            )
+            self._tentar_concluir(ctx, evento["id"], cur)
+            return self.obter(evento["id"], cur)
+
+    @staticmethod
+    def _acesso_ativo_com_login(cur, colaborador_id: int, sistema_id: int, login: str):
+        cur.execute(
+            "SELECT id, login FROM colaborador_acessos WHERE colaborador_id = %s AND "
+            "sistema_id = %s AND status = 'ativo' AND LOWER(login) = LOWER(%s) LIMIT 1",
+            (colaborador_id, sistema_id, login),
+        )
+        return cur.fetchone()
+
+    def concluir(self, ctx: AuditContext, evento_id: int) -> dict:
+        with get_cursor() as cur:
+            evento = self._travar_evento(cur, evento_id)
+            if evento["status"] != "aberto":
+                raise Conflito("O evento não está aberto.")
+            pendencias = self.obter(evento_id, cur)["pendencias"]
+            if pendencias:
+                raise Conflito("Não é possível concluir: " + "; ".join(pendencias) + ".")
+            self._tentar_concluir(ctx, evento_id, cur)
+            return self.obter(evento_id, cur)
+
+    def cancelar(self, ctx: AuditContext, evento_id: int, *, motivo: str) -> dict:
+        with get_cursor() as cur:
+            evento = self._travar_evento(cur, evento_id)
+            if evento["status"] != "aberto":
+                raise Conflito("O evento não está aberto.")
+            cur.execute(
+                "UPDATE acesso_eventos SET status = 'cancelado', cancelado_por = %s, "
+                "cancelado_em = %s, motivo_cancelamento = %s WHERE id = %s",
+                (ctx.username, agora(), motivo, evento_id),
+            )
+            audit.record(
+                ctx, "acesso_evento", evento_id, "cancelar",
+                depois={"motivo_cancelamento": motivo},
+                cur=cur,
+            )
+            return self.obter(evento_id, cur)
