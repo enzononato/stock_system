@@ -14,6 +14,7 @@ from app.db.migrations import aplicar_pendentes, garantir_baseline
 from app.dependencies import limiter, get_inventory_db
 from app.services import scheduler
 from app.routers import auth, users, items, peripherals, loans, documents, history, reports, constants, unidades, audit, colaboradores, locais
+from app.routers import auth_senha
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,10 @@ _ROTULOS_DE_CAMPO = {
     "ativo": "Ativo",
     "colaborador_id": "Colaborador",
     "local_id": "Local",
+    # Campos de login (F2)
+    "identificador": "Usuário ou e-mail",
+    "nova_senha": "Nova senha",
+    "token": "Link",
 }
 
 # "nome" vale "Nome da unidade" nas unidades; nas rotas de colaboradores e locais é só "Nome".
@@ -137,6 +142,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(auth_senha.router)
 app.include_router(users.router)
 app.include_router(items.router)
 app.include_router(peripherals.router)

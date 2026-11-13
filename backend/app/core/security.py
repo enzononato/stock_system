@@ -1,3 +1,4 @@
+import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import uuid4
@@ -26,6 +27,12 @@ def verify_password(plain: str, hashed: Optional[str]) -> bool:
         return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
     except (ValueError, TypeError):
         return False
+
+
+def sha256_hex(texto: str) -> str:
+    """SHA-256 em hexadecimal (64 caracteres). Para tokens e códigos de alta
+    entropia (redefinição de senha, códigos de recuperação), que dispensam bcrypt."""
+    return hashlib.sha256(texto.encode("utf-8")).hexdigest()
 
 
 def create_access_token(data: dict) -> str:

@@ -17,6 +17,7 @@ from app.db.unidade_db import UnidadeDBManager
 from app.db.colaborador_db import ColaboradorDBManager
 from app.db.audit_db import AuditDBManager
 from app.db.local_db import LocalDBManager
+from app.db.password_reset_db import PasswordResetDBManager
 from app.services.audit import AuditContext
 from app.services.sessao import validar_sessao_ativa
 
@@ -180,6 +181,20 @@ def get_audit_context(
         papel=user.role,
         ip=ip_real_do_cliente(request),
     )
+
+
+def contexto_auditoria_de(usuario: Optional[dict], request: Request) -> AuditContext:
+    """Contexto de auditoria para ações fora de uma sessão normal (redefinição de
+    senha, login em etapas): do próprio usuário, ou anônimo (só o IP) com None."""
+    ip = ip_real_do_cliente(request)
+    if usuario is None:
+        return AuditContext(None, None, None, ip)
+    return AuditContext(usuario["id"], usuario["username"], usuario["role"], ip)
+
+
+@lru_cache
+def get_password_reset_db() -> PasswordResetDBManager:
+    return PasswordResetDBManager()
 
 
 limiter = Limiter(key_func=get_client_ip)
