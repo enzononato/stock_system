@@ -73,3 +73,74 @@ class InventarioResponse(BaseModel):
 
 class InventarioDetalhe(InventarioResponse):
     resumo: ResumoInventario
+
+
+# ── Leituras ────────────────────────────────────────────────────────────────
+
+Resultado = Literal["ok", "local_errado", "usuario_diferente", "outra_unidade", "nao_cadastrado"]
+
+
+class LeituraCreate(BaseModel):
+    codigo: str
+    local_id_encontrado: Optional[int] = None
+    colaborador_id_encontrado: Optional[int] = None
+    usuario_conferido: bool = False
+    observacao: Optional[str] = None
+
+    @field_validator("codigo", mode="before")
+    @classmethod
+    def _v_codigo(cls, v):
+        if not isinstance(v, str):
+            raise ValueError(MSG_TEXTO_INVALIDO)
+        v = v.strip()
+        if not v:
+            raise ValueError("Informe o código lido.")
+        if len(v) > 255:
+            raise ValueError("Código muito longo (máximo 255 caracteres).")
+        return v
+
+    @field_validator("observacao", mode="before")
+    @classmethod
+    def _v_observacao(cls, v):
+        return _texto_opcional(v, 500, MSG_OBSERVACAO_LONGA)
+
+
+class LeituraUpdate(BaseModel):
+    """Campo ausente = sem mudança; `null` limpa local/colaborador/observação."""
+
+    local_id_encontrado: Optional[int] = None
+    colaborador_id_encontrado: Optional[int] = None
+    usuario_conferido: Optional[bool] = None
+    observacao: Optional[str] = None
+
+    @field_validator("observacao", mode="before")
+    @classmethod
+    def _v_observacao(cls, v):
+        return _texto_opcional(v, 500, MSG_OBSERVACAO_LONGA)
+
+
+class LeituraResponse(BaseModel):
+    id: int
+    inventario_id: int
+    item_id: Optional[int] = None
+    codigo_lido: str
+    lido_por: str
+    lido_em: datetime
+    resultado: Resultado
+    detalhe: Optional[str] = None
+    observacao: Optional[str] = None
+    atualizado_em: Optional[datetime] = None
+    local_id_encontrado: Optional[int] = None
+    local_encontrado_nome: Optional[str] = None
+    usuario_conferido: bool = False
+    colaborador_id_encontrado: Optional[int] = None
+    colaborador_encontrado_nome: Optional[str] = None
+    local_id_esperado: Optional[int] = None
+    local_esperado_nome: Optional[str] = None
+    usuario_esperado: Optional[str] = None
+    item_tipo: Optional[str] = None
+    item_brand: Optional[str] = None
+    item_model: Optional[str] = None
+    item_identificador: Optional[str] = None
+    item_revenda: Optional[str] = None
+    duplicada: bool = False
