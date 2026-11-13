@@ -47,3 +47,31 @@ class ResumoPainel(BaseModel):
     manutencao: ResumoManutencao
     termos: ResumoTermos
     linhas: ResumoLinhas
+
+
+class LimitesAlerta(BaseModel):
+    garantia_dias: int
+    termo_pendente_dias: int
+    devolucao_pendente_dias: int
+    manutencao_dias: int
+
+
+class Alerta(BaseModel):
+    chave: str
+    tipo: str
+    severidade: str
+    titulo: str
+    descricao: str
+    link: str
+    item_id: Optional[int] = None
+    colaborador_id: Optional[int] = None
+    desde: Optional[date | datetime] = None
+    dias: Optional[int] = None
+
+
+class AlertasPainel(BaseModel):
+    gerado_em: datetime
+    limites: LimitesAlerta
+    total: int
+    por_tipo: dict[str, int]
+    alertas: list[Alerta]
