@@ -168,6 +168,19 @@ def _texto_perifericos(linked_peripherals, texto_vazio: str) -> str:
     )
 
 
+# Colunas e JOINs que preenchem os vínculos do item (colaborador, superior, local).
+# Todos LEFT JOIN por chave primária: item sem vínculo continua aparecendo, 1 linha por item.
+_CAMPOS_VINCULOS = (
+    "c.nome AS colaborador_nome, c.setor AS colaborador_setor, "
+    "c.cargo AS colaborador_cargo, s.nome AS superior_nome, l.nome AS local_nome"
+)
+_JOINS_VINCULOS = (
+    "LEFT JOIN colaboradores c ON c.id = i.colaborador_id "
+    "LEFT JOIN colaboradores s ON s.id = c.superior_id "
+    "LEFT JOIN locais l ON l.id = i.local_id"
+)
+
+
 class InventoryDBManager:
     def __init__(self):
         self._create_tables()
@@ -323,6 +336,7 @@ class InventoryDBManager:
         status: str | None = None,
         revenda: str | None = None,
         search: str | None = None,
+        colaborador_id: int | None = None,
         limit: int | None = None,
         offset: int = 0,
     ) -> tuple[list[dict], int]:
@@ -345,6 +359,9 @@ class InventoryDBManager:
         if revenda:
             where.append("i.revenda = %s")
             params.append(revenda)
+        if colaborador_id is not None:
+            where.append("i.colaborador_id = %s")
+            params.append(colaborador_id)
         if search:
             like = f"%{search}%"
             where.append(
@@ -358,15 +375,18 @@ class InventoryDBManager:
             cur.execute(f"SELECT COUNT(*) as total FROM items i WHERE {where_sql}", params)
             total = cur.fetchone()["total"]
 
-            # GROUP BY (por causa do peripheral_count) impede reaproveitar o
-            # COUNT(*) direto na mesma query — por isso a contagem acima é
-            # feita à parte, sem o LEFT JOIN/GROUP BY.
+            # Os JOINs de colaborador/superior/local são LEFT JOINs por chave primária:
+            # nunca multiplicam nem removem linhas. O peripheral_count é uma subconsulta
+            # (em vez de COUNT + GROUP BY) para as colunas dos JOINs poderem ir no SELECT
+            # sem depender de ONLY_FULL_GROUP_BY.
             query = f"""
-                SELECT i.*, COUNT(ep.peripheral_id) as peripheral_count
+                SELECT i.*,
+                    (SELECT COUNT(ep.peripheral_id) FROM equipment_peripherals ep
+                     WHERE ep.equipment_id = i.id) AS peripheral_count,
+                    {_CAMPOS_VINCULOS}
                 FROM items i
-                LEFT JOIN equipment_peripherals ep ON i.id = ep.equipment_id
+                {_JOINS_VINCULOS}
                 WHERE {where_sql}
-                GROUP BY i.id
                 ORDER BY i.id DESC
             """
             query_params = list(params)
@@ -380,6 +400,22 @@ class InventoryDBManager:
     def find(self, item_id: int):
         with get_cursor(commit=False) as cur:
             cur.execute("SELECT * FROM items WHERE id=%s AND is_active=1", (item_id,))
+            return cur.fetchone()
+
+    def get_item(self, item_id: int):
+        """Como `find`, mas com colaborador (nome, setor, cargo), superior e local
+        preenchidos por LEFT JOIN. Usado pela API de leitura; as regras internas
+        (empréstimo, auditoria) continuam em `find`, só com as colunas da tabela."""
+        with get_cursor(commit=False) as cur:
+            cur.execute(
+                f"""
+                SELECT i.*, {_CAMPOS_VINCULOS}
+                FROM items i
+                {_JOINS_VINCULOS}
+                WHERE i.id = %s AND i.is_active = 1
+                """,
+                (item_id,),
+            )
             return cur.fetchone()
 
     # ── Peripherals ────────────────────────────────────────────────────────────
@@ -403,6 +439,18 @@ class InventoryDBManager:
                 return False, "Já existe um periférico com este Identificador (Nº de Série)."
             logger.exception("Erro de banco de dados")
             return False, "Erro ao processar a operação. Tente novamente."
+
+    def get_peripheral(self, peripheral_id: int):
+        """Periférico por id, ativo ou não (usado para o "antes/depois" da auditoria)."""
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT * FROM peripherals WHERE id=%s", (peripheral_id,))
+            return cur.fetchone()
+
+    def get_peripheral_link(self, link_id: int):
+        """Vínculo equipamento↔periférico (id, equipment_id, peripheral_id) ou None."""
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT * FROM equipment_peripherals WHERE id=%s", (link_id,))
+            return cur.fetchone()
 
     def list_peripherals(self, status_filter="", type_filter="", include_inactive=False):
         where = []
@@ -892,13 +940,16 @@ class InventoryDBManager:
     # ── History ────────────────────────────────────────────────────────────────
 
     def list_history(
-        self, *, search: str | None = None, limit: int | None = None, offset: int = 0
+        self, *, search: str | None = None, limit: int | None = None, offset: int = 0,
+        item_id: int | None = None,
     ) -> tuple[list[dict], int]:
         """Retorna (linhas, total_sem_paginacao).
 
         A busca é feita no banco, e não na página já carregada: com paginação
         server-side, filtrar no cliente só varreria as linhas visíveis e daria a
         impressão falsa de que o histórico inteiro foi pesquisado.
+
+        `item_id` (opcional) restringe às linhas desse item; combina com `search` (AND).
         """
         # As colunas exibidas vêm de COALESCE entre history, items e peripherals,
         # e o MySQL não aceita alias de SELECT no WHERE — por isso as expressões
@@ -916,6 +967,9 @@ class InventoryDBManager:
 
         condicoes = ["h.is_reversed = 0"]
         filtro_params: list = []
+        if item_id is not None:
+            condicoes.append("h.item_id = %s")
+            filtro_params.append(item_id)
         if search and search.strip():
             termo = f"%{search.strip()}%"
             condicoes.append("(" + " OR ".join(f"{c} LIKE %s" for c in campos_busca) + ")")
@@ -993,6 +1047,12 @@ class InventoryDBManager:
         with get_cursor(commit=False) as cur:
             cur.execute(sql, (ano, mes, ano, mes, ano, mes, ano, mes))
             return cur.fetchall()
+
+    def get_history_entry(self, history_id: int):
+        """Linha crua de `history` por id, ou None."""
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT * FROM history WHERE id=%s", (history_id,))
+            return cur.fetchone()
 
     def reverse_history_entry(self, history_id: int, logged_user: str):
         try:

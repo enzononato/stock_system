@@ -101,3 +101,33 @@ def validar_data_br(
     except ValueError:
         raise ValueError(f"Formato de {campo} inválido. Use dd/mm/aaaa.")
     return data
+
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def validar_email(email: Optional[str]) -> Optional[str]:
+    """E-mail é opcional; quando preenchido, vai para minúsculas e precisa ter
+    o formato `algo@dominio.ext`."""
+    email = blank_to_none(email)
+    if email is None:
+        return None
+    email = email.lower()
+    if not _EMAIL_RE.match(email):
+        raise ValueError("E-mail inválido.")
+    return email
+
+
+def normalizar_telefone(telefone: Optional[str]) -> Optional[str]:
+    """Telefone é opcional; guarda só os dígitos (DDD + número, 10 ou 11
+    dígitos). Um `55` de país na frente é removido quando sobram 12 ou 13
+    dígitos."""
+    telefone = blank_to_none(telefone)
+    if telefone is None:
+        return None
+    digitos = re.sub(r"\D", "", telefone)
+    if len(digitos) in (12, 13) and digitos.startswith("55"):
+        digitos = digitos[2:]
+    if len(digitos) not in (10, 11) or not 11 <= int(digitos[:2]) <= 99:
+        raise ValueError("Telefone inválido: informe DDD + número.")
+    return digitos

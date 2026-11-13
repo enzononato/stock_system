@@ -1,8 +1,14 @@
+import logging
+
 from fastapi import APIRouter, HTTPException, Depends
 
 from app.schemas.users import UserCreate, UserResponse, PasswordUpdate
 from app.db.user_manager_db import UserDBManager
-from app.dependencies import gestor_only, get_user_db, CurrentUser
+from app.dependencies import gestor_only, get_user_db, get_audit_context, CurrentUser
+from app.services import audit
+from app.services.audit import AuditContext
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -17,10 +23,21 @@ def create_user(
     body: UserCreate,
     _: CurrentUser = Depends(gestor_only),
     user_db: UserDBManager = Depends(get_user_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
     ok, msg = user_db.add_user(body.username, body.password, body.role)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
+    # O usuário já foi gravado: ler o id para a auditoria não pode derrubar a resposta.
+    try:
+        # get_user_by_username traz o hash da senha: copiamos só os campos seguros.
+        criado = user_db.get_user_by_username(body.username) or {}
+        audit.record(
+            ctx, "usuario", criado.get("id"), "criar",
+            depois={"id": criado.get("id"), "username": body.username, "role": body.role},
+        )
+    except Exception:
+        logger.exception("Falha ao preparar auditoria (entidade=usuario, acao=criar).")
     return {"detail": msg}
 
 
@@ -29,6 +46,7 @@ def remove_user(
     user_id: int,
     current_user: CurrentUser = Depends(gestor_only),
     user_db: UserDBManager = Depends(get_user_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
     # T5: um Gestor não pode remover a si mesmo, nem remover o último
     # Gestor do sistema (o que causaria lockout — ninguém mais poderia
@@ -46,6 +64,10 @@ def remove_user(
     ok, msg = user_db.remove_user(user_id)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
+    audit.record(
+        ctx, "usuario", user_id, "excluir",
+        antes={"id": target["id"], "username": target["username"], "role": target["role"]},
+    )
     return {"detail": msg}
 
 
@@ -55,6 +77,7 @@ def update_password(
     body: PasswordUpdate,
     _: CurrentUser = Depends(gestor_only),
     user_db: UserDBManager = Depends(get_user_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
     # 404 para usuário inexistente, coerente com remove_user e com o resto da API.
     # Antes, a troca de senha de um id inexistente respondia 200 "Senha alterada
@@ -65,6 +88,8 @@ def update_password(
     ok, msg = user_db.update_password(user_id, body.new_password)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
+    # Nunca a senha nem o hash: só o fato de que foi alterada.
+    audit.record(ctx, "usuario", user_id, "editar", depois={"senha": "alterada"})
     return {"detail": msg}
 
 

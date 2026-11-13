@@ -41,6 +41,8 @@ import pymysql
 import pymysql.cursors
 import pytest
 
+pytest_plugins = ["tests.fixtures_colaboradores"]
+
 # ────────────────────────────────────────────────────────────────────────────
 # Configuração do ambiente de teste (guard de segurança)
 # ────────────────────────────────────────────────────────────────────────────
@@ -100,6 +102,11 @@ def pytest_configure(config):
     já enxergue o banco de teste. A verificação final de que isso funcionou está
     em `_assegurar_app_apontando_para_teste`.
     """
+    # Nunca enviar e-mail de verdade nem iniciar o agendador durante os testes,
+    # mesmo que o backend/.env do desenvolvedor diga o contrário.
+    os.environ["MAIL_BACKEND"] = "memory"
+    os.environ["SCHEDULER_ENABLED"] = "false"
+
     host = (os.environ.get("TEST_DB_HOST") or "").strip()
     name = (os.environ.get("TEST_DB_NAME") or "").strip()
     if not host or not name:
@@ -309,12 +316,24 @@ def _test_schema(_ambiente_de_teste):
             f"Não foi possível importar/instanciar app.db.unidade_db.UnidadeDBManager: {e}."
         )
 
+    # Migrações versionadas (backend/migrations/): aplicadas depois dos managers,
+    # que criam as tabelas legadas de que elas dependem. Falha aqui NÃO pula a
+    # suíte -- um erro de migração tem de aparecer como falha, não como skip.
+    from app.db.migrations import aplicar_pendentes
+
+    aplicar_pendentes()
+
     return cfg
 
 
 @pytest.fixture
 def limpar_banco(_test_schema):
     """Trunca todas as tabelas antes de cada teste, para isolamento total entre testes.
+
+    A lista de tabelas vem de `information_schema.tables` (assim, tabelas criadas por
+    migrações futuras entram sozinhas), exceto as de controle: `schema_migrations`
+    (zerá-la faria as migrações serem reaplicadas) e `scheduler_execucoes` (trava de
+    execução do agendador).
 
     Usa FOREIGN_KEY_CHECKS=0 ao redor do TRUNCATE em vez de uma ordem manual de tabelas —
     mais robusto a mudanças de schema e igualmente seguro dentro de uma única conexão.
@@ -323,11 +342,15 @@ def limpar_banco(_test_schema):
     conn = _conectar_direto(cfg, database=cfg.name)
     try:
         with conn.cursor() as cur:
+            cur.execute(
+                "SELECT table_name AS nome FROM information_schema.tables "
+                "WHERE table_schema = %s AND table_type = 'BASE TABLE' "
+                "AND table_name NOT IN ('schema_migrations', 'scheduler_execucoes')",
+                (cfg.name,),
+            )
+            tabelas = [linha["nome"] for linha in cur.fetchall()]
             cur.execute("SET FOREIGN_KEY_CHECKS=0")
-            for tabela in (
-                "equipment_peripherals", "history", "items", "peripherals", "usuarios",
-                "revoked_tokens", "unidades",
-            ):
+            for tabela in tabelas:
                 cur.execute(f"TRUNCATE TABLE `{tabela}`")
             cur.execute("SET FOREIGN_KEY_CHECKS=1")
         conn.commit()

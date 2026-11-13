@@ -4,7 +4,9 @@ from datetime import datetime
 
 from app.schemas.loans import LoanRequest
 from app.db.inventory_manager_db import InventoryDBManager
-from app.dependencies import gestor_or_tecnico, get_inventory_db, CurrentUser
+from app.dependencies import gestor_or_tecnico, get_inventory_db, get_audit_context, CurrentUser
+from app.services import audit
+from app.services.audit import AuditContext
 from app.core.storage import storage
 
 router = APIRouter(prefix="/api/loans", tags=["loans"])
@@ -26,7 +28,9 @@ def initiate_loan(
     body: LoanRequest,
     current_user: CurrentUser = Depends(gestor_or_tecnico),
     inv: InventoryDBManager = Depends(get_inventory_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
+    antes_item = inv.find(body.item_id)
     ok, msg = inv.issue(
         body.item_id,
         body.usuario,
@@ -41,6 +45,10 @@ def initiate_loan(
     )
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
+    audit.record_diff(
+        ctx, "emprestimo", body.item_id, "criar", antes_item, obter_depois=lambda: inv.find(body.item_id),
+        extra={"cargo": body.cargo, "center_cost": body.center_cost, "setor": body.setor},
+    )
     return {"detail": msg}
 
 
@@ -50,6 +58,7 @@ async def confirm_loan(
     signed_pdf: UploadFile = File(...),
     current_user: CurrentUser = Depends(gestor_or_tecnico),
     inv: InventoryDBManager = Depends(get_inventory_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
     content = await signed_pdf.read()
     _check_size(content)
@@ -57,9 +66,14 @@ async def confirm_loan(
     filename = f"termo_{item_id}_{timestamp}_{_safe_filename(signed_pdf.filename)}"
     storage_key = storage.save("termos_assinados", filename, content)
 
+    antes_item = inv.find(item_id)
     ok, msg = inv.confirm_loan(item_id, current_user.username, storage_key)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
+    audit.record_diff(
+        ctx, "emprestimo", item_id, "confirmar", antes_item, obter_depois=lambda: inv.find(item_id),
+        extra={"termo_assinado": storage_key},
+    )
     return {"detail": msg}
 
 
@@ -87,10 +101,15 @@ def initiate_return(
     item_id: int,
     current_user: CurrentUser = Depends(gestor_or_tecnico),
     inv: InventoryDBManager = Depends(get_inventory_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
+    antes_item = inv.find(item_id)
     ok, result, filename = inv.generate_return_term_bytes(item_id, current_user.username)
     if not ok:
         raise HTTPException(status_code=400, detail=result)
+    audit.record_diff(
+        ctx, "devolucao", item_id, "criar", antes_item, obter_depois=lambda: inv.find(item_id)
+    )
 
     # Salva o DOCX gerado no storage
     storage_key = storage.save("termos_devolucao", filename, result)
@@ -105,6 +124,7 @@ async def confirm_return(
     signed_pdf: UploadFile = File(...),
     current_user: CurrentUser = Depends(gestor_or_tecnico),
     inv: InventoryDBManager = Depends(get_inventory_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
     content = await signed_pdf.read()
     _check_size(content)
@@ -112,7 +132,12 @@ async def confirm_return(
     filename = f"termo_devolucao_{item_id}_{timestamp}_{_safe_filename(signed_pdf.filename)}"
     storage_key = storage.save("termos_devolucao_assinados", filename, content)
 
+    antes_item = inv.find(item_id)
     ok, msg = inv.confirm_return(item_id, current_user.username, storage_key)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
+    audit.record_diff(
+        ctx, "devolucao", item_id, "confirmar", antes_item, obter_depois=lambda: inv.find(item_id),
+        extra={"termo_assinado": storage_key},
+    )
     return {"detail": msg}
