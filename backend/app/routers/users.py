@@ -2,7 +2,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Depends
 
-from app.schemas.users import UserCreate, UserResponse, PasswordUpdate
+from app.schemas.users import UserCreate, UserResponse, UserUpdate, PasswordUpdate
 from app.db.user_manager_db import UserDBManager
 from app.dependencies import gestor_only, get_user_db, get_audit_context, CurrentUser
 from app.services import audit
@@ -25,7 +25,7 @@ def create_user(
     user_db: UserDBManager = Depends(get_user_db),
     ctx: AuditContext = Depends(get_audit_context),
 ):
-    ok, msg = user_db.add_user(body.username, body.password, body.role)
+    ok, msg = user_db.add_user(body.username, body.password, body.role, body.email)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
     # O usuário já foi gravado: ler o id para a auditoria não pode derrubar a resposta.
@@ -34,11 +34,44 @@ def create_user(
         criado = user_db.get_user_by_username(body.username) or {}
         audit.record(
             ctx, "usuario", criado.get("id"), "criar",
-            depois={"id": criado.get("id"), "username": body.username, "role": body.role},
+            depois={
+                "id": criado.get("id"), "username": body.username,
+                "role": body.role, "email": body.email,
+            },
         )
     except Exception:
         logger.exception("Falha ao preparar auditoria (entidade=usuario, acao=criar).")
     return {"detail": msg}
+
+
+@router.put("/{user_id}", response_model=UserResponse)
+def update_user(
+    user_id: int,
+    body: UserUpdate,
+    _: CurrentUser = Depends(gestor_only),
+    user_db: UserDBManager = Depends(get_user_db),
+    ctx: AuditContext = Depends(get_audit_context),
+):
+    """Só o Gestor edita o e-mail (canal de recuperação de senha)."""
+    antes = user_db.get_user_by_id(user_id)
+    if not antes:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    ok, msg = user_db.update_email(user_id, body.email)
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    audit.record_diff(
+        ctx, "usuario", user_id, "editar",
+        {"email": antes.get("email")},
+        depois={"email": body.email},
+    )
+    atual = user_db.get_user_by_id(user_id) or {}
+    return UserResponse(
+        id=atual.get("id", user_id),
+        username=atual.get("username", antes["username"]),
+        role=atual.get("role", antes["role"]),
+        email=atual.get("email"),
+        totp_ativo=bool(atual.get("totp_ativo")),
+    )
 
 
 @router.delete("/{user_id}")
