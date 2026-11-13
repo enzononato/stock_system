@@ -17,7 +17,14 @@ from app.dependencies import (
     gestor_or_tecnico,
 )
 from app.schemas.common import Paginated
-from app.schemas.linhas import AparelhoOpcao, LinhaCreate, LinhaResponse
+from app.schemas.linhas import (
+    AparelhoOpcao,
+    LinhaCreate,
+    LinhaEventoResponse,
+    LinhaResponse,
+    LinhaStatusChange,
+    LinhaUpdate,
+)
 from app.services.audit import AuditContext
 
 router = APIRouter(prefix="/api/linhas", tags=["linhas"])
@@ -70,6 +77,15 @@ def listar_aparelhos(
     return db.aparelhos(busca=busca, linha_id=linha_id, limit=limit)
 
 
+@router.get("/eventos", response_model=list[LinhaEventoResponse])
+def listar_eventos_do_aparelho(
+    item_id: int = Query(...),
+    _: CurrentUser = Depends(get_current_user),
+    db: LinhaDBManager = Depends(get_linha_db),
+):
+    return db.eventos_do_aparelho(item_id)
+
+
 @router.get("/{linha_id}", response_model=LinhaResponse)
 def obter_linha(
     linha_id: int,
@@ -91,3 +107,40 @@ def criar_linha(
 ):
     linha_id = _executar(db.criar, body.model_dump(), ctx)
     return db.obter(linha_id)
+
+
+@router.put("/{linha_id}", response_model=LinhaResponse)
+def atualizar_linha(
+    linha_id: int,
+    body: LinhaUpdate,
+    _: CurrentUser = Depends(gestor_or_tecnico),
+    db: LinhaDBManager = Depends(get_linha_db),
+    ctx: AuditContext = Depends(get_audit_context),
+):
+    dados = body.model_dump(exclude_unset=True)
+    motivo = dados.pop("motivo", None)
+    if not dados:
+        raise HTTPException(status_code=400, detail="Nenhum campo para atualizar.")
+    return _executar(db.atualizar, linha_id, dados, ctx, motivo)
+
+
+@router.post("/{linha_id}/status", response_model=LinhaResponse)
+def alterar_status_da_linha(
+    linha_id: int,
+    body: LinhaStatusChange,
+    _: CurrentUser = Depends(gestor_or_tecnico),
+    db: LinhaDBManager = Depends(get_linha_db),
+    ctx: AuditContext = Depends(get_audit_context),
+):
+    return _executar(db.alterar_status, linha_id, body.status, ctx, body.observacao)
+
+
+@router.get("/{linha_id}/eventos", response_model=list[LinhaEventoResponse])
+def listar_eventos_da_linha(
+    linha_id: int,
+    _: CurrentUser = Depends(get_current_user),
+    db: LinhaDBManager = Depends(get_linha_db),
+):
+    if not db.obter(linha_id):
+        raise HTTPException(status_code=404, detail=MSG_NAO_ENCONTRADA)
+    return db.eventos(linha_id)

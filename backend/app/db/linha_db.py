@@ -283,3 +283,166 @@ class LinhaDBManager:
         with get_cursor(commit=False) as cur:
             cur.execute(sql, params)
             return cur.fetchall()
+
+    def atualizar(
+        self, linha_id: int, dados: dict, ctx: AuditContext, motivo: Optional[str] = None
+    ) -> dict:
+        """Altera a linha e grava, na mesma transação, os eventos de cada mudança e a auditoria.
+
+        `dados` só traz as chaves enviadas (`None` limpa plano, aparelho, colaborador, iccid e
+        observações). Sem diferença real não há evento nem auditoria. Devolve a linha relida.
+        """
+        try:
+            with get_cursor() as cur:
+                cur.execute("SELECT * FROM linhas WHERE id = %s FOR UPDATE", (linha_id,))
+                atual = cur.fetchone()
+                if not atual:
+                    raise LinhaNaoEncontrada()
+                if atual["status"] == "cancelada":
+                    raise LinhaConflito("Linha cancelada: reative-a antes de alterar.")
+                mudancas = {
+                    k: v for k, v in dados.items() if k in _CAMPOS_EDITAVEIS and v != atual[k]
+                }
+                if mudancas:
+                    self._aplicar_mudancas(cur, linha_id, atual, mudancas, ctx, motivo)
+        except pymysql.MySQLError as e:
+            if _erro_de_duplicado(e):
+                raise LinhaConflito(MSG_NUMERO_DUPLICADO) from e
+            raise
+        return self.obter(linha_id)
+
+    @staticmethod
+    def _aplicar_mudancas(
+        cur, linha_id: int, atual: dict, mudancas: dict, ctx: AuditContext, motivo: Optional[str]
+    ) -> None:
+        if "numero" in mudancas:
+            _checar_numero_livre(cur, mudancas["numero"], linha_id)
+        unidade_nova = None
+        if "unidade_id" in mudancas:
+            unidade_nova = _validar_unidade(cur, mudancas["unidade_id"])
+        item_novo = None
+        if mudancas.get("item_id") is not None:
+            item_novo = _validar_aparelho(cur, mudancas["item_id"], linha_id)
+        colaborador_novo = None
+        if mudancas.get("colaborador_id") is not None:
+            colaborador_novo = _validar_colaborador(cur, mudancas["colaborador_id"])
+
+        sets = ", ".join(f"{k} = %s" for k in mudancas)
+        cur.execute(
+            f"UPDATE linhas SET {sets}, atualizada_em = %s WHERE id = %s",
+            [*mudancas.values(), datetime.now(), linha_id],
+        )
+
+        item_depois = mudancas["item_id"] if "item_id" in mudancas else atual["item_id"]
+        base = {"por_usuario": ctx.username, "observacao": motivo, "item_id": item_depois}
+
+        if "item_id" in mudancas:
+            antigo = None
+            if atual["item_id"] is not None:
+                cur.execute(
+                    "SELECT tipo, brand, model, identificador FROM items WHERE id = %s",
+                    (atual["item_id"],),
+                )
+                antigo = cur.fetchone()
+            _registrar_evento(
+                cur, linha_id, "troca_aparelho",
+                de_valor=_descrever_item(antigo), para_valor=_descrever_item(item_novo),
+                item_id_anterior=atual["item_id"], **base,
+            )
+        if "colaborador_id" in mudancas:
+            antigo_nome = None
+            if atual["colaborador_id"] is not None:
+                cur.execute("SELECT nome FROM colaboradores WHERE id = %s", (atual["colaborador_id"],))
+                encontrado = cur.fetchone()
+                antigo_nome = encontrado["nome"] if encontrado else None
+            _registrar_evento(
+                cur, linha_id, "troca_usuario", de_valor=antigo_nome,
+                para_valor=colaborador_novo["nome"] if colaborador_novo else None, **base,
+            )
+        if "operadora" in mudancas:
+            _registrar_evento(
+                cur, linha_id, "portabilidade",
+                de_valor=atual["operadora"], para_valor=mudancas["operadora"], **base,
+            )
+        for campo in ("numero", "plano", "custo_mensal", "unidade_id", "iccid", "observacoes"):
+            if campo not in mudancas:
+                continue
+            de, para = atual[campo], mudancas[campo]
+            if campo == "unidade_id":
+                cur.execute("SELECT nome FROM unidades WHERE id = %s", (de,))
+                encontrada = cur.fetchone()
+                de = encontrada["nome"] if encontrada else de
+                para = unidade_nova["nome"]
+            _registrar_evento(
+                cur, linha_id, "edicao",
+                campo="unidade" if campo == "unidade_id" else campo,
+                de_valor=None if de is None else str(de),
+                para_valor=None if para is None else str(para), **base,
+            )
+
+        depois = _ler_linha_crua(cur, linha_id)
+        antes_diff, depois_diff = audit.diff(
+            {k: v for k, v in atual.items() if k != "atualizada_em"},
+            {k: v for k, v in depois.items() if k != "atualizada_em"},
+        )
+        audit.record(ctx, "linha", linha_id, "editar", antes_diff, depois_diff, cur=cur)
+
+    def alterar_status(
+        self, linha_id: int, status: str, ctx: AuditContext, observacao: Optional[str] = None
+    ) -> dict:
+        """Suspende, reativa ou cancela (cancelar libera o aparelho). Devolve a linha relida."""
+        with get_cursor() as cur:
+            cur.execute("SELECT * FROM linhas WHERE id = %s FOR UPDATE", (linha_id,))
+            atual = cur.fetchone()
+            if not atual:
+                raise LinhaNaoEncontrada()
+            antigo = atual["status"]
+            if status == "suspensa" and antigo != "ativa":
+                raise LinhaConflito("Só linhas ativas podem ser suspensas.")
+            if status == "ativa" and antigo == "ativa":
+                raise LinhaConflito("A linha já está ativa.")
+            if status == "cancelada" and antigo == "cancelada":
+                raise LinhaConflito("A linha já está cancelada.")
+
+            cancelando = status == "cancelada"
+            item_depois = None if cancelando else atual["item_id"]
+            cur.execute(
+                "UPDATE linhas SET status = %s, item_id = %s, atualizada_em = %s WHERE id = %s",
+                (status, item_depois, datetime.now(), linha_id),
+            )
+            tipo, acao = {
+                "suspensa": ("suspensao", "suspender"),
+                "ativa": ("reativacao", "reativar"),
+                "cancelada": ("cancelamento", "cancelar"),
+            }[status]
+            _registrar_evento(
+                cur, linha_id, tipo, por_usuario=ctx.username, de_valor=antigo, para_valor=status,
+                item_id=item_depois,
+                item_id_anterior=atual["item_id"] if cancelando else None,
+                observacao=observacao,
+            )
+            antes = {"status": antigo}
+            depois = {"status": status}
+            if cancelando:
+                antes["item_id"] = atual["item_id"]
+                depois["item_id"] = None
+            audit.record(ctx, "linha", linha_id, acao, antes, depois, cur=cur)
+        return self.obter(linha_id)
+
+    def eventos(self, linha_id: int) -> list[dict]:
+        return self._eventos("e.linha_id = %s", (linha_id,))
+
+    def eventos_do_aparelho(self, item_id: int) -> list[dict]:
+        """Eventos das linhas que passaram pelo aparelho (fonte da linha do tempo do equipamento, F7)."""
+        return self._eventos("(e.item_id = %s OR e.item_id_anterior = %s)", (item_id, item_id))
+
+    @staticmethod
+    def _eventos(condicao: str, params: tuple) -> list[dict]:
+        with get_cursor(commit=False) as cur:
+            cur.execute(
+                "SELECT e.*, l.numero AS linha_numero FROM linha_eventos e "
+                "JOIN linhas l ON l.id = e.linha_id "
+                f"WHERE {condicao} ORDER BY e.ocorrido_em DESC, e.id DESC LIMIT 200",
+                params,
+            )
+            return cur.fetchall()
