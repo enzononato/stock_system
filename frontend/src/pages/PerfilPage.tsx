@@ -8,6 +8,7 @@ import {
   regenerarCodigos,
 } from '@/api/perfil'
 import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
+import type { CadastroTotp } from '@/api/auth'
 import { CadastroAutenticador } from '@/components/auth/CadastroAutenticador'
 import { CodigosRecuperacao } from '@/components/auth/CodigosRecuperacao'
 import { Button } from '@/components/ui/button'
@@ -27,10 +28,10 @@ import { mensagemErroAuth } from '@/lib/auth-errors'
 
 type Fluxo =
   | { tipo: 'nenhum' }
-  | { tipo: 'cadastro' }
+  | { tipo: 'cadastro'; dados: CadastroTotp }
   | { tipo: 'codigos'; codigos: string[]; aoConcluir: () => void }
 
-type AcaoComSenha = 'desativar' | 'codigos'
+type AcaoComSenha = 'ativar' | 'desativar' | 'codigos'
 
 function Campo({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
   return (
@@ -56,16 +57,25 @@ export default function PerfilPage() {
   }
 
   const senhaMutation = useMutation({
-    mutationFn: async ({ qual, valor }: { qual: AcaoComSenha; valor: string }) => {
+    mutationFn: async ({
+      qual,
+      valor,
+    }: {
+      qual: AcaoComSenha
+      valor: string
+    }): Promise<{ codigos?: string[]; cadastro?: CadastroTotp }> => {
+      if (qual === 'ativar') return { cadastro: await iniciarCadastro2fa(valor) }
       if (qual === 'desativar') {
         await desativar2fa(valor)
-        return null
+        return {}
       }
-      return (await regenerarCodigos(valor)).codigos_recuperacao
+      return { codigos: (await regenerarCodigos(valor)).codigos_recuperacao }
     },
-    onSuccess: (codigos, { qual }) => {
+    onSuccess: ({ codigos, cadastro }, { qual }) => {
       fecharDialogo()
-      if (qual === 'desativar') {
+      if (qual === 'ativar' && cadastro) {
+        setFluxo({ tipo: 'cadastro', dados: cadastro })
+      } else if (qual === 'desativar') {
         void queryClient.invalidateQueries({ queryKey: ['perfil'] })
         toast('Verificação em duas etapas desativada.')
       } else if (codigos) {
@@ -141,7 +151,7 @@ export default function PerfilPage() {
         {fluxo.tipo === 'cadastro' && (
           <div className="mx-auto max-w-sm rounded-lg border border-border p-5">
             <CadastroAutenticador
-              iniciar={iniciarCadastro2fa}
+              iniciar={() => Promise.resolve(fluxo.dados)}
               confirmar={async (codigo) => (await confirmarCadastro2fa(codigo)).codigos_recuperacao}
               onConcluido={(codigos) =>
                 setFluxo({
@@ -171,11 +181,12 @@ export default function PerfilPage() {
         {fluxo.tipo === 'nenhum' && (
           <div className="flex flex-wrap gap-2">
             {!perfil.totp_ativo && perfil.mfa_disponivel && (
-              <Button onClick={() => setFluxo({ tipo: 'cadastro' })}>
+              <Button onClick={() => setAcao('ativar')}>
                 Ativar verificação em duas etapas
               </Button>
             )}
-            {perfil.totp_ativo && perfil.mfa_disponivel && (
+            {/* Gerar códigos não depende da chave TOTP do servidor: só o hash dos códigos é usado. */}
+            {perfil.totp_ativo && (
               <Button variant="outline" onClick={() => setAcao('codigos')}>
                 Gerar novos códigos de recuperação
               </Button>
@@ -201,9 +212,11 @@ export default function PerfilPage() {
             <DialogHeader>
               <DialogTitle>Confirme sua senha</DialogTitle>
               <DialogDescription>
-                {acao === 'desativar'
-                  ? 'Para desativar a verificação em duas etapas, digite a sua senha.'
-                  : 'Os códigos atuais deixarão de valer. Digite a sua senha para gerar novos.'}
+                {acao === 'ativar'
+                  ? 'Para ativar a verificação em duas etapas, digite a sua senha.'
+                  : acao === 'desativar'
+                    ? 'Para desativar a verificação em duas etapas, digite a sua senha.'
+                    : 'Os códigos atuais deixarão de valer. Digite a sua senha para gerar novos.'}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-1.5">

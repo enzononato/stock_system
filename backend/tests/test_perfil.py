@@ -17,6 +17,7 @@ pytestmark = pytest.mark.integration
 
 MSG_JA_ATIVO = "A verificação em duas etapas já está ativa."
 MSG_NAO_ATIVO = "A verificação em duas etapas não está ativa."
+SENHA = "SenhaForte#123"  # senha_padrao_teste
 
 
 def _cliente_logado(app, client, username, senha) -> TestClient:
@@ -28,7 +29,7 @@ def _cliente_logado(app, client, username, senha) -> TestClient:
 
 
 def _ativar_pelo_perfil(c, usuario_segredo=None):
-    segredo = c.post("/api/perfil/2fa/iniciar").json()["segredo"]
+    segredo = c.post("/api/perfil/2fa/iniciar", json={"senha": SENHA}).json()["segredo"]
     resp = c.post("/api/perfil/2fa/confirmar", json={"codigo": codigo_totp(segredo)})
     assert resp.status_code == 200, resp.text
     return segredo, resp.json()["codigos_recuperacao"]
@@ -67,14 +68,14 @@ def test_perfil_sem_chave_indica_indisponivel(client_tecnico):
 
     perfil = client_tecnico.get("/api/perfil").json()
     assert perfil["mfa_disponivel"] is False
-    resp = client_tecnico.post("/api/perfil/2fa/iniciar")
+    resp = client_tecnico.post("/api/perfil/2fa/iniciar", json={"senha": SENHA})
     assert resp.status_code == 503
     assert resp.json()["detail"] == MSG_MFA_INDISPONIVEL
 
 
 def test_tecnico_ativa_2fa_no_perfil(_fastapi_app, client, chave_totp, usuario_tecnico, senha_padrao_teste):
     c = _cliente_logado(_fastapi_app, client, "tecnico.teste", senha_padrao_teste)
-    ini = c.post("/api/perfil/2fa/iniciar")
+    ini = c.post("/api/perfil/2fa/iniciar", json={"senha": SENHA})
     assert ini.status_code == 200, ini.text
     segredo = ini.json()["segredo"]
     assert ini.json()["otpauth_uri"].startswith("otpauth://totp/")
@@ -102,7 +103,7 @@ def test_tecnico_ativa_2fa_no_perfil(_fastapi_app, client, chave_totp, usuario_t
 def test_iniciar_com_2fa_ativo_409(_fastapi_app, client, usuario_tecnico, senha_padrao_teste, ativar_2fa_direto):
     c = _cliente_logado(_fastapi_app, client, "tecnico.teste", senha_padrao_teste)
     ativar_2fa_direto(usuario_tecnico["id"])
-    resp = c.post("/api/perfil/2fa/iniciar")
+    resp = c.post("/api/perfil/2fa/iniciar", json={"senha": SENHA})
     assert resp.status_code == 409
     assert resp.json()["detail"] == MSG_JA_ATIVO
 
@@ -116,7 +117,7 @@ def test_confirmar_sem_iniciar_400(_fastapi_app, client, chave_totp, usuario_tec
 
 def test_confirmar_codigo_errado_400(_fastapi_app, client, chave_totp, usuario_tecnico, senha_padrao_teste):
     c = _cliente_logado(_fastapi_app, client, "tecnico.teste", senha_padrao_teste)
-    segredo = c.post("/api/perfil/2fa/iniciar").json()["segredo"]
+    segredo = c.post("/api/perfil/2fa/iniciar", json={"senha": SENHA}).json()["segredo"]
     certo = codigo_totp(segredo)
     errado = "000000" if certo != "000000" else "111111"
     resp = c.post("/api/perfil/2fa/confirmar", json={"codigo": errado})
@@ -191,3 +192,19 @@ def test_regenerar_sem_2fa_400(_fastapi_app, client, usuario_tecnico, senha_padr
     resp = c.post("/api/perfil/2fa/codigos", json={"senha": senha_padrao_teste})
     assert resp.status_code == 400
     assert resp.json()["detail"] == MSG_NAO_ATIVO
+
+
+def test_iniciar_exige_a_senha_atual(_fastapi_app, client, chave_totp, usuario_tecnico, senha_padrao_teste):
+    c = _cliente_logado(_fastapi_app, client, "tecnico.teste", senha_padrao_teste)
+
+    errada = c.post("/api/perfil/2fa/iniciar", json={"senha": "errada"})
+    assert errada.status_code == 400
+    assert errada.json()["detail"] == "Senha incorreta."
+    assert c.post("/api/perfil/2fa/iniciar", json={}).status_code == 422
+    # Nada foi gravado pela tentativa com senha errada.
+    assert _linhas("SELECT totp_secret_cifrado FROM usuarios WHERE id = %s", (usuario_tecnico["id"],))[0][
+        "totp_secret_cifrado"
+    ] is None
+
+    certa = c.post("/api/perfil/2fa/iniciar", json={"senha": senha_padrao_teste})
+    assert certa.status_code == 200

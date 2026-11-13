@@ -52,7 +52,7 @@ export default function LoginPage() {
   const [etapa, setEtapa] = useState<Etapa>({ tipo: 'senha' })
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const { login, concluirLogin } = useAuth()
+  const { login, concluirLogin, avisoLogin, limparAviso } = useAuth()
   const navigate = useNavigate()
   const accessTokenDoCadastro = useRef('')
 
@@ -67,11 +67,13 @@ export default function LoginPage() {
     <AuthShell titulo={cabecalho.titulo} descricao={cabecalho.descricao}>
       {etapa.tipo === 'senha' && (
         <SenhaEtapa
+          aviso={avisoLogin}
           username={username}
           password={password}
           onUsername={setUsername}
           onPassword={setPassword}
           onEntrar={async () => {
+            limparAviso()
             const resposta = await login(username, password)
             if (resposta.etapa === 'ok') {
               navigate('/', { replace: true })
@@ -130,6 +132,7 @@ export default function LoginPage() {
 }
 
 interface SenhaEtapaProps {
+  aviso: string | null
   username: string
   password: string
   onUsername: (v: string) => void
@@ -137,7 +140,7 @@ interface SenhaEtapaProps {
   onEntrar: () => Promise<void>
 }
 
-function SenhaEtapa({ username, password, onUsername, onPassword, onEntrar }: SenhaEtapaProps) {
+function SenhaEtapa({ aviso, username, password, onUsername, onPassword, onEntrar }: SenhaEtapaProps) {
   const [showPass, setShowPass] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -157,6 +160,14 @@ function SenhaEtapa({ username, password, onUsername, onPassword, onEntrar }: Se
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+      {aviso && (
+        <p
+          role="status"
+          className="rounded-lg border border-border bg-surface-alt px-3.5 py-2.5 text-xs font-medium text-foreground leading-relaxed"
+        >
+          {aviso}
+        </p>
+      )}
       <div className="space-y-1.5">
         <Label htmlFor="username" className="text-xs font-medium text-foreground">
           Usuário

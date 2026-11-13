@@ -39,3 +39,26 @@ describe('CodigosRecuperacao', () => {
     expect(await navigator.clipboard.readText()).toBe(CODIGOS.join('\n'))
   })
 })
+
+describe('CodigosRecuperacao — download', () => {
+  it('baixa o .txt e só revoga a URL do Blob depois, num timeout', async () => {
+    const criar = vi.fn(() => 'blob:codigos')
+    const revogar = vi.fn()
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: criar, revokeObjectURL: revogar }))
+    const clique = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    try {
+      const user = userEvent.setup()
+      render(<CodigosRecuperacao codigos={CODIGOS} onContinuar={() => {}} />)
+
+      await user.click(screen.getByRole('button', { name: 'Baixar .txt' }))
+
+      expect(criar).toHaveBeenCalledTimes(1)
+      expect(clique).toHaveBeenCalledTimes(1)
+      expect(revogar).not.toHaveBeenCalled()
+      await vi.waitFor(() => expect(revogar).toHaveBeenCalledWith('blob:codigos'), { timeout: 3000 })
+    } finally {
+      clique.mockRestore()
+      vi.unstubAllGlobals()
+    }
+  })
+})

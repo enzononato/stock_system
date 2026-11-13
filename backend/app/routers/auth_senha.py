@@ -66,30 +66,59 @@ def forgot(
     user_db: UserDBManager = Depends(get_user_db),
     reset_db: PasswordResetDBManager = Depends(get_password_reset_db),
 ):
-    """Resposta sempre genérica: não revela se o usuário existe nem se tem e-mail."""
-    identificador = body.identificador.strip()
-    usuario = None
-    if identificador:
-        if "@" in identificador:
-            usuario = user_db.get_user_by_email(identificador)
-        else:
-            usuario = user_db.get_user_by_username(identificador)
-
-    if usuario and usuario.get("email"):
-        agora = _agora_utc()
-        if reset_db.contar_criados_desde(usuario["id"], agora - timedelta(hours=1)) < RESET_MAX_POR_HORA:
-            token = secrets.token_urlsafe(32)
-            ip = ip_real_do_cliente(request)
-            reset_db.criar(
-                usuario["id"], sha256_hex(token), agora, agora + timedelta(minutes=RESET_VALIDADE_MINUTOS), ip
-            )
-            audit.record(
-                contexto_auditoria_de(None, request),
-                "usuario", usuario["id"], "solicitar_redefinicao_senha",
-                depois={"canal": "email"},
-            )
-            background_tasks.add_task(enviar_email_redefinicao, usuario["email"], usuario["username"], token)
+    """Resposta sempre genérica e no mesmo tempo para qualquer entrada: o trabalho todo
+    (busca, limite por usuário, gravação do link, auditoria, e-mail) roda depois da
+    resposta, numa BackgroundTask, então o tempo não revela se o usuário existe."""
+    background_tasks.add_task(
+        _processar_pedido,
+        body.identificador.strip(),
+        ip_real_do_cliente(request),
+        contexto_auditoria_de(None, request),
+        user_db,
+        reset_db,
+    )
     return MensagemResponse(detail=MSG_FORGOT)
+
+
+def _processar_pedido(
+    identificador: str,
+    ip: str,
+    ctx,
+    user_db: UserDBManager,
+    reset_db: PasswordResetDBManager,
+) -> None:
+    try:
+        usuario = None
+        if identificador:
+            if "@" in identificador:
+                usuario = user_db.get_user_by_email(identificador)
+            else:
+                usuario = user_db.get_user_by_username(identificador)
+        if not usuario or not usuario.get("email"):
+            return
+
+        agora = _agora_utc()
+        token = secrets.token_urlsafe(32)
+        # Contagem + gravação atômicas (linha do usuário travada): no máximo
+        # RESET_MAX_POR_HORA e-mails por hora, mesmo com pedidos simultâneos.
+        criado = reset_db.criar_se_dentro_do_limite(
+            usuario["id"],
+            sha256_hex(token),
+            agora,
+            agora + timedelta(minutes=RESET_VALIDADE_MINUTOS),
+            ip,
+            agora - timedelta(hours=1),
+            RESET_MAX_POR_HORA,
+        )
+        if not criado:
+            return
+        audit.record(
+            ctx, "usuario", usuario["id"], "solicitar_redefinicao_senha", depois={"canal": "email"}
+        )
+        enviar_email_redefinicao(usuario["email"], usuario["username"], token)
+    except Exception:
+        # Mensagem fixa: nada de usuário, e-mail ou token no log.
+        logger.error("Falha ao processar o pedido de redefinição de senha.")
 
 
 @router.post("/reset", response_model=MensagemResponse)

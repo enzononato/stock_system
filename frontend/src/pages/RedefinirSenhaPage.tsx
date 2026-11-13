@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { redefinirSenha } from '@/api/auth'
 import AuthShell from '@/components/auth/AuthShell'
 import { Button } from '@/components/ui/button'
@@ -24,7 +24,14 @@ function Alerta({ texto }: { texto: string }) {
 
 export default function RedefinirSenhaPage() {
   const [params] = useSearchParams()
-  const token = params.get('token') ?? ''
+  const { pathname } = useLocation()
+  const navigate = useNavigate()
+  // O token vem na URL, mas fica só em memória: logo depois de lido, é tirado do
+  // endereço e do histórico (não vaza por histórico, Referer nem captura de tela).
+  const [token] = useState(() => params.get('token') ?? '')
+  useEffect(() => {
+    if (params.has('token')) navigate(pathname, { replace: true })
+  }, [params, pathname, navigate])
   const [novaSenha, setNovaSenha] = useState('')
   const [confirmacao, setConfirmacao] = useState('')
   const [enviando, setEnviando] = useState(false)

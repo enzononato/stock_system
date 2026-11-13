@@ -2,15 +2,19 @@
 
 Nunca grava segredo, hash nem códigos na auditoria.
 """
+from datetime import datetime, timedelta, timezone
+
 from app.db.mfa_db import MfaDBManager
 from app.services import audit
 from app.services.audit import AuditContext
 from app.services.mfa import (
     CadastroNaoIniciado,
     CodigoInvalido,
+    MfaBloqueado,
     MfaErro,
     MfaIndisponivel,
     MfaJaAtivo,
+    TokenEsgotado,
     cifrar_segredo,
     decifrar_segredo,
     gerar_codigos_recuperacao,
@@ -33,7 +37,10 @@ def iniciar_cadastro(db: MfaDBManager, usuario: dict) -> tuple[str, str]:
     if not mfa_configurado():
         raise MfaIndisponivel()
     segredo = gerar_segredo()
-    db.salvar_segredo_pendente(usuario["id"], cifrar_segredo(segredo))
+    # A gravação só vale com o 2FA inativo (condição na própria UPDATE): se alguém
+    # ativou entre a leitura de `usuario` e aqui, o 2FA ativo não é derrubado.
+    if not db.salvar_segredo_pendente(usuario["id"], cifrar_segredo(segredo)):
+        raise MfaJaAtivo()
     return segredo, uri_provisionamento(segredo, usuario["username"])
 
 
@@ -52,7 +59,11 @@ def confirmar_cadastro(db: MfaDBManager, usuario: dict, codigo: str, ctx: AuditC
     if passo is None:
         raise CodigoInvalido()
     codigos = gerar_codigos_recuperacao()
-    db.ativar(usuario["id"], [hash_codigo_recuperacao(c) for c in codigos], passo)
+    # Ativa só o segredo cujo código acabou de ser verificado.
+    if not db.ativar(
+        usuario["id"], [hash_codigo_recuperacao(c) for c in codigos], passo, estado["totp_secret_cifrado"]
+    ):
+        raise CodigoInvalido()
     audit.record(
         ctx, "usuario", usuario["id"], "ativar_2fa",
         antes={"totp_ativo": False}, depois={"totp_ativo": True},
@@ -86,6 +97,41 @@ def verificar_segundo_fator(db: MfaDBManager, usuario: dict, codigo: str, ctx: A
         depois={"codigos_restantes": restantes},
     )
     return restantes
+
+
+MAX_FALHAS_POR_TOKEN = 5
+MAX_FALHAS_POR_USUARIO = 10
+JANELA_FALHAS = timedelta(minutes=15)
+DURACAO_BLOQUEIO = timedelta(minutes=15)
+
+
+def _agora_utc() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def exigir_verificacao_liberada(db: MfaDBManager, usuario: dict) -> None:
+    """`MfaBloqueado` (429) enquanto o usuário está no bloqueio temporário da 2ª etapa."""
+    ate = db.bloqueado_ate(usuario["id"])
+    if ate is not None and ate > _agora_utc():
+        raise MfaBloqueado()
+
+
+def registrar_falha_segundo_fator(db: MfaDBManager, usuario: dict, jti: str, ctx: AuditContext) -> None:
+    """Contabiliza um código errado da 2ª etapa e audita `falha_2fa` (sem código nem token).
+
+    Levanta `MfaBloqueado` quando esta falha é a 10ª do usuário em 15 min (bloqueio de 15 min)
+    e `TokenEsgotado` na 5ª falha do mesmo token; em ambos o chamador revoga o token."""
+    agora = _agora_utc()
+    do_token, do_usuario = db.registrar_falha(usuario["id"], jti, agora, agora - JANELA_FALHAS)
+    audit.record(
+        ctx, "usuario", usuario["id"], "falha_2fa",
+        depois={"falhas_no_token": do_token, "falhas_em_15_min": do_usuario},
+    )
+    if do_usuario >= MAX_FALHAS_POR_USUARIO:
+        db.bloquear(usuario["id"], agora + DURACAO_BLOQUEIO)
+        raise MfaBloqueado()
+    if do_token >= MAX_FALHAS_POR_TOKEN:
+        raise TokenEsgotado()
 
 
 def regenerar_codigos(db: MfaDBManager, usuario: dict, ctx: AuditContext) -> list[str]:

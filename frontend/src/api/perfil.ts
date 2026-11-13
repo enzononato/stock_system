@@ -17,8 +17,8 @@ export async function getPerfil() {
   return res.data as Perfil
 }
 
-export async function iniciarCadastro2fa() {
-  const res = await api.post('/perfil/2fa/iniciar')
+export async function iniciarCadastro2fa(senha: string) {
+  const res = await api.post('/perfil/2fa/iniciar', { senha })
   return res.data as CadastroTotp
 }
 

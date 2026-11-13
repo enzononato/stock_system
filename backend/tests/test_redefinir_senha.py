@@ -218,3 +218,62 @@ def test_forgot_tem_rate_limit(usuario_com_email):
         for _ in range(3):
             assert c.post("/api/auth/forgot", json={"identificador": "x"}).status_code == 200
         assert c.post("/api/auth/forgot", json={"identificador": "x"}).status_code == 429
+
+
+def test_forgot_responde_antes_de_processar(client, usuario_com_email, monkeypatch):
+    """Busca, limite, gravação, auditoria e e-mail ficam todos na BackgroundTask: a resposta
+    não depende de nada disso (mesmo tempo para qualquer entrada)."""
+    recebidos = []
+    monkeypatch.setattr("app.routers.auth_senha._processar_pedido", lambda *a, **k: recebidos.append(a[0]))
+
+    for ident in ("tecnico.email", "ninguem.assim"):
+        resp = _forgot(client, ident)
+        assert (resp.status_code, resp.json()) == (200, {"detail": MSG_FORGOT})
+
+    assert recebidos == ["tecnico.email", "ninguem.assim"]
+    assert outbox == [] and _linhas_tokens() == []
+
+
+def test_limite_de_3_por_hora_e_atomico(usuario_com_email):
+    from concurrent.futures import ThreadPoolExecutor
+
+    from app.core.security import sha256_hex
+    from app.db.password_reset_db import PasswordResetDBManager
+
+    db = PasswordResetDBManager()
+    agora = _agora_utc()
+
+    def tentar(i):
+        return db.criar_se_dentro_do_limite(
+            usuario_com_email["id"], sha256_hex(f"tok-{i}"), agora, agora + timedelta(minutes=30),
+            None, agora - timedelta(hours=1), 3,
+        )
+
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        resultados = list(ex.map(tentar, range(8)))
+
+    assert resultados.count(True) == 3
+    assert len(_linhas_tokens()) == 3
+
+
+def test_aviso_de_boot_com_url_publica_local_em_producao(caplog, monkeypatch):
+    import app.main as main_module
+
+    monkeypatch.setattr("app.main.settings.ENVIRONMENT", "production")
+    monkeypatch.setattr("app.main.settings.APP_PUBLIC_URL", "http://localhost:5173")
+    with caplog.at_level(logging.WARNING):
+        main_module.avisar_url_publica_local()
+    assert "APP_PUBLIC_URL aponta para localhost em produção" in caplog.text
+
+    caplog.clear()
+    monkeypatch.setattr("app.main.settings.APP_PUBLIC_URL", "https://patrimonio.revalle.com.br")
+    with caplog.at_level(logging.WARNING):
+        main_module.avisar_url_publica_local()
+    assert "APP_PUBLIC_URL" not in caplog.text
+
+    monkeypatch.setattr("app.main.settings.APP_PUBLIC_URL", "http://localhost:5173")
+    monkeypatch.setattr("app.main.settings.ENVIRONMENT", "development")
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        main_module.avisar_url_publica_local()
+    assert "APP_PUBLIC_URL" not in caplog.text

@@ -230,3 +230,12 @@ def test_aviso_de_chave_ausente_no_boot(caplog, monkeypatch):
     with caplog.at_level(logging.WARNING):
         main_module.avisar_2fa_sem_chave()
     assert "TOTP_ENCRYPTION_KEY" not in caplog.text
+
+
+def test_cadastro_iniciar_tem_rate_limit(chave_totp):
+    from tests.fixtures_auth import cliente_com_rate_limit
+
+    with cliente_com_rate_limit("3/minute") as c:
+        for _ in range(3):
+            assert _iniciar(c, "x").status_code == 400
+        assert _iniciar(c, "x").status_code == 429

@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { server } from '@/test/server'
 import RedefinirSenhaPage from '@/pages/RedefinirSenhaPage'
 
@@ -79,5 +79,34 @@ describe('RedefinirSenhaPage', () => {
 
     expect(await screen.findByText(MSG_LINK)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Pedir novo link' })).toHaveAttribute('href', '/esqueci-senha')
+  })
+})
+
+describe('RedefinirSenhaPage — token fora da URL', () => {
+  it('tira o token do endereço e ainda envia o token lido', async () => {
+    let corpo: unknown = null
+    server.use(
+      http.post('/api/auth/reset', async ({ request }) => {
+        corpo = await request.json()
+        return HttpResponse.json({ detail: 'Senha redefinida. Entre com a nova senha.' })
+      })
+    )
+    function Endereco() {
+      const l = useLocation()
+      return <p data-testid="endereco">{l.pathname + l.search}</p>
+    }
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/redefinir-senha?token=segredo-do-link']}>
+        <RedefinirSenhaPage />
+        <Endereco />
+      </MemoryRouter>
+    )
+
+    await vi.waitFor(() => expect(screen.getByTestId('endereco')).toHaveTextContent(/^\/redefinir-senha$/))
+    await preencher(user, 'Nova#123', 'Nova#123')
+
+    expect(await screen.findByText('Senha redefinida. Entre com a nova senha.')).toBeInTheDocument()
+    expect(corpo).toEqual({ token: 'segredo-do-link', nova_senha: 'Nova#123' })
   })
 })

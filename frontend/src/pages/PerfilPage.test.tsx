@@ -56,6 +56,7 @@ describe('PerfilPage', () => {
 
   it('Técnico sem 2FA ativa: QR, código, códigos de recuperação e conclusão', async () => {
     let ativo = false
+    let corpoIniciar: unknown = null
     server.use(
       http.get('/api/perfil', () =>
         HttpResponse.json({
@@ -64,12 +65,13 @@ describe('PerfilPage', () => {
           codigos_recuperacao_restantes: ativo ? 10 : 0,
         })
       ),
-      http.post('/api/perfil/2fa/iniciar', () =>
-        HttpResponse.json({
+      http.post('/api/perfil/2fa/iniciar', async ({ request }) => {
+        corpoIniciar = await request.json()
+        return HttpResponse.json({
           segredo: 'JBSWY3DPEHPK3PXP',
           otpauth_uri: 'otpauth://totp/Revalle:joao?secret=JBSWY3DPEHPK3PXP',
         })
-      ),
+      }),
       http.post('/api/perfil/2fa/confirmar', async ({ request }) => {
         expect(await request.json()).toEqual({ codigo: '123456' })
         ativo = true
@@ -81,7 +83,11 @@ describe('PerfilPage', () => {
 
     expect(await screen.findByText('Inativo')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Ativar verificação em duas etapas' }))
+    const dialogo = await screen.findByRole('dialog')
+    await user.type(within(dialogo).getByLabelText('Senha'), 'minha-senha')
+    await user.click(within(dialogo).getByRole('button', { name: 'Confirmar' }))
     expect(await screen.findByAltText('QR code para o aplicativo autenticador')).toBeInTheDocument()
+    expect(corpoIniciar).toEqual({ senha: 'minha-senha' })
     await user.type(screen.getByLabelText('Código de 6 dígitos'), '123456')
     await user.click(screen.getByRole('button', { name: 'Confirmar' }))
 
@@ -92,6 +98,33 @@ describe('PerfilPage', () => {
     expect(await screen.findByText('Ativo')).toBeInTheDocument()
     expect(await screen.findByText('Verificação em duas etapas ativada.')).toBeInTheDocument()
     expect(screen.getByText('Códigos de recuperação restantes: 10')).toBeInTheDocument()
+  })
+
+  it('ativar com senha incorreta mostra o erro e não abre o cadastro', async () => {
+    servirPerfil(tecnico)
+    server.use(
+      http.post('/api/perfil/2fa/iniciar', () =>
+        HttpResponse.json({ detail: 'Senha incorreta.' }, { status: 400 })
+      )
+    )
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.click(await screen.findByRole('button', { name: 'Ativar verificação em duas etapas' }))
+    const dialogo = await screen.findByRole('dialog')
+    await user.type(within(dialogo).getByLabelText('Senha'), 'errada')
+    await user.click(within(dialogo).getByRole('button', { name: 'Confirmar' }))
+
+    expect(await within(dialogo).findByText('Senha incorreta.')).toBeInTheDocument()
+    expect(screen.queryByAltText('QR code para o aplicativo autenticador')).not.toBeInTheDocument()
+  })
+
+  it('com 2FA ativa e servidor sem chave ainda oferece gerar novos códigos', async () => {
+    servirPerfil({ ...tecnico, totp_ativo: true, mfa_disponivel: false, codigos_recuperacao_restantes: 2 })
+    renderPagina()
+
+    expect(await screen.findByText(/indisponível neste servidor/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Gerar novos códigos de recuperação' })).toBeInTheDocument()
   })
 
   it('Técnico com 2FA ativa desativa confirmando a senha', async () => {

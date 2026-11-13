@@ -61,6 +61,26 @@ class CadastroNaoIniciado(MfaErro):
     mensagem_padrao = MSG_CADASTRO_NAO_INICIADO
 
 
+MSG_TOKEN_ESGOTADO = "Muitas tentativas. Entre novamente."
+MSG_MFA_BLOQUEADO = (
+    "Verificação em duas etapas bloqueada por excesso de tentativas. Tente novamente em 15 minutos."
+)
+
+
+class TokenEsgotado(MfaErro):
+    """Cinco códigos errados no mesmo token: ele é revogado e é preciso entrar de novo."""
+
+    status_code = 400
+    mensagem_padrao = MSG_TOKEN_ESGOTADO
+
+
+class MfaBloqueado(MfaErro):
+    """Dez falhas do usuário em 15 min: a 2ª etapa fica bloqueada por 15 min."""
+
+    status_code = 429
+    mensagem_padrao = MSG_MFA_BLOQUEADO
+
+
 def _fernet() -> Fernet:
     chave = (config.settings.TOTP_ENCRYPTION_KEY or "").strip()
     if not chave:

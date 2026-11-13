@@ -14,6 +14,7 @@ from app.schemas.auth import (
     UserMe,
 )
 from app.core.security import (
+    DUMMY_PASSWORD_HASH,
     MFA_CADASTRO_MINUTOS,
     MFA_VERIFICAR_MINUTOS,
     create_access_token,
@@ -36,8 +37,14 @@ from app.dependencies import (
     get_user_db,
     limiter,
 )
-from app.services.mfa import MfaErro
-from app.services.segundo_fator import confirmar_cadastro, iniciar_cadastro, verificar_segundo_fator
+from app.services.mfa import CodigoInvalido, MfaErro
+from app.services.segundo_fator import (
+    confirmar_cadastro,
+    exigir_verificacao_liberada,
+    iniciar_cadastro,
+    registrar_falha_segundo_fator,
+    verificar_segundo_fator,
+)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -114,7 +121,11 @@ def login(
     user_db: UserDBManager = Depends(get_user_db),
 ):
     user = user_db.get_user_by_username(body.username)
-    if not user or not verify_password(body.password, user["password"]):
+    # Usuário inexistente também paga o custo do bcrypt: o tempo de resposta não
+    # revela se o usuário existe.
+    hash_a_conferir = user["password"] if user else DUMMY_PASSWORD_HASH
+    senha_ok = verify_password(body.password, hash_a_conferir)
+    if not user or not senha_ok:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuário ou senha inválidos.")
 
     if user.get("totp_ativo"):
@@ -146,18 +157,30 @@ def verificar_mfa(
     mfa_db: MfaDBManager = Depends(get_mfa_db),
 ):
     payload, usuario = _decodificar_mfa(body.mfa_token, "verificar", token_db, user_db)
+    ctx = contexto_auditoria_de(usuario, request)
     try:
-        restantes = verificar_segundo_fator(
-            mfa_db, usuario, body.codigo, contexto_auditoria_de(usuario, request)
-        )
+        exigir_verificacao_liberada(mfa_db, usuario)
+        restantes = verificar_segundo_fator(mfa_db, usuario, body.codigo, ctx)
+    except CodigoInvalido as exc:
+        # Código errado: conta a falha. 5 no mesmo token o revogam; 10 do usuário em
+        # 15 min bloqueiam a 2ª etapa por 15 min (contadores no banco, valem entre workers).
+        try:
+            registrar_falha_segundo_fator(mfa_db, usuario, payload["jti"], ctx)
+        except MfaErro as limite:
+            _revogar_mfa(payload, token_db)
+            raise _erro_mfa(limite)
+        raise _erro_mfa(exc)
     except MfaErro as exc:
         raise _erro_mfa(exc)
+    mfa_db.limpar_falhas(usuario["id"])
     _revogar_mfa(payload, token_db)
     return _emitir_sessao(response, usuario, codigos_recuperacao_restantes=restantes)
 
 
 @router.post("/mfa/cadastro/iniciar", response_model=CadastroTotpResponse)
+@limiter.limit(settings.LOGIN_RATE_LIMIT)
 def iniciar_cadastro_mfa(
+    request: Request,
     body: MfaTokenRequest,
     user_db: UserDBManager = Depends(get_user_db),
     token_db: TokenDBManager = Depends(get_token_db),

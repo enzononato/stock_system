@@ -23,6 +23,36 @@ class PasswordResetDBManager:
                 (usuario_id, token_hash, criado_em, expira_em, criado_ip),
             )
 
+    def criar_se_dentro_do_limite(
+        self,
+        usuario_id: int,
+        token_hash: str,
+        criado_em: datetime,
+        expira_em: datetime,
+        criado_ip: str | None,
+        desde: datetime,
+        maximo: int,
+    ) -> bool:
+        """Conta e insere de forma atômica: a linha do usuário fica travada (`FOR UPDATE`)
+        durante o COUNT + INSERT, então pedidos simultâneos (vários workers/IPs) não
+        passam do `maximo` por janela. Devolve False, sem inserir, se o limite já foi atingido."""
+        with get_cursor() as cur:
+            cur.execute("SELECT id FROM usuarios WHERE id = %s FOR UPDATE", (usuario_id,))
+            if cur.fetchone() is None:
+                return False
+            cur.execute(
+                "SELECT COUNT(*) AS total FROM password_reset_tokens WHERE usuario_id = %s AND criado_em >= %s",
+                (usuario_id, desde),
+            )
+            if cur.fetchone()["total"] >= maximo:
+                return False
+            cur.execute(
+                "INSERT INTO password_reset_tokens (usuario_id, token_hash, criado_em, expira_em, criado_ip) "
+                "VALUES (%s, %s, %s, %s, %s)",
+                (usuario_id, token_hash, criado_em, expira_em, criado_ip),
+            )
+            return True
+
     def contar_criados_desde(self, usuario_id: int, desde: datetime) -> int:
         with get_cursor(commit=False) as cur:
             cur.execute(

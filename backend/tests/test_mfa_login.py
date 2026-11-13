@@ -206,3 +206,22 @@ def test_usuario_sem_2fa_continua_com_login_direto(client, usuario_tecnico, senh
     assert corpo["etapa"] == "ok"
     assert corpo["access_token"]
     assert "refresh_token" in resp.cookies
+
+
+def test_login_de_usuario_inexistente_tambem_confere_um_hash_bcrypt(client, usuario_tecnico, monkeypatch):
+    """O tempo de resposta não pode revelar se o usuário existe: sempre 1 verificação de bcrypt."""
+    import app.routers.auth as auth_router
+
+    chamadas = []
+    original = auth_router.verify_password
+
+    def _espiao(plain, hashed):
+        chamadas.append(hashed)
+        return original(plain, hashed)
+
+    monkeypatch.setattr(auth_router, "verify_password", _espiao)
+
+    resp = _login(client, "ninguem.assim", "qualquer-senha")
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "Usuário ou senha inválidos."
+    assert len(chamadas) == 1 and chamadas[0].startswith("$2b$")

@@ -13,6 +13,11 @@ def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
+# Hash bcrypt (mesmo custo dos reais) usado quando o usuário não existe, para o login
+# gastar o mesmo tempo com usuário válido e inválido. Calculado uma vez na importação.
+DUMMY_PASSWORD_HASH = hash_password("senha-fictícia-para-igualar-o-tempo")
+
+
 def verify_password(plain: str, hashed: Optional[str]) -> bool:
     """Verifica a senha em texto puro contra o hash armazenado.
 

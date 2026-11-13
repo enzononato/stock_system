@@ -60,11 +60,17 @@ def obter_perfil(
 
 
 @router.post("/2fa/iniciar", response_model=CadastroTotpResponse)
+@limiter.limit(settings.LOGIN_RATE_LIMIT)
 def iniciar_2fa(
+    request: Request,
+    body: SenhaRequest,
     atual: CurrentUser = Depends(get_current_user),
     user_db: UserDBManager = Depends(get_user_db),
     mfa_db: MfaDBManager = Depends(get_mfa_db),
 ):
+    # Ativar o 2FA pede a senha atual (como desativar e gerar códigos): uma sessão
+    # sequestrada não consegue trocar o autenticador.
+    _exigir_senha(user_db, atual, body.senha)
     try:
         segredo, uri = segundo_fator.iniciar_cadastro(mfa_db, _usuario(user_db, atual))
     except MfaErro as exc:
@@ -73,7 +79,9 @@ def iniciar_2fa(
 
 
 @router.post("/2fa/confirmar", response_model=CodigosRecuperacaoResponse)
+@limiter.limit(settings.LOGIN_RATE_LIMIT)
 def confirmar_2fa(
+    request: Request,
     body: CodigoRequest,
     atual: CurrentUser = Depends(get_current_user),
     user_db: UserDBManager = Depends(get_user_db),

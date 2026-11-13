@@ -35,7 +35,8 @@ export function CodigosRecuperacao({
     a.href = url
     a.download = 'codigos-recuperacao-patrimonio.txt'
     a.click()
-    URL.revokeObjectURL(url)
+    // Revoga depois: revogar na hora pode cancelar o download em alguns navegadores.
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
   return (

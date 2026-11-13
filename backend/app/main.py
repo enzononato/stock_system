@@ -202,6 +202,22 @@ def avisar_2fa_sem_chave() -> None:
         )
 
 
+@app.on_event("startup")
+def avisar_url_publica_local() -> None:
+    """Em produção, o link do e-mail de redefinição precisa apontar para o endereço público."""
+    from urllib.parse import urlparse
+
+    if settings.ENVIRONMENT != "production":
+        return
+    host = (urlparse(settings.APP_PUBLIC_URL).hostname or "").lower()
+    if host in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
+        logger.warning(
+            "APP_PUBLIC_URL aponta para %s em produção: os links dos e-mails (redefinição de senha) "
+            "não vão funcionar para os usuários. Ajuste no .env.",
+            host,
+        )
+
+
 @app.get("/api/health")
 def health():
     """Healthcheck simples, sem tocar no banco: sempre responde 200 enquanto

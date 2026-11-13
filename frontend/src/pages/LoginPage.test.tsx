@@ -233,6 +233,22 @@ describe('LoginPage', () => {
     expect(await screen.findByText(DETAIL_MUITAS)).toBeInTheDocument()
   })
 
+  it('Gestor barrado por falta de cadastro do 2FA vê o aviso na tela de login', async () => {
+    server.use(
+      http.post('/api/auth/refresh', () =>
+        HttpResponse.json(
+          { detail: 'Cadastre a verificação em duas etapas para continuar. Entre novamente.' },
+          { status: 401 }
+        )
+      )
+    )
+    renderLoginPage()
+
+    expect(
+      await screen.findByText('Cadastre a verificação em duas etapas para continuar. Entre novamente.')
+    ).toBeInTheDocument()
+  })
+
   it('link esqueci minha senha', async () => {
     server.use(semSessao)
 
