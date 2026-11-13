@@ -39,6 +39,8 @@ def normalizar_numero_linha(valor: Optional[str]) -> str:
         raise ValueError(MSG_NUMERO_TAMANHO)
     if digitos[:2] not in DDDS_VALIDOS:
         raise ValueError("DDD inexistente.")
+    if len(digitos) == 10 and digitos[2] in "6789":
+        raise ValueError("Celular deve ter 11 dígitos (DDD + 9 + número).")
     if len(digitos) == 11 and digitos[2] != "9":
         raise ValueError("celular com 9 dígitos deve começar com 9.")
     return digitos

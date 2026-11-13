@@ -40,6 +40,8 @@ def test_normalizar_numero_linha(entrada, esperado):
         ("20999990001", "DDD inexistente."),
         ("23999990001", "DDD inexistente."),
         ("74899990001", "celular com 9 dígitos deve começar com 9."),
+        ("7499999999", "Celular deve ter 11 dígitos (DDD + 9 + número)."),
+        ("(74) 6999-9999", "Celular deve ter 11 dígitos (DDD + 9 + número)."),
     ],
 )
 def test_normalizar_numero_linha_erros(entrada, mensagem):
@@ -138,3 +140,78 @@ def test_migracao_0500_cria_tabelas(_test_schema):
         "linha_id", "tipo", "campo", "de_valor", "para_valor", "item_id", "item_id_anterior",
         "ocorrido_em", "por_usuario", "observacao",
     } <= set(eventos)
+
+
+class _CursorQueQuebra:
+    """get_cursor falso: levanta o erro do MySQL ao entrar, como um deadlock na primeira instrução."""
+
+    def __init__(self, codigo, tentativas):
+        self.codigo, self.tentativas = codigo, tentativas
+
+    def __call__(self, *args, **kwargs):
+        import pymysql
+
+        self.tentativas.append(1)
+        raise pymysql.err.OperationalError(self.codigo, "bloqueio simulado")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("codigo", [1213, 1205])
+def test_bloqueio_do_banco_tenta_de_novo_uma_vez_e_vira_409(monkeypatch, codigo):
+    from app.db import linha_db
+    from app.services.audit import AuditContext
+
+    tentativas: list = []
+    monkeypatch.setattr(linha_db, "get_cursor", _CursorQueQuebra(codigo, tentativas))
+    ctx = AuditContext(usuario_id=None, username="teste", papel="Gestor", ip=None)
+    dados = {"numero": "74999990001", "operadora": "Vivo", "custo_mensal": Decimal("1.00"), "unidade_id": 1}
+
+    with pytest.raises(linha_db.LinhaConflito) as exc:
+        linha_db.LinhaDBManager().criar(dados, ctx)
+    assert str(exc.value) == "Outra alteração estava em andamento. Tente novamente."
+    assert len(tentativas) == 2
+
+    tentativas.clear()
+    with pytest.raises(linha_db.LinhaConflito):
+        linha_db.LinhaDBManager().atualizar(1, {"plano": "X"}, ctx)
+    assert len(tentativas) == 2
+
+    tentativas.clear()
+    with pytest.raises(linha_db.LinhaConflito):
+        linha_db.LinhaDBManager().alterar_status(1, "suspensa", ctx)
+    assert len(tentativas) == 2
+
+
+@pytest.mark.unit
+def test_bloqueio_na_primeira_tentativa_e_sucesso_na_segunda():
+    import pymysql
+    from app.db.linha_db import _tolerante_a_bloqueio
+
+    chamadas = []
+
+    @_tolerante_a_bloqueio
+    def gravar():
+        chamadas.append(1)
+        if len(chamadas) == 1:
+            raise pymysql.err.OperationalError(1213, "deadlock")
+        return "ok"
+
+    assert gravar() == "ok"
+    assert len(chamadas) == 2
+
+
+@pytest.mark.unit
+def test_outro_erro_do_mysql_nao_e_repetido():
+    import pymysql
+    from app.db.linha_db import _tolerante_a_bloqueio
+
+    chamadas = []
+
+    @_tolerante_a_bloqueio
+    def gravar():
+        chamadas.append(1)
+        raise pymysql.err.OperationalError(1045, "acesso negado")
+
+    with pytest.raises(pymysql.err.OperationalError):
+        gravar()
+    assert len(chamadas) == 1

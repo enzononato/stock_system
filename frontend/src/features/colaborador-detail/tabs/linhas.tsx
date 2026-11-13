@@ -71,17 +71,19 @@ function LinhasTab({ colaborador }: { colaborador: Colaborador }) {
                   <span> · {formatMoeda(l.custo_mensal)}</span>
                 </p>
                 <p className="text-xs">
-                  {l.item_id !== null ? (
+                  {l.item_id === null ? (
+                    <span className="text-muted-foreground">Sem aparelho</span>
+                  ) : l.item_ativo === false ? (
+                    // Item baixado não abre no detalhe ("não encontrado"): só texto.
+                    <span className="text-muted-foreground">{aparelho || `Equipamento ${l.item_id}`} (baixado)</span>
+                  ) : (
                     <Link
                       to={`/items/${l.item_id}`}
                       className="rounded-sm text-brand-text hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     >
                       {aparelho || `Equipamento ${l.item_id}`}
                     </Link>
-                  ) : (
-                    <span className="text-muted-foreground">Sem aparelho</span>
                   )}
-                  {l.item_ativo === false && <span className="text-muted-foreground"> (baixado)</span>}
                 </p>
               </div>
               <div className="flex items-center gap-2">

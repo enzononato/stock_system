@@ -239,12 +239,16 @@ export default function LinhasPage() {
                       <td className="whitespace-nowrap px-4 py-2.5 text-body-sm">{upper(l.unidade_nome) || '—'}</td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-body-sm">
                         {l.item_id !== null ? (
-                          <>
+                          l.item_ativo === false ? (
+                            // Item baixado não abre no detalhe ("não encontrado"): só texto.
+                            <span className="text-muted-foreground">
+                              {aparelho || `Equipamento ${l.item_id}`} (baixado)
+                            </span>
+                          ) : (
                             <Link to={`/items/${l.item_id}`} className={linkClass}>
                               {aparelho || `Equipamento ${l.item_id}`}
                             </Link>
-                            {l.item_ativo === false && <span className="text-muted-foreground"> (baixado)</span>}
-                          </>
+                          )
                         ) : (
                           '—'
                         )}

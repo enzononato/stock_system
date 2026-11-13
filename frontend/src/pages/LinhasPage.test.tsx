@@ -118,6 +118,9 @@ describe('LinhasPage', () => {
 
     const tabela = within(await screen.findByRole('table'))
     expect(await tabela.findByText(/\(baixado\)/)).toBeInTheDocument()
+    // aparelho baixado não tem página de detalhe: aparece como texto, sem link
+    expect(tabela.queryByRole('link', { name: /Celular Samsung A15/ })).not.toBeInTheDocument()
+    expect(tabela.getByText(/Celular Samsung A15 · CEL-A \(baixado\)/)).toBeInTheDocument()
     expect(tabela.getByText(/\(desligado\)/)).toBeInTheDocument()
     // plano, aparelho e colaborador vazios viram traço
     expect(tabela.getAllByText('—').length).toBeGreaterThanOrEqual(3)

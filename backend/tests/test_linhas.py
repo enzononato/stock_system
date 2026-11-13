@@ -219,3 +219,40 @@ def test_aparelhos_so_celular_e_tablet_livres(
     assert por_id[celular_livre["id"]]["responsavel_nome"] == "Maria Souza"
     assert por_id[celular_livre["id"]]["tipo"] == "Celular"
     assert ids(busca="maria") == {celular_livre["id"]}
+
+
+def test_busca_por_texto_nao_casa_com_os_digitos_do_numero(client_gestor, nova_linha, criar_aparelho):
+    celular = criar_aparelho(identificador="CEL-07")
+    nova_linha(numero="74999990001", plano="Controle 20GB", item_id=celular["id"])
+    nova_linha(numero="74999990004", plano="Controle 4GB")
+
+    def total(busca):
+        return client_gestor.get("/api/linhas", params={"busca": busca}).json()["total"]
+
+    assert total("Controle 4GB") == 1  # não traz a linha de "Controle 20GB" pelos dígitos
+    assert total("CEL-07") == 1
+    assert total("CEL-99") == 0
+    # termo que parece telefone continua achando pelo número, com ou sem máscara
+    assert total("(74) 9999") == 2
+    assert total("99999-0004") == 1
+    assert total("999") == 0  # menos de 4 dígitos não busca por número
+
+
+def test_put_para_numero_de_linha_cancelada_nao_sugere_cadastrar_de_novo(
+    client_gestor, nova_linha, executar_sql
+):
+    cancelada = nova_linha(numero="74999990001")
+    executar_sql("UPDATE linhas SET status='cancelada' WHERE id=%s", (cancelada["id"],))
+    outra = nova_linha(numero="74999990002")
+
+    resp = client_gestor.put(f"/api/linhas/{outra['id']}", json={"numero": "74999990001"})
+
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "Esse número pertence a outra linha (cancelada)."
+
+
+def test_numero_fixo_antigo_de_celular_e_recusado(client_gestor, dados_linha):
+    resp = client_gestor.post("/api/linhas", json=dados_linha(numero="7499999999"))
+
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "Número: Celular deve ter 11 dígitos (DDD + 9 + número)."

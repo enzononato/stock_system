@@ -6,6 +6,7 @@ schema. Cada escrita roda num único `get_cursor()`: a alteração da linha, os 
 em `linha_eventos` e a auditoria entram na mesma transação (falhou um, desfaz tudo).
 Datas em hora local do servidor (`datetime.now()`).
 """
+import functools
 import logging
 import re
 from datetime import datetime
@@ -35,6 +36,8 @@ class LinhaConflito(Exception):
 
 
 MSG_NUMERO_DUPLICADO = "Já existe uma linha com este número."
+MSG_EM_ANDAMENTO = "Outra alteração estava em andamento. Tente novamente."
+_ERROS_DE_BLOQUEIO = (1213, 1205)  # deadlock e lock wait timeout
 
 _FROM_LINHA = (
     " FROM linhas l JOIN unidades u ON u.id = l.unidade_id"
@@ -56,6 +59,28 @@ _CAMPOS_EDITAVEIS = (
 
 def _erro_de_duplicado(e: pymysql.MySQLError) -> bool:
     return bool(e.args) and e.args[0] == 1062
+
+
+def _tolerante_a_bloqueio(func):
+    """Deadlock/lock wait numa escrita concorrente: refaz a transação uma vez; se falhar de novo,
+    responde conflito (409) em vez de um erro 500."""
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        for tentativa in (1, 2):
+            try:
+                return func(*args, **kwargs)
+            except pymysql.MySQLError as e:
+                if not (e.args and e.args[0] in _ERROS_DE_BLOQUEIO):
+                    raise
+                if tentativa == 2:
+                    raise LinhaConflito(MSG_EM_ANDAMENTO) from e
+                logger.warning("Bloqueio no banco ao gravar linha (%s); tentando de novo.", e.args[0])
+
+    return wrapper
+
+
+_RE_BUSCA_NUMERICA = re.compile(r"[\d\s()+.\-]+")
 
 
 def _escapar_like(texto: str) -> str:
@@ -149,6 +174,8 @@ def _checar_numero_livre(cur, numero: str, linha_id: Optional[int]) -> None:
     existente = cur.fetchone()
     if not existente:
         return
+    if existente["status"] == "cancelada" and linha_id is not None:
+        raise LinhaConflito("Esse número pertence a outra linha (cancelada).")
     if existente["status"] == "cancelada":
         raise LinhaConflito(
             "Já existe uma linha cancelada com este número: reative-a em vez de cadastrar de novo."
@@ -199,7 +226,9 @@ class LinhaDBManager:
             ]
             params.extend([like] * 4)
             digitos = re.sub(r"\D", "", busca)
-            if digitos:
+            # Só procura por número/ICCID quando o termo parece um telefone: "Controle 4GB" ou "CEL-07"
+            # não podem casar com os dígitos de todas as linhas (todas começam com o DDD).
+            if _RE_BUSCA_NUMERICA.fullmatch(busca) and len(digitos) >= 4:
                 condicoes += ["l.numero LIKE %s", "l.iccid LIKE %s"]
                 params.extend([f"%{digitos}%"] * 2)
             where.append("(" + " OR ".join(condicoes) + ")")
@@ -219,6 +248,7 @@ class LinhaDBManager:
             cur.execute(_SELECT_LINHA + " WHERE l.id = %s", (linha_id,))
             return cur.fetchone()
 
+    @_tolerante_a_bloqueio
     def criar(self, dados: dict, ctx: AuditContext) -> int:
         """Cadastra a linha (sempre `ativa`) com o evento `ativacao` e a auditoria na mesma transação."""
         numero = dados["numero"]
@@ -284,6 +314,7 @@ class LinhaDBManager:
             cur.execute(sql, params)
             return cur.fetchall()
 
+    @_tolerante_a_bloqueio
     def atualizar(
         self, linha_id: int, dados: dict, ctx: AuditContext, motivo: Optional[str] = None
     ) -> dict:
@@ -387,6 +418,7 @@ class LinhaDBManager:
         )
         audit.record(ctx, "linha", linha_id, "editar", antes_diff, depois_diff, cur=cur)
 
+    @_tolerante_a_bloqueio
     def alterar_status(
         self, linha_id: int, status: str, ctx: AuditContext, observacao: Optional[str] = None
     ) -> dict:

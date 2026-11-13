@@ -1,13 +1,24 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { server } from '@/test/server'
 import { renderWithClient } from '@/test/render'
+import ColaboradorDetailPage from '@/pages/ColaboradorDetailPage'
 import tab from '@/features/colaborador-detail/tabs/linhas'
 import type { Colaborador } from '@/api/colaboradores'
 import type { Linha } from '@/api/linhas'
+
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({
+    user: { id: 1, username: 'tecnico.teste', role: 'Técnico' },
+    isLoading: false,
+    login: vi.fn(),
+    logout: vi.fn(),
+    hasRole: (...roles: string[]) => roles.includes('Técnico'),
+  }),
+}))
 
 const colaborador: Colaborador = {
   id: 3,
@@ -138,5 +149,36 @@ describe('aba Linhas do colaborador', () => {
 
     await waitFor(() => expect(pedidos.some((p) => p.get('limit') === '50' && p.get('offset') === '0')).toBe(true))
     expect(within(screen.getByRole('list')).getAllByRole('listitem')).toHaveLength(1)
+  })
+
+  it('aparelho baixado aparece como texto com (baixado), sem link', async () => {
+    mockLinhas([{ ...ativa, item_ativo: false }])
+    renderAba()
+
+    expect(await screen.findByText(/Celular Samsung A15 · CEL-A \(baixado\)/)).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Celular Samsung A15/ })).not.toBeInTheDocument()
+  })
+})
+
+describe('ColaboradorDetailPage com a aba Linhas', () => {
+  it('mostra a aba Linhas depois de Equipamentos e lista as linhas do colaborador', async () => {
+    const pedidos = mockLinhas([ativa, cancelada])
+    server.use(http.get('/api/colaboradores/3', () => HttpResponse.json(colaborador)))
+    const { unmount } = renderWithClient(
+      <MemoryRouter initialEntries={['/colaboradores/3?aba=linhas']}>
+        <Routes>
+          <Route path="/colaboradores/:id" element={<ColaboradorDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    const abas = within(await screen.findByRole('tablist')).getAllByRole('tab').map((t) => t.textContent)
+    expect(abas).toContain('Linhas')
+    expect(abas.indexOf('Equipamentos')).toBeLessThan(abas.indexOf('Linhas'))
+    expect(screen.getByRole('tab', { name: 'Linhas' })).toHaveAttribute('aria-selected', 'true')
+    expect(await screen.findByText('(74) 99999-0001')).toBeInTheDocument()
+    expect(screen.getByText('(74) 99999-0002')).toBeInTheDocument()
+    expect(pedidos[0].get('colaborador_id')).toBe('3')
+    unmount()
   })
 })
