@@ -150,3 +150,52 @@ def processar_evento(evento: EventoWebhook) -> str:
     if termo is None:
         return "nao_encontrado"
     return sincronizar(termo["id"])
+
+
+# ── Jobs do agendador ─────────────────────────────────────────────────────────
+
+
+def enviar_agendados(agora: Optional[datetime] = None) -> int:
+    """Envia as solicitações `agendado` cuja data já passou. Devolve quantas saíram de `agendado`.
+
+    Idempotente: cada solicitação é tratada dentro da trava dela e relida antes de enviar, então
+    se o job rodar de novo (estado não gravado) nada é enviado em dobro. O erro de uma
+    solicitação é logado e não impede as outras.
+    """
+    from app.services import termos  # import tardio: evita ciclo com termos_confirmacao
+
+    if not termos.revsign_ligado():
+        return 0
+    enviados = 0
+    for vencido in get_termo_db().agendados_vencidos(agora or agora_local()):
+        try:
+            with trava(vencido["id"]) as pegou:
+                if not pegou:
+                    continue  # outro worker está cuidando dela
+                atual = get_termo_db().obter(vencido["id"])
+                if atual is None or atual["status"] != "agendado":
+                    continue
+                termos.enviar(vencido["id"], AuditContext.sistema())
+                depois = get_termo_db().obter(vencido["id"])
+                if depois is not None and depois["status"] != "agendado":
+                    enviados += 1
+        except Exception:
+            logger.exception("Falha ao enviar o termo agendado %s.", vencido["id"])
+    return enviados
+
+
+def consultar_enviados() -> int:
+    """Consulta ao RevSign as solicitações `enviado` (reserva para o webhook perdido). Devolve
+    quantas mudaram de status."""
+    from app.services import termos
+
+    if not termos.revsign_ligado():
+        return 0
+    mudaram = 0
+    for enviado in get_termo_db().enviados():
+        try:
+            if sincronizar(enviado["id"]) not in _RESULTADOS_SEM_MUDANCA:
+                mudaram += 1
+        except Exception:
+            logger.exception("Falha ao consultar o termo %s no RevSign.", enviado["id"])
+    return mudaram
