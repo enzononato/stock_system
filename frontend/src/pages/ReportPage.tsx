@@ -249,34 +249,38 @@ export default function ReportPage() {
               Gerar
             </Button>
 
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleExport}
-              loading={isExporting}
-              disabled={report.length === 0}
-            >
-              {!isExporting && <Download />}
-              CSV
-            </Button>
-
+            {/* Exportar o relatório mensal é só do Gestor (a API recusa os demais). */}
             {hasRole('Gestor') && (
-              <BotoesExportar
-                disabled={report.length === 0}
-                onExportar={(f) => exportarRelatorioMensal(queryParams.year, queryParams.month, f)}
-              />
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleExport}
+                  loading={isExporting}
+                  disabled={report.length === 0}
+                >
+                  {!isExporting && <Download />}
+                  CSV
+                </Button>
+                <BotoesExportar
+                  disabled={report.length === 0}
+                  onExportar={(f) => exportarRelatorioMensal(queryParams.year, queryParams.month, f)}
+                />
+              </>
             )}
           </div>
         </div>
 
         {/* Aviso de escopo do CSV: a exportação só recebe ano/mês — os filtros
             locais nunca chegam ao servidor. Avisamos em vez de bloquear. */}
-        <p className="text-caption text-muted-foreground">
-          {`O CSV exportado sempre traz ${periodo} inteiro`}
-          {hasActiveFilters
-            ? ' — os filtros de revenda, operação e busca não são aplicados ao arquivo.'
-            : ', sem os filtros de revenda e operação.'}
-        </p>
+        {hasRole('Gestor') && (
+          <p className="text-caption text-muted-foreground">
+            {`O CSV exportado sempre traz ${periodo} inteiro`}
+            {hasActiveFilters
+              ? ' — os filtros de revenda, operação e busca não são aplicados ao arquivo.'
+              : ', sem os filtros de revenda e operação.'}
+          </p>
+        )}
 
         {/* O ramo de periféricos do relatório não carrega revenda: filtrar por
             unidade esconde essas operações. Não dá para corrigir sem mexer no

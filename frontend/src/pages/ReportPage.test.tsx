@@ -116,11 +116,12 @@ describe('ReportPage', () => {
     expect(urls[0].searchParams.get('formato')).toBe('pdf')
   })
 
-  it('o Técnico não vê os botões Excel/PDF do relatório', async () => {
+  it('o Técnico não vê nenhuma exportação do relatório (a API é só do Gestor)', async () => {
     papel.atual = 'Técnico'
     renderPage()
     await screen.findByText('Mostrando 1–25 de 30')
     expect(screen.queryByRole('group', { name: 'Exportar' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'CSV' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'CSV' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/O CSV exportado/)).not.toBeInTheDocument()
   })
 })
