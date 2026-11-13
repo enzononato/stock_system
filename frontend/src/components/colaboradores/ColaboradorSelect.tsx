@@ -25,8 +25,10 @@ function toOption(c: Colaborador): SearchableOption {
 /**
  * Seletor de colaborador com busca no servidor (nome, CPF, matrícula...). A
  * lista nunca é carregada inteira: cada pausa de digitação (300 ms) refaz a
- * consulta com `limit: 20`. O colaborador do `value` é buscado à parte quando
- * não está entre os resultados atuais, para o rótulo nunca sumir.
+ * consulta com `limit: 20`. Para o rótulo nunca sumir quando o `value` não está
+ * entre os resultados atuais: o colaborador escolhido aqui fica guardado; só um
+ * `value` que veio de fora (ex.: edição) é buscado à parte em
+ * `GET /colaboradores/{id}` (que é só de Gestor/Técnico).
  */
 export function ColaboradorSelect({
   value,
@@ -36,6 +38,7 @@ export function ColaboradorSelect({
   disabled,
 }: ColaboradorSelectProps) {
   const [search, setSearch] = useState('')
+  const [escolhido, setEscolhido] = useState<Colaborador | null>(null)
   const busca = useDebouncedValue(search.trim(), 300)
 
   const { data } = useQuery({
@@ -51,17 +54,20 @@ export function ColaboradorSelect({
   const items = data?.items ?? []
 
   const selecionadoNaLista = value !== null && items.some((c) => c.id === value)
-  const { data: selecionado } = useQuery({
+  const escolhidoAqui = escolhido !== null && escolhido.id === value
+  const { data: buscado } = useQuery({
     queryKey: ['colaboradores', 'detalhe', value],
     queryFn: () => getColaborador(value as number),
-    enabled: value !== null && !selecionadoNaLista,
+    enabled: value !== null && !selecionadoNaLista && !escolhidoAqui,
   })
+  const selecionado = escolhidoAqui ? escolhido : buscado
 
   const todos = selecionado && !selecionadoNaLista && value === selecionado.id ? [selecionado, ...items] : items
 
   function handleChange(val: string) {
     const c = todos.find((x) => String(x.id) === val) ?? null
     setSearch('')
+    setEscolhido(c)
     onChange(c)
   }
 

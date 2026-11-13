@@ -190,6 +190,31 @@ describe('StockPage', () => {
     expect(colaboradoresPedidos.every((p) => p.get('situacao') === null)).toBe(true)
   })
 
+  it('Jovem Aprendiz: o filtro de colaborador mantém o nome escolhido sem pedir o detalhe (403 para o papel)', async () => {
+    papel.atual = 'Jovem Aprendiz'
+    mockServidor({ items: [itemSemColaborador] })
+    let detalhes = 0
+    server.use(
+      http.get('/api/colaboradores/:id', () => {
+        detalhes += 1
+        return HttpResponse.json({ detail: 'Acesso restrito a Gestor ou Técnico.' }, { status: 403 })
+      })
+    )
+    renderPage()
+    const user = userEvent.setup()
+    await screen.findByRole('link', { name: /#11/ })
+    await user.click(screen.getByRole('button', { name: /Todos os colaboradores/ }))
+    await user.type(screen.getByPlaceholderText(/buscar por nome/i), 'mar')
+    await user.click(await screen.findByText('MARIA SILVA'))
+    await waitFor(() => expect(ultimo().get('colaborador_id')).toBe('7'))
+
+    // a lista padrão (sem busca) não traz a Maria; o rótulo continua o escolhido
+    await waitFor(() => expect(colaboradoresPedidos.at(-1)?.get('busca')).toBeNull())
+    expect(await screen.findByRole('button', { name: /MARIA SILVA/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Todos os colaboradores/ })).not.toBeInTheDocument()
+    expect(detalhes).toBe(0)
+  })
+
   it('página além da última depois de o total encolher volta para a última', async () => {
     let total = 60
     mockServidor({ total: () => total })
