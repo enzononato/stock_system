@@ -181,3 +181,12 @@ def get_audit_context(
 
 
 limiter = Limiter(key_func=get_client_ip)
+
+
+# ── F8: Acessos ─────────────────────────────────────────────────────────────
+
+@lru_cache
+def get_acesso_db():
+    from app.db.acesso_db import AcessoDBManager
+
+    return AcessoDBManager()
