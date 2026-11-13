@@ -74,6 +74,10 @@ _ROTULOS_DE_CAMPO = {
     "ativo": "Ativo",
     "colaborador_id": "Colaborador",
     "local_id": "Local",
+    # Compra do equipamento (F4)
+    "valor_compra": "Valor de compra",
+    "data_compra": "Data da compra",
+    "garantia_ate": "Fim da garantia",
 }
 
 # "nome" vale "Nome da unidade" nas unidades; nas rotas de colaboradores e locais é só "Nome".

@@ -6,6 +6,9 @@ from datetime import datetime
 from app.schemas.items import ItemCreate, ItemUpdate, ItemResponse
 from app.schemas.common import Paginated
 from app.db.inventory_manager_db import InventoryDBManager
+from app.db.transferencia_db import erro_local
+from app.schemas.validators import data_br_para_date
+from app.services.anexos import CATEGORIA_NF, resposta_anexo, salvar_anexo
 from app.dependencies import (
     get_current_user, gestor_or_tecnico, gestor_only, get_inventory_db, get_audit_context, CurrentUser,
 )
@@ -17,6 +20,11 @@ from app.core.config import settings
 router = APIRouter(prefix="/api/items", tags=["items"])
 
 MAX_UPLOAD_SIZE = 20 * 1024 * 1024  # 20MB
+
+# Campos que a edição pode limpar: `null` explícito grava NULL; chave ausente não muda.
+CAMPOS_ANULAVEIS = ("valor_compra", "data_compra", "garantia_ate", "local_id")
+CAMPOS_DE_DATA = ("data_compra", "garantia_ate")
+MSG_GARANTIA_ANTES_DA_COMPRA = "A garantia não pode terminar antes da data da compra."
 
 
 def _safe_filename(name: str) -> str:
@@ -69,6 +77,17 @@ def create_item(
 
     item_data = body.model_dump(exclude_none=True, exclude={"date_registered"})
     item_data["date_registered"] = date_reg
+    for campo in CAMPOS_DE_DATA:
+        if campo in item_data:
+            item_data[campo] = data_br_para_date(item_data[campo])
+
+    compra, garantia = item_data.get("data_compra"), item_data.get("garantia_ate")
+    if compra and garantia and garantia < compra:
+        raise HTTPException(status_code=400, detail=MSG_GARANTIA_ANTES_DA_COMPRA)
+    if body.local_id is not None:
+        erro = erro_local(body.local_id, body.revenda, rotulo_unidade="do equipamento")
+        if erro:
+            raise HTTPException(status_code=400, detail=erro)
 
     ok, result = inv.add_item(item_data, current_user.username)
     if not ok:
@@ -90,8 +109,30 @@ def update_item(
         raise HTTPException(status_code=404, detail="Item não encontrado.")
 
     item_data = body.model_dump(exclude_none=True)
+    for campo in CAMPOS_ANULAVEIS:
+        if campo in body.model_fields_set and getattr(body, campo) is None:
+            item_data[campo] = None
     if not item_data:
         raise HTTPException(status_code=400, detail="Nenhum campo para atualizar.")
+
+    # A unidade só muda pela transferência (fica registrada e muda o local junto).
+    if "revenda" in item_data and item_data["revenda"] != existing.get("revenda"):
+        raise HTTPException(
+            status_code=400, detail="Para mudar a unidade do equipamento, use a transferência."
+        )
+    for campo in CAMPOS_DE_DATA:
+        if item_data.get(campo) is not None:
+            item_data[campo] = data_br_para_date(item_data[campo])
+    compra = item_data["data_compra"] if "data_compra" in item_data else existing.get("data_compra")
+    garantia = item_data["garantia_ate"] if "garantia_ate" in item_data else existing.get("garantia_ate")
+    if compra and garantia and garantia < compra:
+        raise HTTPException(status_code=400, detail=MSG_GARANTIA_ANTES_DA_COMPRA)
+    # Só valida o local quando muda: manter um local desativado depois não trava a edição.
+    novo_local = item_data.get("local_id")
+    if novo_local is not None and novo_local != existing.get("local_id"):
+        erro = erro_local(novo_local, existing.get("revenda"), rotulo_unidade="do equipamento")
+        if erro:
+            raise HTTPException(status_code=400, detail=erro)
 
     ok, msg = inv.update_item(item_id, item_data, current_user.username)
     if not ok:
@@ -100,6 +141,42 @@ def update_item(
         ctx, "item", item_id, "editar", existing, obter_depois=lambda: inv.find(item_id)
     )
     return {"detail": msg}
+
+
+@router.post("/{item_id}/nota-fiscal", response_model=dict)
+async def anexar_nota_fiscal(
+    item_id: int,
+    arquivo: UploadFile = File(...),
+    current_user: CurrentUser = Depends(gestor_or_tecnico),
+    inv: InventoryDBManager = Depends(get_inventory_db),
+    ctx: AuditContext = Depends(get_audit_context),
+):
+    existing = inv.find(item_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Item não encontrado.")
+    key = await salvar_anexo(arquivo, CATEGORIA_NF, f"nf_{item_id}")
+    ok, msg = inv.update_item(item_id, {"nf_anexo_key": key}, current_user.username)
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    audit.record_diff(
+        ctx, "item", item_id, "editar",
+        antes={"nf_anexo_key": existing.get("nf_anexo_key")}, depois={"nf_anexo_key": key},
+    )
+    return {"detail": "Nota fiscal anexada.", "nf_anexo_key": key}
+
+
+@router.get("/{item_id}/nota-fiscal")
+def baixar_nota_fiscal(
+    item_id: int,
+    _: CurrentUser = Depends(gestor_or_tecnico),
+    inv: InventoryDBManager = Depends(get_inventory_db),
+):
+    item = inv.find(item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item não encontrado.")
+    if not item.get("nf_anexo_key"):
+        raise HTTPException(status_code=404, detail="Nenhuma nota fiscal anexada a este equipamento.")
+    return resposta_anexo(item["nf_anexo_key"], f"nota_fiscal_item_{item_id}")
 
 
 @router.delete("/{item_id}", response_model=dict)
