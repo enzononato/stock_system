@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react'
 import { Contact, MapPin, ScrollText, type LucideIcon } from 'lucide-react'
+import { AppWindow } from 'lucide-react'
 import {
   DashboardIcon,
   EstoqueIcon,
@@ -89,6 +90,12 @@ export const navGroups: NavGroup[] = [
       { to: '/charts', label: 'Indicadores', icon: DashboardIcon },
       { to: '/remove', label: 'Baixa de Ativos', icon: LixeiraIcon, roles: ['Gestor'] },
       { to: '/auditoria', label: 'Auditoria', icon: ScrollText, roles: ['Gestor'] },
+    ],
+  },
+  {
+    title: 'Acessos',
+    items: [
+      { to: '/acessos/sistemas', label: 'Sistemas', icon: AppWindow, roles: ['Gestor'] },
     ],
   },
 ]
