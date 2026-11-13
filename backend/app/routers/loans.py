@@ -1,6 +1,4 @@
-import os
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
-from datetime import datetime
 
 from app.schemas.loans import LoanRequest
 from app.db.inventory_manager_db import InventoryDBManager
@@ -8,14 +6,11 @@ from app.dependencies import gestor_or_tecnico, get_inventory_db, get_audit_cont
 from app.services import audit
 from app.services.audit import AuditContext
 from app.core.storage import storage
+from app.services.termos_confirmacao import confirmar_devolucao, confirmar_emprestimo
 
 router = APIRouter(prefix="/api/loans", tags=["loans"])
 
 MAX_UPLOAD_SIZE = 20 * 1024 * 1024  # 20MB
-
-
-def _safe_filename(name: str) -> str:
-    return os.path.basename(name or "").replace("\\", "").replace("/", "") or "arquivo"
 
 
 def _check_size(content: bytes) -> None:
@@ -57,23 +52,13 @@ async def confirm_loan(
     item_id: int,
     signed_pdf: UploadFile = File(...),
     current_user: CurrentUser = Depends(gestor_or_tecnico),
-    inv: InventoryDBManager = Depends(get_inventory_db),
     ctx: AuditContext = Depends(get_audit_context),
 ):
     content = await signed_pdf.read()
     _check_size(content)
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    filename = f"termo_{item_id}_{timestamp}_{_safe_filename(signed_pdf.filename)}"
-    storage_key = storage.save("termos_assinados", filename, content)
-
-    antes_item = inv.find(item_id)
-    ok, msg = inv.confirm_loan(item_id, current_user.username, storage_key)
+    ok, msg, _ = confirmar_emprestimo(item_id, content, signed_pdf.filename, current_user.username, ctx)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
-    audit.record_diff(
-        ctx, "emprestimo", item_id, "confirmar", antes_item, obter_depois=lambda: inv.find(item_id),
-        extra={"termo_assinado": storage_key},
-    )
     return {"detail": msg}
 
 
@@ -123,21 +108,11 @@ async def confirm_return(
     item_id: int,
     signed_pdf: UploadFile = File(...),
     current_user: CurrentUser = Depends(gestor_or_tecnico),
-    inv: InventoryDBManager = Depends(get_inventory_db),
     ctx: AuditContext = Depends(get_audit_context),
 ):
     content = await signed_pdf.read()
     _check_size(content)
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    filename = f"termo_devolucao_{item_id}_{timestamp}_{_safe_filename(signed_pdf.filename)}"
-    storage_key = storage.save("termos_devolucao_assinados", filename, content)
-
-    antes_item = inv.find(item_id)
-    ok, msg = inv.confirm_return(item_id, current_user.username, storage_key)
+    ok, msg, _ = confirmar_devolucao(item_id, content, signed_pdf.filename, current_user.username, ctx)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
-    audit.record_diff(
-        ctx, "devolucao", item_id, "confirmar", antes_item, obter_depois=lambda: inv.find(item_id),
-        extra={"termo_assinado": storage_key},
-    )
     return {"detail": msg}
