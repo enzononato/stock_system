@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
 import { setAccessToken, setSessionExpiredHandler } from '@/api/client'
-import { login as apiLogin, logout as apiLogout, getMe } from '@/api/auth'
+import { login as apiLogin, logout as apiLogout, getMe, type LoginResponse } from '@/api/auth'
 import { toast } from '@/components/ui/toast'
 
 interface AuthUser {
@@ -12,7 +12,8 @@ interface AuthUser {
 interface AuthContextType {
   user: AuthUser | null
   isLoading: boolean
-  login: (username: string, password: string) => Promise<void>
+  login: (username: string, password: string) => Promise<LoginResponse>
+  concluirLogin: (accessToken: string) => Promise<void>
   logout: () => Promise<void>
   hasRole: (...roles: string[]) => boolean
 }
@@ -57,12 +58,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => setSessionExpiredHandler(null)
   }, [])
 
-  const login = useCallback(async (username: string, password: string) => {
-    const data = await apiLogin(username, password)
-    setAccessToken(data.access_token)
+  const concluirLogin = useCallback(async (accessToken: string) => {
+    setAccessToken(accessToken)
     const me = await getMe()
     setUser(me)
   }, [])
+
+  // Só a etapa `ok` abre a sessão; `mfa` e `cadastro_2fa` devolvem a resposta
+  // para a tela de login continuar (nenhum token nem usuário é guardado ainda).
+  const login = useCallback(
+    async (username: string, password: string) => {
+      const data = await apiLogin(username, password)
+      if (data.etapa === 'ok' && data.access_token) {
+        await concluirLogin(data.access_token)
+      }
+      return data
+    },
+    [concluirLogin]
+  )
 
   const logout = useCallback(async () => {
     await apiLogout()
@@ -76,7 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   )
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout, hasRole }}>
+    <AuthContext.Provider value={{ user, isLoading, login, concluirLogin, logout, hasRole }}>
       {children}
     </AuthContext.Provider>
   )
