@@ -567,3 +567,18 @@ class InventarioDBManager:
                 (item_id, item_id),
             )
             return cur.fetchall()
+
+    # ── Etiquetas ───────────────────────────────────────────────────────────
+
+    def dados_etiquetas(self, item_ids: list[int]) -> list[dict]:
+        """Só o que a etiqueta imprime, dos itens ativos, em ordem crescente de id."""
+        if not item_ids:
+            return []
+        marcadores = ", ".join(["%s"] * len(item_ids))
+        with get_cursor(commit=False) as cur:
+            cur.execute(
+                "SELECT id, tipo, brand, model, identificador, revenda FROM items "
+                f"WHERE is_active = 1 AND id IN ({marcadores}) ORDER BY id",
+                list(item_ids),
+            )
+            return cur.fetchall()

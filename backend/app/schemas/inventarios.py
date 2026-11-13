@@ -174,3 +174,40 @@ class RelatorioLinha(BaseModel):
 class RelatorioInventario(BaseModel):
     inventario: InventarioDetalhe
     linhas: list[RelatorioLinha]
+
+
+# ── Etiquetas ───────────────────────────────────────────────────────────────
+
+class EtiquetasRequest(BaseModel):
+    item_ids: list[int]
+
+    @field_validator("item_ids")
+    @classmethod
+    def _v_item_ids(cls, v):
+        v = list(dict.fromkeys(v))  # sem duplicados, na ordem recebida
+        if not v:
+            raise ValueError("Selecione ao menos um equipamento.")
+        if len(v) > 2000:
+            raise ValueError("Selecione no máximo 2000 equipamentos por vez.")
+        return v
+
+
+class Etiqueta(BaseModel):
+    id: int
+    tipo: Optional[str] = None
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    identificador: Optional[str] = None
+    revenda: Optional[str] = None
+    url: str
+
+
+class EtiquetasResponse(BaseModel):
+    base_url: str
+    etiquetas: list[Etiqueta]
+    ignorados: list[int]
+
+
+class IdsEtiquetas(BaseModel):
+    ids: list[int]
+    total: int

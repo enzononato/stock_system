@@ -15,6 +15,7 @@ from app.dependencies import limiter, get_inventory_db
 from app.services import scheduler
 from app.routers import auth, users, items, peripherals, loans, documents, history, reports, constants, unidades, audit, colaboradores, locais
 from app.routers import inventarios
+from app.routers import etiquetas
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +160,7 @@ app.include_router(audit.router)
 app.include_router(colaboradores.router)
 app.include_router(locais.router)
 app.include_router(inventarios.router)
+app.include_router(etiquetas.router)
 
 
 @app.on_event("startup")
