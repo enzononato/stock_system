@@ -7,6 +7,12 @@ server {
     # Aumenta o limite para upload de PDFs assinados
     client_max_body_size 50M;
 
+    # Câmera só para o próprio site (leitura de QR do inventário, F6). O navegador
+    # só libera a câmera em HTTPS (ou localhost); em produção o TLS termina no proxy
+    # do EasyPanel. Vale para o index.html (location /); o bloco de assets tem
+    # add_header próprio e não herda este, o que não importa para a câmera.
+    add_header Permissions-Policy "camera=(self), microphone=(), geolocation=()" always;
+
     # 127.0.0.11 é o resolvedor DNS embutido do Docker, disponível em toda rede
     # bridge/overlay — mesmo endereço sob docker-compose, Swarm ou qualquer
     # orquestrador construído sobre o Docker Engine (o que inclui EasyPanel).

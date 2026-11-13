@@ -18,6 +18,7 @@ from app.db.colaborador_db import ColaboradorDBManager
 from app.db.audit_db import AuditDBManager
 from app.db.local_db import LocalDBManager
 from app.db.linha_db import LinhaDBManager
+from app.db.inventario_db import InventarioDBManager
 from app.services.audit import AuditContext
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -124,6 +125,11 @@ def get_colaborador_db() -> ColaboradorDBManager:
 @lru_cache
 def get_linha_db() -> LinhaDBManager:
     return LinhaDBManager()
+
+
+@lru_cache
+def get_inventario_db() -> InventarioDBManager:
+    return InventarioDBManager()
 
 
 # ── Rate limiting (T2) ──────────────────────────────────────────────────────

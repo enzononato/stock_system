@@ -28,6 +28,7 @@ managers em `app/db/`; as migrações partem delas.
 | 0200-0299 | Fase 2 |
 | 0300-0399 | Fase 3 |
 | 0500-0599 | Fase 5 (linhas telefônicas) |
+| 0600-0699 | Fase 6 (inventário físico) |
 
 ## Como roda
 

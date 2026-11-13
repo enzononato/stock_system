@@ -24,6 +24,12 @@ import AuditPage from '@/pages/AuditPage'
 import LocaisPage from '@/pages/LocaisPage'
 import LinhasPage from '@/pages/LinhasPage'
 import LinhasRelatorioPage from '@/pages/LinhasRelatorioPage'
+import EtiquetasPage from '@/pages/EtiquetasPage'
+import EtiquetaRedirectPage from '@/pages/EtiquetaRedirectPage'
+import InventariosPage from '@/pages/InventariosPage'
+import InventarioLeituraPage from '@/pages/InventarioLeituraPage'
+import InventarioRelatorioPage from '@/pages/InventarioRelatorioPage'
+import { PosLoginRedirect } from '@/features/etiquetas/PosLoginRedirect'
 import { ToastContainer } from '@/components/ui/toast'
 
 /**
@@ -46,6 +52,7 @@ export default function App() {
     <>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/e/:id" element={<EtiquetaRedirectPage />} />
 
         {/* Todas as rotas protegidas dentro do AppLayout */}
         <Route element={<AppLayout />}>
@@ -155,6 +162,38 @@ export default function App() {
               </RequireRole>
             }
           />
+          <Route
+            path="etiquetas"
+            element={
+              <RequireRole roles={['Gestor', 'Técnico']}>
+                <EtiquetasPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="inventarios"
+            element={
+              <RequireRole roles={['Gestor', 'Técnico']}>
+                <InventariosPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="inventarios/:id/leitura"
+            element={
+              <RequireRole roles={['Gestor', 'Técnico']}>
+                <InventarioLeituraPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="inventarios/:id"
+            element={
+              <RequireRole roles={['Gestor', 'Técnico']}>
+                <InventarioRelatorioPage />
+              </RequireRole>
+            }
+          />
 
           <Route path="linhas" element={<LinhasPage />} />
           <Route
@@ -206,6 +245,7 @@ export default function App() {
         </Route>
       </Routes>
 
+      <PosLoginRedirect />
       <ToastContainer />
     </>
   )

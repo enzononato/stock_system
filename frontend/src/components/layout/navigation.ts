@@ -1,6 +1,8 @@
 import type { ComponentType } from 'react'
 import { Contact, MapPin, ScrollText, type LucideIcon } from 'lucide-react'
 import { Smartphone } from 'lucide-react'
+import { QrCode } from 'lucide-react'
+import { ClipboardCheck } from 'lucide-react'
 import {
   DashboardIcon,
   EstoqueIcon,
@@ -72,6 +74,8 @@ export const navGroups: NavGroup[] = [
       { to: '/history', label: 'Histórico', icon: MovimentacoesIcon, roles: ['Gestor', 'Técnico'] },
       { to: '/locais', label: 'Locais', icon: MapPin, roles: ['Gestor', 'Técnico'] },
       { to: '/linhas', label: 'Linhas', icon: Smartphone },
+      { to: '/etiquetas', label: 'Etiquetas', icon: QrCode, roles: ['Gestor', 'Técnico'] },
+      { to: '/inventarios', label: 'Inventários', icon: ClipboardCheck, roles: ['Gestor', 'Técnico'] },
     ],
   },
   {
