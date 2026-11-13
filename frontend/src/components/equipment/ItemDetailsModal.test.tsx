@@ -191,4 +191,29 @@ describe("ItemDetailsModal — vínculos e visual da F1", () => {
     expect(salvar).toHaveAttribute("aria-busy", "true")
     liberar()
   })
+
+  it('baixar termo de responsabilidade com duplo clique envia uma requisição só', async () => {
+    let liberar!: () => void
+    const pendente = new Promise<void>((r) => {
+      liberar = r
+    })
+    let chamadas = 0
+    server.use(
+      http.post('/api/documents/loan-term/:id', async () => {
+        chamadas += 1
+        await pendente
+        return new HttpResponse(new Blob(['x']), { status: 200 })
+      })
+    )
+    URL.createObjectURL = vi.fn(() => 'blob:termo')
+    URL.revokeObjectURL = vi.fn()
+    const user = userEvent.setup()
+    renderModal({ ...desktopItem, status: 'Pendente' })
+    const botao = screen.getByRole('button', { name: 'Baixar Termo de Responsabilidade' })
+    await user.click(botao)
+    await user.click(botao)
+    await waitFor(() => expect(chamadas).toBe(1))
+    expect(botao).toHaveAttribute('aria-busy', 'true')
+    liberar()
+  })
 })

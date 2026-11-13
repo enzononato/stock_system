@@ -203,4 +203,23 @@ describe('HistoryPage — listagem', () => {
     expect(confirmar).toHaveAttribute('aria-busy', 'true')
     liberar()
   })
+
+  it('busca com atraso volta à página 1 sem pedir (novo termo, página antiga)', async () => {
+    const pedidos: URLSearchParams[] = []
+    server.use(
+      http.get('/api/history', ({ request }) => {
+        const params = new URL(request.url).searchParams
+        pedidos.push(params)
+        return HttpResponse.json({ items: [entradaCadastro], total: 60 })
+      })
+    )
+    const user = userEvent.setup()
+    renderWithClient(<HistoryPage />)
+    await screen.findByText('Mostrando 1–25 de 60')
+    await user.click(screen.getByRole('button', { name: 'Próxima' }))
+    await waitFor(() => expect(pedidos.some((p) => p.get('offset') === '25')).toBe(true))
+    await user.type(screen.getByLabelText('Busca geral'), 'ana')
+    await waitFor(() => expect(pedidos.some((p) => p.get('search') === 'ana')).toBe(true))
+    expect(pedidos.filter((p) => p.get('search') === 'ana').every((p) => p.get('offset') === '0')).toBe(true)
+  })
 })

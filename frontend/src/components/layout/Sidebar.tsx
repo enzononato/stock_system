@@ -118,7 +118,9 @@ export default function Sidebar({ className, onNavigate }: SidebarProps) {
                         )
                       }
                     >
-                      <item.icon size={18} />
+                      <span aria-hidden="true" className="inline-flex shrink-0">
+                        <item.icon size={18} />
+                      </span>
                       <span className="truncate">{item.label}</span>
                     </NavLink>
                   ))}

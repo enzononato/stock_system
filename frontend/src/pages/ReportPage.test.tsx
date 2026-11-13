@@ -64,4 +64,25 @@ describe('ReportPage', () => {
     const rotulo = await screen.findByText('Total de Registros')
     expect(rotulo.closest('div')).toHaveClass('bg-brand-soft')
   })
+
+  it('opções de revenda sem duplicata por caixa e filtro sem diferenciar caixa', async () => {
+    server.use(
+      http.get('/api/unidades', () =>
+        HttpResponse.json([{ id: 1, nome: 'Revalle Juazeiro', razao_social: 'X', cnpj: '1', is_active: true }])
+      ),
+      http.get('/api/reports/monthly', () =>
+        HttpResponse.json([
+          { history_id: 1, item_id: 1, operation_type: 'Cadastro', revenda: 'REVALLE JUAZEIRO' },
+          { history_id: 2, item_id: 2, operation_type: 'Cadastro', revenda: 'Revalle Juazeiro' },
+        ])
+      )
+    )
+    renderWithClient(<ReportPage />)
+    const user = userEvent.setup()
+    await screen.findByText('Mostrando 1–2 de 2')
+    await user.click(screen.getByRole('combobox', { name: 'Revenda' }))
+    expect(await screen.findAllByRole('option', { name: 'REVALLE JUAZEIRO' })).toHaveLength(1)
+    await user.click(screen.getByRole('option', { name: 'REVALLE JUAZEIRO' }))
+    expect(await screen.findByText('Mostrando 1–2 de 2')).toBeInTheDocument()
+  })
 })

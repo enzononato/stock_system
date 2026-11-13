@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
 import { type Item } from '@/api/items'
@@ -62,14 +62,13 @@ export default function StockPage() {
   const [filterRevenda, setFilterRevenda] = useState('all')
   const [colaboradorId, setColaboradorId] = useState<number | null>(null)
   const [ordem, setOrdem] = useState<{ sort: EstoqueSort; dir: SortDir }>({ sort: 'id', dir: 'desc' })
-  const [page, setPage] = useState(1)
+  // A página vale só para o termo de busca em que foi escolhida: ao mudar o termo (já com atraso) a
+  // página efetiva volta a 1 no mesmo render, sem pedido com (termo novo, página antiga).
+  const [paginaEscolhida, setPaginaEscolhida] = useState({ n: 1, busca: '' })
+  const page = paginaEscolhida.busca === busca ? paginaEscolhida.n : 1
+  const setPage = useCallback((n: number) => setPaginaEscolhida({ n, busca }), [busca])
   const [pageSize, setPageSize] = usePageSize('estoque')
   const [selectedItem, setSelectedItem] = useState<Item | null>(null)
-
-  // Nova busca (já com atraso) volta para a primeira página.
-  useEffect(() => {
-    setPage(1)
-  }, [busca])
 
   const { data: unidades = [] } = useQuery({
     queryKey: ['unidades-filter'],
@@ -282,6 +281,12 @@ export default function StockPage() {
                     <button type="button" onClick={() => void refetch()} className="underline">
                       Tentar novamente
                     </button>
+                  </td>
+                </tr>
+              ) : items.length === 0 && total > 0 ? (
+                <tr>
+                  <td colSpan={TOTAL_COLUNAS} className="py-16 text-center text-caption text-muted-foreground">
+                    Carregando equipamentos…
                   </td>
                 </tr>
               ) : items.length === 0 ? (

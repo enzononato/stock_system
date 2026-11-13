@@ -188,7 +188,8 @@ ORDENACOES_ITEMS: dict[str, tuple[str, ...]] = {
     "tipo": ("i.tipo",),
     "equipamento": ("i.brand", "i.model"),
     "status": ("CAST(i.status AS CHAR)",),
-    "colaborador": ("i.assigned_to",),
+    # Mesma regra da coluna exibida (colaborador_nome, senão assigned_to), vazio tratado como ausente.
+    "colaborador": ("COALESCE(NULLIF(c.nome, ''), NULLIF(i.assigned_to, ''))",),
     "setor": ("c.setor",),
     "cargo": ("c.cargo",),
     "unidade": ("i.revenda",),

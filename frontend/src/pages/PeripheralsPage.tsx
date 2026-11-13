@@ -95,7 +95,7 @@ export default function PeripheralsPage() {
   const [selectedItemId, setSelectedItemId] = useState('')
   const [selectedItemSnapshot, setSelectedItemSnapshot] = useState<Item | null>(null)
 
-  const { data: peripherals = [], isLoading } = useQuery({
+  const { data: peripherals = [], isLoading, isFetching } = useQuery({
     queryKey: ['peripherals', filterTipo, filterStatus],
     queryFn: () =>
       listPeripherals({
@@ -481,6 +481,7 @@ export default function PeripheralsPage() {
                 setPageSize(n)
                 setTablePage(1)
               }}
+              isFetching={isFetching}
             />
           </div>
         </div>

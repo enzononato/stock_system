@@ -32,6 +32,9 @@ const MONTHS = [
   'Dezembro',
 ]
 
+// Chave de comparação de revenda: sem diferenciar caixa nem espaços nas pontas.
+const chaveRevenda = (v: string) => v.trim().toLocaleLowerCase('pt-BR')
+
 // Sentinela de "sem filtro" para os <Select> — o Radix não aceita value="".
 const ALL = 'all'
 
@@ -74,11 +77,15 @@ export default function ReportPage() {
   })
 
   const revendaOptions = useMemo(() => {
-    const set = new Set<string>()
-    revendas.forEach((r) => { if (r) set.add(r) })
-    unidades.forEach((u) => { if (u.nome) set.add(u.nome) })
-    report.forEach((r) => { if (r.revenda) set.add(r.revenda) })
-    return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+    // Sem duplicata por caixa (a exibição é em CAIXA ALTA): a primeira grafia vista é a canônica.
+    const porChave = new Map<string, string>()
+    const add = (v?: string | null) => {
+      if (v && !porChave.has(chaveRevenda(v))) porChave.set(chaveRevenda(v), v)
+    }
+    revendas.forEach(add)
+    unidades.forEach((u) => add(u.nome))
+    report.forEach((r) => add(r.revenda))
+    return Array.from(porChave.values()).sort((a, b) => a.localeCompare(b, 'pt-BR'))
   }, [revendas, unidades, report])
 
   const opTypes = useMemo(() => {
@@ -90,7 +97,7 @@ export default function ReportPage() {
   const filteredReport = useMemo(() => {
     const term = search.trim().toLowerCase()
     return report.filter((r) => {
-      if (filterRevenda !== ALL && r.revenda !== filterRevenda) return false
+      if (filterRevenda !== ALL && chaveRevenda(r.revenda ?? '') !== chaveRevenda(filterRevenda)) return false
       if (filterOp !== ALL && r.operation_type !== filterOp) return false
       if (term && !Object.values(r).some((v) => v != null && String(v).toLowerCase().includes(term))) return false
       return true

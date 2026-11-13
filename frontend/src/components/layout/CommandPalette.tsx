@@ -141,7 +141,9 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                     : 'text-muted-foreground hover:bg-surface-alt hover:text-foreground'
                 )}
               >
-                <item.icon size={16} className="shrink-0" aria-hidden="true" />
+                <span aria-hidden="true" className="inline-flex shrink-0">
+                  <item.icon size={16} />
+                </span>
                 <span className="truncate">{item.label}</span>
               </button>
             </li>

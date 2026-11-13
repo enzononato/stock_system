@@ -164,6 +164,7 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
   const [fornecedor, setFornecedor] = useState('')
   const [specificFields, setSpecificFields] = useState<Record<string, string>>({})
   const [downloadingTerm, setDownloadingTerm] = useState(false)
+  const [baixandoTermoResp, setBaixandoTermoResp] = useState(false)
 
   // Busca os periféricos vinculados caso existam
   const { data: peripherals = [] } = useQuery({
@@ -231,6 +232,15 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
       toast.error(getErrorMessage(err, 'Termo assinado não encontrado.'))
     } finally {
       setDownloadingTerm(false)
+    }
+  }
+
+  async function handleBaixarTermoResponsabilidade() {
+    setBaixandoTermoResp(true)
+    try {
+      await generateAndDownloadLoanTerm(item!.id)
+    } finally {
+      setBaixandoTermoResp(false)
     }
   }
 
@@ -423,7 +433,8 @@ export function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => generateAndDownloadLoanTerm(item.id)}
+                  loading={baixandoTermoResp}
+                  onClick={() => void handleBaixarTermoResponsabilidade()}
                 >
                   <FileDown aria-hidden />
                   Baixar Termo de Responsabilidade

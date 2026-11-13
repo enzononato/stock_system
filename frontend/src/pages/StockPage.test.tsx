@@ -199,6 +199,36 @@ describe('StockPage', () => {
     expect(await screen.findByText('Mostrando 26–30 de 30')).toBeInTheDocument()
   })
 
+  it('busca com atraso volta à página 1 sem pedir (novo termo, página antiga)', async () => {
+    mockServidor({ total: () => 60 })
+    renderPage()
+    const user = userEvent.setup()
+    await screen.findByText('Mostrando 1–25 de 60')
+    await user.click(screen.getByRole('button', { name: 'Próxima' }))
+    await waitFor(() => expect(ultimo().get('offset')).toBe('25'))
+    await user.type(screen.getByLabelText('Buscar equipamentos'), 'dell')
+    await waitFor(() => expect(pedidos.some((p) => p.get('search') === 'dell')).toBe(true))
+    expect(pedidos.filter((p) => p.get('search') === 'dell').every((p) => p.get('offset') === '0')).toBe(true)
+  })
+
+  it('enquanto a página se corrige não mostra "Não há equipamentos" (total > 0)', async () => {
+    let total = 60
+    mockServidor({ total: () => total })
+    renderPage()
+    await screen.findByText('Mostrando 1–25 de 60')
+    total = 30
+    fireEvent.change(screen.getByLabelText('Ir para a página'), { target: { value: '3' } })
+    fireEvent.keyDown(screen.getByLabelText('Ir para a página'), { key: 'Enter' })
+    await screen.findByText('Mostrando 26–30 de 30')
+    expect(screen.queryByText(/Não há equipamentos/)).not.toBeInTheDocument()
+  })
+
+  it('sem nenhum equipamento mostra "Não há equipamentos cadastrados"', async () => {
+    mockServidor({ items: [] })
+    renderPage()
+    expect(await screen.findByText(/Não há equipamentos cadastrados/)).toBeInTheDocument()
+  })
+
   it('#id leva à página do equipamento e a tabela rola dentro do painel', async () => {
     mockServidor()
     renderPage()

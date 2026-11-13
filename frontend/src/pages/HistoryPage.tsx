@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import {
   Download,
@@ -75,12 +75,16 @@ export default function HistoryPage() {
   const { hasRole } = useAuth()
   const queryClient = useQueryClient()
 
-  const [page, setPage] = useState(1)
+  // A página vale só para o termo de busca em que foi escolhida: ao mudar o termo (já com atraso) a
+  // página efetiva volta a 1 no mesmo render, sem pedido com (termo novo, página antiga).
+  const [paginaEscolhida, setPaginaEscolhida] = useState({ n: 1, busca: '' })
   const [pageSize, setPageSize] = usePageSize('historico')
   // `search` é o que o usuário digita; `busca` é o que vai para a query, com
   // atraso, para não disparar uma requisição por tecla.
   const [search, setSearch] = useState('')
   const busca = useDebouncedValue(search.trim(), 400)
+  const page = paginaEscolhida.busca === busca ? paginaEscolhida.n : 1
+  const setPage = useCallback((n: number) => setPaginaEscolhida({ n, busca }), [busca])
   const [downloadingKey, setDownloadingKey] = useState<string | null>(null)
 
   // Confirmação de estorno: entrada sendo estornada (null = diálogo fechado),
@@ -132,12 +136,6 @@ export default function HistoryPage() {
   useEffect(() => {
     if (total > 0 && page > lastPage) setPage(lastPage)
   }, [total, page, lastPage])
-
-  // Nova busca (já com atraso): o resultado não tem relação com a página em que
-  // o usuário estava, então volta para a primeira.
-  useEffect(() => {
-    setPage(1)
-  }, [busca])
 
   function openReverseConfirm(entry: HistoryEntry) {
     setReversingEntry(entry)

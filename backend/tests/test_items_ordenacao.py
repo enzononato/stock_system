@@ -82,6 +82,20 @@ class TestOrdenacaoDeItems:
         assert _ids(client_gestor, sort="colaborador", dir="asc") == [ana["id"], bruno["id"], vazio["id"]]
         assert _ids(client_gestor, sort="colaborador", dir="desc") == [bruno["id"], ana["id"], vazio["id"]]
 
+    def test_colaborador_vinculado_ordena_pelo_nome_do_colaborador(self, client_gestor, criar_item, executar_sql):
+        # A coluna mostra colaborador_nome (ou assigned_to): a ordenação segue a mesma regra.
+        so_texto, vinculado, so_vinculo, vazio = criar_item(), criar_item(), criar_item(), criar_item()
+        executar_sql("UPDATE items SET assigned_to=%s WHERE id=%s", ("Bruno", so_texto["id"]))
+        executar_sql("UPDATE items SET assigned_to=%s WHERE id=%s", ("Zeca", vinculado["id"]))
+        _vincular(executar_sql, vinculado["id"], cpf="52998224725", nome="ANA", setor="TI", cargo="Analista")
+        _vincular(executar_sql, so_vinculo["id"], cpf="11144477735", nome="CARLA", setor="TI", cargo="Analista")
+        assert _ids(client_gestor, sort="colaborador", dir="asc") == [
+            vinculado["id"], so_texto["id"], so_vinculo["id"], vazio["id"],
+        ]
+        assert _ids(client_gestor, sort="colaborador", dir="desc") == [
+            so_vinculo["id"], so_texto["id"], vinculado["id"], vazio["id"],
+        ]
+
     def test_ordenacao_com_paginacao_nao_repete(self, client_gestor, criar_item):
         c = criar_item(tipo="C")["id"]
         a = criar_item(tipo="A")["id"]

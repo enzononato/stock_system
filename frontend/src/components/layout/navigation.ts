@@ -19,7 +19,10 @@ import {
  * Props mínimas que qualquer ícone de navegação precisa aceitar. Os ícones do
  * lucide-react atendem este contrato de sobra (aceitam qualquer atributo SVG);
  * os ícones animados da sidebar (API mais restrita: size/className/
- * strokeWidth/title/aria-hidden) também o atendem. `NavIcon` é a união dos
+ * strokeWidth/title/aria-hidden) também o atendem. Atenção: os animados
+ * renderizam `role="img" aria-label={title}` e IGNORAM `aria-hidden`; quem os
+ * usa ao lado de um rótulo (Sidebar, CommandPalette) os envolve num
+ * `<span aria-hidden="true">` para o nome acessível não duplicar. `NavIcon` é a união dos
  * dois — não é um cast, é o tipo real de cada ícone usado em `navGroups`.
  */
 export interface NavIconProps {

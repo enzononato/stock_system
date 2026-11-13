@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Outlet, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import Sidebar from './Sidebar'
@@ -15,6 +15,22 @@ export default function AppLayout() {
   // continua fixa e este estado não tem efeito nenhum (Task 8, Step 1).
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
+
+  // Foco da gaveta (aria-modal): ao abrir vai para "Fechar menu"; ao fechar (Escape, botão,
+  // clique fora ou navegação) volta para quem abriu.
+  const fecharMenuRef = useRef<HTMLButtonElement>(null)
+  const focoAnteriorRef = useRef<HTMLElement | null>(null)
+  const abrirGaveta = useCallback(() => {
+    focoAnteriorRef.current = document.activeElement as HTMLElement | null
+    setMobileNavOpen(true)
+  }, [])
+  useEffect(() => {
+    if (!mobileNavOpen) return
+    fecharMenuRef.current?.focus()
+    return () => {
+      focoAnteriorRef.current?.focus()
+    }
+  }, [mobileNavOpen])
 
   // 1ª forma de fechar a gaveta: navegar para outra tela.
   useEffect(() => {
@@ -85,6 +101,7 @@ export default function AppLayout() {
             <Button
               variant="ghost"
               size="icon"
+              ref={fecharMenuRef}
               onClick={() => setMobileNavOpen(false)}
               aria-label="Fechar menu"
               className="absolute right-2 top-2 text-muted-foreground hover:text-foreground"
@@ -97,7 +114,7 @@ export default function AppLayout() {
 
       <div className="flex flex-col flex-1 min-w-0">
         <TopBar
-          onOpenMobileNav={() => setMobileNavOpen(true)}
+          onOpenMobileNav={abrirGaveta}
           onOpenCommandPalette={() => setCommandPaletteOpen(true)}
         />
         <main className="min-w-0 flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">

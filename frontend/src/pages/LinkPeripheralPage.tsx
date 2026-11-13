@@ -129,7 +129,7 @@ export default function LinkPeripheralPage() {
     ...linkableItems,
   ]
 
-  const { data: linkedPeripherals = [], refetch: refetchLinked } = useQuery({
+  const { data: linkedPeripherals = [], refetch: refetchLinked, isFetching: atualizandoLista } = useQuery({
     queryKey: ['item-peripherals', selectedItemId],
     queryFn: () => listItemPeripherals(Number(selectedItemId)),
     enabled: !!selectedItemId,
@@ -258,10 +258,11 @@ export default function LinkPeripheralPage() {
                 size="sm"
                 variant="ghost"
                 onClick={() => void refetchLinked()}
+                loading={atualizandoLista}
                 className="size-8 p-0"
                 aria-label="Atualizar lista"
               >
-                <RefreshCw className="size-3.5" />
+                {!atualizandoLista && <RefreshCw className="size-3.5" />}
               </Button>
             </div>
 
