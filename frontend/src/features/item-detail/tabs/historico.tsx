@@ -75,5 +75,11 @@ function HistoricoTab({ item }: { item: Item }) {
   )
 }
 
-const tab: ItemDetailTab = { id: 'historico', label: 'Histórico', order: 90, Component: HistoricoTab }
+const tab: ItemDetailTab = {
+  id: 'historico',
+  label: 'Histórico',
+  order: 90,
+  roles: ['Gestor', 'Técnico'],
+  Component: HistoricoTab,
+}
 export default tab
