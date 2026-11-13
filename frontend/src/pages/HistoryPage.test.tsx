@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -146,5 +146,61 @@ describe('HistoryPage — estorno', () => {
       screen.queryByText((_, el) => el instanceof HTMLHeadingElement && el.textContent === 'Confirmar Estorno — Operação #10')
     ).not.toBeInTheDocument()
     expect(chamadasReverse).toBe(0)
+  })
+})
+
+describe('HistoryPage — listagem', () => {
+  beforeEach(() => localStorage.clear())
+
+  it('pede 25 por página e mostra a paginação padrão', async () => {
+    const pedidos: URLSearchParams[] = []
+    server.use(
+      http.get('/api/history', ({ request }) => {
+        pedidos.push(new URL(request.url).searchParams)
+        return HttpResponse.json({ items: [entradaCadastro], total: 1 })
+      })
+    )
+    renderWithClient(<HistoryPage />)
+    expect(await screen.findByText('Mostrando 1–1 de 1')).toBeInTheDocument()
+    expect(pedidos[0].get('limit')).toBe('25')
+    expect(pedidos[0].get('offset')).toBe('0')
+  })
+
+  it('revenda em CAIXA ALTA nos detalhes', async () => {
+    server.use(
+      http.get('/api/history', () =>
+        HttpResponse.json({ items: [{ ...entradaCadastro, revenda: 'Revalle Juazeiro' }], total: 1 })
+      )
+    )
+    const user = userEvent.setup()
+    renderWithClient(<HistoryPage />)
+    await user.click(await screen.findByRole('button', { name: 'Expandir detalhes' }))
+    expect(screen.getByText('REVALLE JUAZEIRO')).toBeInTheDocument()
+  })
+
+  it('confirmar estorno com duplo clique envia uma requisição só', async () => {
+    mockHistoryList()
+    let liberar!: () => void
+    const pendente = new Promise<void>((r) => {
+      liberar = r
+    })
+    let chamadasReverse = 0
+    server.use(
+      http.post('/api/history/10/reverse', async () => {
+        chamadasReverse += 1
+        await pendente
+        return HttpResponse.json({ detail: 'ok' })
+      })
+    )
+    const user = userEvent.setup()
+    renderWithClient(<HistoryPage />)
+    await user.click(await screen.findByRole('button', { name: /Estornar/i }))
+    await user.type(screen.getByPlaceholderText('Sua senha de acesso'), 'SenhaForte#123')
+    const confirmar = screen.getByRole('button', { name: 'Confirmar' })
+    await user.click(confirmar)
+    await user.click(confirmar)
+    await waitFor(() => expect(chamadasReverse).toBe(1))
+    expect(confirmar).toHaveAttribute('aria-busy', 'true')
+    liberar()
   })
 })

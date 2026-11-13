@@ -12,7 +12,9 @@ import {
 
 import { listHistoryPaginated, reverseEntryWithPassword, type HistoryEntry } from '@/api/history'
 import { downloadAuthenticated } from '@/api/client'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/button'
+import { Pagination } from '@/components/ui/Pagination'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -24,7 +26,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useAuth } from '@/contexts/AuthContext'
+import { useDebouncedValue } from '@/hooks/useDebouncedValue'
+import { usePageSize } from '@/hooks/usePageSize'
 import { getErrorMessage } from '@/lib/api-error'
+import { upper } from '@/lib/format'
 import { cn, formatDateTime, exportToCsv } from '@/lib/utils'
 import { toast } from '@/components/ui/toast'
 
@@ -35,7 +40,6 @@ const REVERSIBLE_OPS = [
   'Devolução',
   'Confirmação Devolução',
 ]
-const PAGE_SIZE = 7
 
 function operationSymbol(op?: string) {
   if (!op) return '•'
@@ -71,11 +75,12 @@ export default function HistoryPage() {
   const { hasRole } = useAuth()
   const queryClient = useQueryClient()
 
-  const [pageIndex, setPageIndex] = useState(0)
-  // `search` é o que o usuário digita; `searchAplicado` é o que vai para a
-  // query, com atraso, para não disparar uma requisição por tecla.
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = usePageSize('historico')
+  // `search` é o que o usuário digita; `busca` é o que vai para a query, com
+  // atraso, para não disparar uma requisição por tecla.
   const [search, setSearch] = useState('')
-  const [searchAplicado, setSearchAplicado] = useState('')
+  const busca = useDebouncedValue(search.trim(), 400)
   const [downloadingKey, setDownloadingKey] = useState<string | null>(null)
 
   // Confirmação de estorno: entrada sendo estornada (null = diálogo fechado),
@@ -87,20 +92,20 @@ export default function HistoryPage() {
   // Quais cartões da linha do tempo estão com os detalhes expandidos.
   const [expandedIds, setExpandedIds] = useState<Record<number, boolean>>({})
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['history', pageIndex, searchAplicado],
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ['history', page, pageSize, busca],
     queryFn: () =>
       listHistoryPaginated({
-        search: searchAplicado || undefined,
-        limit: PAGE_SIZE,
-        offset: pageIndex * PAGE_SIZE,
+        search: busca || undefined,
+        limit: pageSize,
+        offset: (page - 1) * pageSize,
       }),
     placeholderData: keepPreviousData,
   })
 
   const history = data?.items ?? []
   const total = data?.total ?? 0
-  const totalPages = Math.ceil(total / PAGE_SIZE)
+  const lastPage = Math.max(1, Math.ceil(total / pageSize))
 
   const allExpanded = history.length > 0 && history.every((e) => expandedIds[e.id])
 
@@ -125,21 +130,14 @@ export default function HistoryPage() {
   // único item da última página), volta para a última página válida em vez
   // de deixar a lista "presa" numa página vazia.
   useEffect(() => {
-    if (!data || data.total <= 0) return
-    const maxPageIndex = Math.max(0, Math.ceil(data.total / PAGE_SIZE) - 1)
-    if (pageIndex > maxPageIndex) setPageIndex(maxPageIndex)
-  }, [data, pageIndex])
+    if (total > 0 && page > lastPage) setPage(lastPage)
+  }, [total, page, lastPage])
 
-  // Espera o usuário parar de digitar antes de consultar o servidor, e volta
-  // para a primeira página: o resultado da nova busca não tem relação com a
-  // página em que ele estava.
+  // Nova busca (já com atraso): o resultado não tem relação com a página em que
+  // o usuário estava, então volta para a primeira.
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setSearchAplicado(search.trim())
-      setPageIndex(0)
-    }, 400)
-    return () => clearTimeout(timer)
-  }, [search])
+    setPage(1)
+  }, [busca])
 
   function openReverseConfirm(entry: HistoryEntry) {
     setReversingEntry(entry)
@@ -195,28 +193,18 @@ export default function HistoryPage() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Cabeçalho */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-border pb-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
-              Auditoria e Rastreabilidade
-            </span>
-            <span className="text-muted-foreground">•</span>
-            <span className="text-caption text-foreground font-medium">Linha Temporal</span>
-          </div>
-          <h1 className="text-heading-lg font-semibold tracking-tight text-foreground mt-0.5">
-            Histórico de Operações
-          </h1>
-          <p className="text-body-sm text-muted-foreground mt-1">
-            Registro cronológico e imutável de todas as ações realizadas no sistema patrimonial.
-          </p>
-        </div>
+      <PageHeader
+        eyebrow="Auditoria e Rastreabilidade"
+        eyebrowDetail="Linha Temporal"
+        title="Histórico de Operações"
+        description="Registro cronológico e imutável de todas as ações realizadas no sistema patrimonial."
+        actions={
         <Button
           variant="outline"
           size="sm"
           disabled={history.length === 0}
           onClick={() =>
-            exportToCsv('historico', history as unknown as Record<string, unknown>[], [
+            exportToCsv('historico', history.map((h) => ({ ...h, revenda: upper(h.revenda) })) as unknown as Record<string, unknown>[], [
               { key: 'id', label: 'ID' },
               { key: 'operador', label: 'Operador' },
               { key: 'operation', label: 'Operação' },
@@ -230,19 +218,19 @@ export default function HistoryPage() {
               { key: 'data_operacao', label: 'Data' },
             ])
           }
-          className="text-xs h-8"
         >
-          <Download className="mr-1.5 size-3.5" />
+          <Download />
           Exportar CSV
         </Button>
-      </div>
+        }
+      />
 
       {/* Grid: 280px filtros / 1fr timeline */}
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6 items-start">
         {/* Painel de Filtros */}
-        <div className="rounded border border-border bg-surface p-5 space-y-5">
+        <div className="rounded-md border border-border bg-surface p-5 space-y-5">
           <div className="border-b border-border pb-2.5">
-            <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
+            <span className="text-caption font-semibold uppercase tracking-wider text-brand-text">
               Filtros de Consulta
             </span>
           </div>
@@ -254,6 +242,7 @@ export default function HistoryPage() {
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                aria-label="Busca geral"
                 placeholder="Operador, usuário, operação…"
                 className="pl-8 h-8 text-body-sm"
               />
@@ -262,10 +251,10 @@ export default function HistoryPage() {
 
           {/* Sumário de Página */}
           <div className="space-y-2 pt-2 border-t border-border">
-            <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground block">
+            <span className="text-caption font-semibold uppercase tracking-wider text-brand-text block">
               Sumário — Página Atual
             </span>
-            <div className="space-y-2 text-caption">
+            <div className="grid grid-cols-2 gap-2">
               {[
                 { label: 'Total de Registros', value: total, symbol: '#' },
                 {
@@ -284,56 +273,21 @@ export default function HistoryPage() {
                   symbol: '↺',
                 },
               ].map((stat) => (
-                <div
-                  key={stat.label}
-                  className="flex justify-between py-1 border-b border-border"
-                >
-                  <span className="text-muted-foreground">{stat.label}</span>
-                  <span className="font-mono font-semibold text-foreground">
+                <div key={stat.label} className="rounded-md bg-brand-soft p-3">
+                  <span className="block text-caption text-brand-soft-foreground">{stat.label}</span>
+                  <span className="block font-mono text-heading font-bold text-brand-soft-foreground">
                     {stat.symbol} {stat.value}
                   </span>
                 </div>
               ))}
             </div>
           </div>
-
-          {/* Paginação */}
-          {totalPages > 1 && (
-            <div className="space-y-2 pt-2 border-t border-border">
-              <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground block">
-                Paginação
-              </span>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={pageIndex === 0}
-                  onClick={() => setPageIndex((p) => p - 1)}
-                  className="text-xs h-7 px-2.5 flex-1"
-                >
-                  ← Anterior
-                </Button>
-                <span className="text-caption font-mono text-foreground whitespace-nowrap">
-                  {pageIndex + 1}/{totalPages}
-                </span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={pageIndex >= totalPages - 1}
-                  onClick={() => setPageIndex((p) => p + 1)}
-                  className="text-xs h-7 px-2.5 flex-1"
-                >
-                  Próxima →
-                </Button>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Timeline Editorial */}
-        <div className="rounded border border-border bg-surface p-5 space-y-1">
-          <div className="border-b border-border pb-3 mb-4 flex items-center justify-between">
-            <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
+        <div className="min-w-0 rounded-md border border-border bg-surface p-5 space-y-1">
+          <div className="border-b border-border pb-3 mb-4 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-caption font-semibold uppercase tracking-wider text-brand-text">
               Linha Temporal — {total} evento{total !== 1 ? 's' : ''} auditados
             </span>
             {history.length > 0 && (
@@ -344,7 +298,7 @@ export default function HistoryPage() {
                 onClick={toggleAll}
                 className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground"
               >
-                <ChevronsUpDown className="mr-1 size-3" />
+                <ChevronsUpDown />
                 {allExpanded ? 'Recolher todos' : 'Expandir todos'}
               </Button>
             )}
@@ -389,9 +343,9 @@ export default function HistoryPage() {
                       </div>
 
                       {/* Card Expansível da Entrada */}
-                      <div className="flex-1 rounded border border-border bg-surface-alt transition-colors overflow-hidden min-w-0">
+                      <div className="flex-1 rounded-md border border-border bg-surface transition-colors overflow-hidden min-w-0">
                         {/* Linha Resumo */}
-                        <div className="w-full px-3 py-2 flex items-center justify-between gap-2.5">
+                        <div className="w-full px-3 py-2 flex flex-wrap items-center justify-between gap-2.5">
                           <button
                             type="button"
                             onClick={() => toggleExpand(entry.id)}
@@ -431,7 +385,7 @@ export default function HistoryPage() {
                                 className="h-6 px-2 text-[11px] text-muted-foreground hover:text-destructive"
                                 onClick={() => openReverseConfirm(entry)}
                               >
-                                <RotateCcw className="mr-1 size-2.5" />
+                                <RotateCcw />
                                 Estornar
                               </Button>
                             )}
@@ -456,40 +410,40 @@ export default function HistoryPage() {
                         {isExpanded && (
                           <div className="px-3 pb-3 pt-1 border-t border-border space-y-2 bg-surface">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-caption pt-1">
-                              <div className="p-2 rounded border border-border bg-surface">
-                                <span className="text-muted-foreground block text-[11px] uppercase tracking-wider">
+                              <div className="p-2 rounded-md bg-brand-soft text-brand-soft-foreground">
+                                <span className="block text-[11px] uppercase tracking-wider">
                                   Operador
                                 </span>
-                                <span className="font-medium text-foreground">
+                                <span className="font-medium">
                                   {entry.operador || '—'}
                                 </span>
                               </div>
                               {entry.usuario && (
-                                <div className="p-2 rounded border border-border bg-surface">
-                                  <span className="text-muted-foreground block text-[11px] uppercase tracking-wider">
+                                <div className="p-2 rounded-md bg-brand-soft text-brand-soft-foreground">
+                                  <span className="block text-[11px] uppercase tracking-wider">
                                     Colaborador
                                   </span>
-                                  <span className="font-medium text-foreground">
+                                  <span className="font-medium">
                                     {entry.usuario}
                                   </span>
                                 </div>
                               )}
                               {(entry.tipo || entry.marca) && (
-                                <div className="p-2 rounded border border-border bg-surface">
-                                  <span className="text-muted-foreground block text-[11px] uppercase tracking-wider">
+                                <div className="p-2 rounded-md bg-brand-soft text-brand-soft-foreground">
+                                  <span className="block text-[11px] uppercase tracking-wider">
                                     Equipamento
                                   </span>
-                                  <span className="font-medium text-foreground">
+                                  <span className="font-medium">
                                     {entry.tipo} {entry.marca} {entry.modelo}
                                   </span>
                                 </div>
                               )}
                               {entry.revenda && (
-                                <div className="p-2 rounded border border-border bg-surface">
-                                  <span className="text-muted-foreground block text-[11px] uppercase tracking-wider">
+                                <div className="p-2 rounded-md bg-brand-soft text-brand-soft-foreground">
+                                  <span className="block text-[11px] uppercase tracking-wider">
                                     Revenda
                                   </span>
-                                  <span className="text-foreground">{entry.revenda}</span>
+                                  <span>{upper(entry.revenda)}</span>
                                 </div>
                               )}
                             </div>
@@ -509,16 +463,14 @@ export default function HistoryPage() {
                                     size="sm"
                                     variant="outline"
                                     className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground"
-                                    disabled={downloadingKey === entry.operacao_anexo}
+                                    loading={downloadingKey === entry.operacao_anexo}
                                     onClick={(e) => {
                                       e.stopPropagation()
                                       void handleDownloadAttachment(entry.operacao_anexo!)
                                     }}
                                   >
-                                    <Paperclip className="mr-1 size-2.5" />
-                                    {downloadingKey === entry.operacao_anexo
-                                      ? 'Baixando…'
-                                      : 'Comprovante'}
+                                    {downloadingKey !== entry.operacao_anexo && <Paperclip />}
+                                    Comprovante
                                   </Button>
                                 )}
                                 {entry.termo_assinado_anexo && (
@@ -527,16 +479,14 @@ export default function HistoryPage() {
                                     size="sm"
                                     variant="outline"
                                     className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground"
-                                    disabled={downloadingKey === entry.termo_assinado_anexo}
+                                    loading={downloadingKey === entry.termo_assinado_anexo}
                                     onClick={(e) => {
                                       e.stopPropagation()
                                       void handleDownloadAttachment(entry.termo_assinado_anexo!)
                                     }}
                                   >
-                                    <Paperclip className="mr-1 size-2.5" />
-                                    {downloadingKey === entry.termo_assinado_anexo
-                                      ? 'Baixando…'
-                                      : 'Termo'}
+                                    {downloadingKey !== entry.termo_assinado_anexo && <Paperclip />}
+                                    Termo
                                   </Button>
                                 )}
                                 {isReversible && (
@@ -550,7 +500,7 @@ export default function HistoryPage() {
                                       openReverseConfirm(entry)
                                     }}
                                   >
-                                    <RotateCcw className="mr-1 size-2.5" />
+                                    <RotateCcw />
                                     Estornar
                                   </Button>
                                 )}
@@ -565,6 +515,20 @@ export default function HistoryPage() {
               </div>
             </div>
           )}
+
+          <div className="border-t border-border pt-4 mt-4">
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={(n) => {
+                setPageSize(n)
+                setPage(1)
+              }}
+              isFetching={isFetching}
+            />
+          </div>
         </div>
       </div>
 
@@ -594,18 +558,18 @@ export default function HistoryPage() {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
-            <div className="rounded border border-border bg-surface-alt p-3 text-caption space-y-1">
+            <div className="rounded-md bg-brand-soft p-3 text-caption text-brand-soft-foreground space-y-1">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Operação:</span>
-                <span className="font-semibold text-foreground">{reversingEntry?.operation}</span>
+                <span>Operação:</span>
+                <span className="font-semibold">{reversingEntry?.operation}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Item envolvido:</span>
-                <span className="font-mono text-foreground">#{reversingEntry?.item_id || '—'}</span>
+                <span>Item envolvido:</span>
+                <span className="font-mono">#{reversingEntry?.item_id || '—'}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Operador original:</span>
-                <span className="text-foreground">{reversingEntry?.operador || '—'}</span>
+                <span>Operador original:</span>
+                <span>{reversingEntry?.operador || '—'}</span>
               </div>
             </div>
 
@@ -643,11 +607,12 @@ export default function HistoryPage() {
             <Button
               type="button"
               size="sm"
-              disabled={reverseMutation.isPending || !password}
+              disabled={!password}
+              loading={reverseMutation.isPending}
               onClick={handleConfirmReverse}
             >
-              <RotateCcw className="mr-1.5 size-3.5" />
-              {reverseMutation.isPending ? 'Estornando...' : 'Confirmar'}
+              {!reverseMutation.isPending && <RotateCcw />}
+              Confirmar
             </Button>
           </DialogFooter>
         </DialogContent>
