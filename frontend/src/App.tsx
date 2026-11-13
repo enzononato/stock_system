@@ -5,6 +5,7 @@ import { RestrictedAccess } from '@/components/layout/RestrictedAccess'
 import LoginPage from '@/pages/LoginPage'
 import EsqueciSenhaPage from '@/pages/EsqueciSenhaPage'
 import RedefinirSenhaPage from '@/pages/RedefinirSenhaPage'
+import PerfilPage from '@/pages/PerfilPage'
 import DashboardPage from '@/pages/DashboardPage'
 import StockPage from '@/pages/StockPage'
 import ItemDetailPage from '@/pages/ItemDetailPage'
@@ -57,6 +58,7 @@ export default function App() {
           <Route path="stock" element={<StockPage />} />
           <Route path="items/:id" element={<ItemDetailPage />} />
           <Route path="charts" element={<ChartsPage />} />
+          <Route path="perfil" element={<PerfilPage />} />
 
           {/* Gestor + Técnico */}
           <Route
