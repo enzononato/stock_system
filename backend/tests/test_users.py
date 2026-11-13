@@ -137,6 +137,33 @@ class TestAtualizarSenha:
         )
         assert login_com_senha_nova.status_code == 200
 
+    def test_atualizar_senha_encerra_as_sessoes_do_usuario(
+        self, client, client_gestor, usuario_tecnico, senha_padrao_teste
+    ):
+        login = client.post(
+            "/api/auth/login", json={"username": usuario_tecnico["username"], "password": senha_padrao_teste}
+        )
+        assert login.status_code == 200
+        access = login.json()["access_token"]
+        cookie = login.cookies["refresh_token"]
+        headers = {"Authorization": f"Bearer {access}"}
+        assert client.get("/api/auth/me", headers=headers).status_code == 200
+
+        resp = client_gestor.put(
+            f"/api/users/{usuario_tecnico['id']}/password", json={"new_password": "SenhaNova#456"}
+        )
+        assert resp.status_code == 200
+
+        me = client.get("/api/auth/me", headers=headers)
+        assert me.status_code == 401
+        assert me.json()["detail"] == "Sessão encerrada. Faça login novamente."
+        client.cookies.clear()
+        client.cookies.set("refresh_token", cookie)
+        assert client.post("/api/auth/refresh").status_code == 401
+        client.cookies.clear()
+        # o Gestor que trocou a senha continua logado
+        assert client_gestor.get("/api/auth/me").status_code == 200
+
     def test_atualizar_senha_em_branco(self, client_gestor, usuario_tecnico):
         resp = client_gestor.put(f"/api/users/{usuario_tecnico['id']}/password", json={"new_password": ""})
         assert resp.status_code == 400

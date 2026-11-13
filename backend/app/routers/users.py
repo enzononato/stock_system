@@ -150,6 +150,9 @@ def update_password(
     ok, msg = user_db.update_password(user_id, body.new_password)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
+    # Como na redefinição por e-mail: senha nova encerra todas as sessões abertas
+    # do usuário (quem estava logado com a senha antiga precisa entrar de novo).
+    user_db.revogar_sessoes(user_id)
     # Nunca a senha nem o hash: só o fato de que foi alterada.
     audit.record(ctx, "usuario", user_id, "editar", depois={"senha": "alterada"})
     return {"detail": msg}
