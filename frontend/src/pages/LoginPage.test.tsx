@@ -249,6 +249,45 @@ describe('LoginPage', () => {
     ).toBeInTheDocument()
   })
 
+  it('token da 2ª etapa esgotado volta à senha com a explicação', async () => {
+    server.use(
+      semSessao,
+      http.post('/api/auth/login', () => HttpResponse.json({ etapa: 'mfa', mfa_token: 'mfa-1' })),
+      http.post('/api/auth/mfa/verificar', () =>
+        HttpResponse.json({ detail: 'Muitas tentativas. Entre novamente.' }, { status: 400 })
+      )
+    )
+
+    const user = userEvent.setup()
+    renderLoginPage()
+    await preencherSenhaEEntrar(user)
+    await user.type(await screen.findByLabelText('Código'), '000000')
+    await user.click(screen.getByRole('button', { name: 'Verificar' }))
+
+    expect(await screen.findByRole('button', { name: 'Entrar' })).toBeInTheDocument()
+    expect(screen.getByText('Muitas tentativas. Entre novamente.')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Código')).not.toBeInTheDocument()
+  })
+
+  it('bloqueio de 15 minutos mostra a mensagem do servidor e fica na etapa do código', async () => {
+    const detail =
+      'Verificação em duas etapas bloqueada por excesso de tentativas. Tente novamente em 15 minutos.'
+    server.use(
+      semSessao,
+      http.post('/api/auth/login', () => HttpResponse.json({ etapa: 'mfa', mfa_token: 'mfa-1' })),
+      http.post('/api/auth/mfa/verificar', () => HttpResponse.json({ detail }, { status: 429 }))
+    )
+
+    const user = userEvent.setup()
+    renderLoginPage()
+    await preencherSenhaEEntrar(user)
+    await user.type(await screen.findByLabelText('Código'), '000000')
+    await user.click(screen.getByRole('button', { name: 'Verificar' }))
+
+    expect(await screen.findByText(detail)).toBeInTheDocument()
+    expect(screen.getByLabelText('Código')).toBeInTheDocument()
+  })
+
   it('link esqueci minha senha', async () => {
     server.use(semSessao)
 

@@ -53,8 +53,10 @@ def enviar_email_redefinicao(email: str, username: str, token: str) -> None:
         )
     except MailError:
         logger.error("Falha ao enviar o e-mail de redefinição de senha.")
-    except Exception:
-        logger.error("Erro inesperado ao enviar o e-mail de redefinição de senha.")
+    except Exception as exc:
+        logger.error(
+            "Erro inesperado ao enviar o e-mail de redefinição de senha (%s).", type(exc).__name__
+        )
 
 
 @router.post("/forgot", response_model=MensagemResponse)
@@ -116,9 +118,9 @@ def _processar_pedido(
             ctx, "usuario", usuario["id"], "solicitar_redefinicao_senha", depois={"canal": "email"}
         )
         enviar_email_redefinicao(usuario["email"], usuario["username"], token)
-    except Exception:
-        # Mensagem fixa: nada de usuário, e-mail ou token no log.
-        logger.error("Falha ao processar o pedido de redefinição de senha.")
+    except Exception as exc:
+        # Só o tipo do erro: nada de usuário, e-mail ou token no log.
+        logger.error("Falha ao processar o pedido de redefinição de senha (%s).", type(exc).__name__)
 
 
 @router.post("/reset", response_model=MensagemResponse)

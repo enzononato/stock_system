@@ -2,6 +2,8 @@
 
 Guarda o segredo já cifrado e só o SHA-256 dos códigos. Datas em UTC, passadas pelo Python.
 """
+import threading
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
 from app.db.database_mysql import get_cursor
@@ -12,9 +14,45 @@ def _agora_utc() -> datetime:
 
 
 class MfaDBManager:
+    """Os métodos usam, por padrão, um cursor próprio (commit por chamada). Dentro de
+    `transacao_do_usuario` todos passam a usar o MESMO cursor/transação da thread, com a
+    linha do usuário travada (`SELECT ... FOR UPDATE`)."""
+
+    def __init__(self) -> None:
+        self._tls = threading.local()
+
+    @contextmanager
+    def _cursor(self, dict_cursor: bool = True, commit: bool = True):
+        atual = getattr(self._tls, "cur", None)
+        if atual is not None:
+            yield atual  # dentro da transação do usuário: commit/rollback é de quem a abriu
+        else:
+            with get_cursor(dict_cursor=dict_cursor, commit=commit) as cur:
+                yield cur
+
+    def cursor_atual(self):
+        """Cursor da transação do usuário em curso nesta thread, ou None (para `audit.record(cur=...)`)."""
+        return getattr(self._tls, "cur", None)
+
+    @contextmanager
+    def transacao_do_usuario(self, usuario_id: int):
+        """Uma transação só, com a linha do usuário travada do início ao fim.
+
+        Serializa a 2ª etapa do login do usuário (checar bloqueio, verificar o código,
+        registrar a falha ou o sucesso) entre threads e workers: contagens enxergam as falhas
+        já confirmadas e dois pedidos simultâneos não se sobrepõem. Commit ao sair sem
+        exceção; rollback se levantar. Usa um único cursor (uma conexão do pool) para não
+        esgotar o pool com várias conexões por pedido."""
+        with get_cursor() as cur:
+            cur.execute("SELECT id FROM usuarios WHERE id = %s FOR UPDATE", (usuario_id,))
+            self._tls.cur = cur
+            try:
+                yield cur
+            finally:
+                self._tls.cur = None
     def estado(self, usuario_id: int) -> dict | None:
         """`totp_secret_cifrado`, `totp_ativo` e `totp_ultimo_passo` do usuário."""
-        with get_cursor(commit=False) as cur:
+        with self._cursor(commit=False) as cur:
             cur.execute(
                 "SELECT totp_secret_cifrado, totp_ativo, totp_ultimo_passo FROM usuarios WHERE id = %s",
                 (usuario_id,),
@@ -27,7 +65,7 @@ class MfaDBManager:
         Só vale enquanto o 2FA NÃO está ativo (`WHERE totp_ativo = 0`, na própria
         UPDATE): um "iniciar" que chega depois da ativação não derruba o 2FA ativo.
         Devolve False se nada foi gravado (já ativo ou usuário inexistente)."""
-        with get_cursor(dict_cursor=False) as cur:
+        with self._cursor(dict_cursor=False) as cur:
             cur.execute(
                 "UPDATE usuarios SET totp_secret_cifrado = %s, totp_ultimo_passo = NULL "
                 "WHERE id = %s AND totp_ativo = 0",
@@ -52,7 +90,7 @@ class MfaDBManager:
         ativa EXATAMENTE o segredo cujo código foi verificado (um "iniciar" concorrente
         que trocou o segredo no meio faz a ativação falhar). Devolve False se não ativou;
         nesse caso os códigos não são tocados."""
-        with get_cursor(dict_cursor=False) as cur:
+        with self._cursor(dict_cursor=False) as cur:
             sql = "UPDATE usuarios SET totp_ativo = 1, totp_ultimo_passo = %s WHERE id = %s AND totp_ativo = 0"
             params: list = [passo, usuario_id]
             if segredo_cifrado is not None:
@@ -67,15 +105,19 @@ class MfaDBManager:
     # ── Falhas da 2ª etapa do login (limite por token e por usuário) ────────────
 
     def bloqueado_ate(self, usuario_id: int) -> datetime | None:
-        with get_cursor(commit=False) as cur:
+        with self._cursor(commit=False) as cur:
             cur.execute("SELECT mfa_bloqueado_ate FROM usuarios WHERE id = %s", (usuario_id,))
             linha = cur.fetchone()
         return linha["mfa_bloqueado_ate"] if linha else None
 
     def registrar_falha(self, usuario_id: int, jti: str, agora: datetime, janela_inicio: datetime) -> tuple[int, int]:
         """Grava uma falha e devolve (falhas deste token, falhas do usuário desde `janela_inicio`).
-        Também descarta falhas com mais de um dia."""
-        with get_cursor() as cur:
+
+        Trava a linha do usuário primeiro (`FOR UPDATE`): as falhas de um usuário se serializam
+        e as contagens veem as linhas já confirmadas. Só descarta falhas ANTIGAS DESTE usuário
+        (nunca varre a tabela toda dentro desta transação)."""
+        with self._cursor() as cur:
+            cur.execute("SELECT id FROM usuarios WHERE id = %s FOR UPDATE", (usuario_id,))
             cur.execute(
                 "INSERT INTO mfa_falhas (usuario_id, jti, criado_em) VALUES (%s, %s, %s)",
                 (usuario_id, jti, agora),
@@ -87,27 +129,30 @@ class MfaDBManager:
                 (usuario_id, janela_inicio),
             )
             do_usuario = cur.fetchone()["n"]
-            cur.execute("DELETE FROM mfa_falhas WHERE criado_em < %s", (agora - timedelta(days=1),))
+            cur.execute(
+                "DELETE FROM mfa_falhas WHERE usuario_id = %s AND criado_em < %s",
+                (usuario_id, agora - timedelta(days=1)),
+            )
         return do_token, do_usuario
 
     def bloquear(self, usuario_id: int, ate: datetime) -> None:
-        with get_cursor(dict_cursor=False) as cur:
+        with self._cursor(dict_cursor=False) as cur:
             cur.execute("UPDATE usuarios SET mfa_bloqueado_ate = %s WHERE id = %s", (ate, usuario_id))
 
     def limpar_falhas(self, usuario_id: int) -> None:
         """Sucesso na 2ª etapa: zera o contador e o bloqueio do usuário."""
-        with get_cursor(dict_cursor=False) as cur:
+        with self._cursor(dict_cursor=False) as cur:
             cur.execute("DELETE FROM mfa_falhas WHERE usuario_id = %s", (usuario_id,))
             cur.execute("UPDATE usuarios SET mfa_bloqueado_ate = NULL WHERE id = %s", (usuario_id,))
 
     def substituir_codigos(self, usuario_id: int, hashes: list[str]) -> None:
         """Troca todos os códigos de recuperação (os antigos deixam de valer)."""
-        with get_cursor(dict_cursor=False) as cur:
+        with self._cursor(dict_cursor=False) as cur:
             self._trocar_codigos(cur, usuario_id, hashes)
 
     def desativar(self, usuario_id: int) -> None:
         """Desliga o 2FA: apaga o segredo, o último passo e os códigos. Não mexe em `sessao_versao`."""
-        with get_cursor(dict_cursor=False) as cur:
+        with self._cursor(dict_cursor=False) as cur:
             self._desligar(cur, usuario_id)
 
     def _desligar(self, cur, usuario_id: int) -> None:
@@ -121,13 +166,13 @@ class MfaDBManager:
 
     def zerar(self, usuario_id: int) -> None:
         """Como `desativar`, mais `sessao_versao + 1` (encerra as sessões do usuário), numa transação."""
-        with get_cursor(dict_cursor=False) as cur:
+        with self._cursor(dict_cursor=False) as cur:
             self._desligar(cur, usuario_id)
             cur.execute("UPDATE usuarios SET sessao_versao = sessao_versao + 1 WHERE id = %s", (usuario_id,))
 
     def registrar_passo(self, usuario_id: int, passo: int) -> bool:
         """Anti-replay: grava o passo só se for maior que o último aceito. False se já usado."""
-        with get_cursor(dict_cursor=False) as cur:
+        with self._cursor(dict_cursor=False) as cur:
             cur.execute(
                 "UPDATE usuarios SET totp_ultimo_passo = %s "
                 "WHERE id = %s AND (totp_ultimo_passo IS NULL OR totp_ultimo_passo < %s)",
@@ -137,7 +182,7 @@ class MfaDBManager:
 
     def consumir_codigo(self, usuario_id: int, code_hash: str) -> bool:
         """Marca o código como usado; False se não existe ou já foi usado (atômico)."""
-        with get_cursor(dict_cursor=False) as cur:
+        with self._cursor(dict_cursor=False) as cur:
             cur.execute(
                 "UPDATE mfa_recovery_codes SET usado_em = %s "
                 "WHERE usuario_id = %s AND code_hash = %s AND usado_em IS NULL",
@@ -146,7 +191,7 @@ class MfaDBManager:
             return cur.rowcount == 1
 
     def contar_codigos_restantes(self, usuario_id: int) -> int:
-        with get_cursor(commit=False) as cur:
+        with self._cursor(commit=False) as cur:
             cur.execute(
                 "SELECT COUNT(*) AS total FROM mfa_recovery_codes WHERE usuario_id = %s AND usado_em IS NULL",
                 (usuario_id,),

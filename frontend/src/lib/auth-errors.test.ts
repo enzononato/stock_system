@@ -32,3 +32,10 @@ describe('mensagemErroAuth', () => {
     expect(mensagemErroAuth({}, 'Usuário ou senha inválidos.')).toBe('Usuário ou senha inválidos.')
   })
 })
+
+describe('mensagemErroAuth — 429 com detail', () => {
+  it('429 com detail (bloqueio da 2ª etapa) mostra o detail do servidor', () => {
+    const detail = 'Verificação em duas etapas bloqueada por excesso de tentativas. Tente novamente em 15 minutos.'
+    expect(mensagemErroAuth(erroHttp(429, { detail }), 'Falhou.')).toBe(detail)
+  })
+})

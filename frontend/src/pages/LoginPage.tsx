@@ -9,7 +9,7 @@ import { toast } from '@/components/ui/toast'
 import AuthShell from '@/components/auth/AuthShell'
 import { CadastroAutenticador } from '@/components/auth/CadastroAutenticador'
 import { CodigosRecuperacao } from '@/components/auth/CodigosRecuperacao'
-import { mensagemErroAuth } from '@/lib/auth-errors'
+import { mensagemErroAuth, mensagemEtapaEncerrada } from '@/lib/auth-errors'
 import { Eye, EyeOff, Lock, User, KeyRound } from 'lucide-react'
 
 type Etapa =
@@ -55,9 +55,12 @@ export default function LoginPage() {
   const { login, concluirLogin, avisoLogin, limparAviso } = useAuth()
   const navigate = useNavigate()
   const accessTokenDoCadastro = useRef('')
+  // Aviso desta tela (ex.: a 2ª etapa foi encerrada por excesso de tentativas).
+  const [avisoLocal, setAvisoLocal] = useState<string | null>(null)
 
-  function voltarParaSenha() {
+  function voltarParaSenha(aviso: string | null = null) {
     setPassword('')
+    setAvisoLocal(aviso)
     setEtapa({ tipo: 'senha' })
   }
 
@@ -67,13 +70,14 @@ export default function LoginPage() {
     <AuthShell titulo={cabecalho.titulo} descricao={cabecalho.descricao}>
       {etapa.tipo === 'senha' && (
         <SenhaEtapa
-          aviso={avisoLogin}
+          aviso={avisoLocal ?? avisoLogin}
           username={username}
           password={password}
           onUsername={setUsername}
           onPassword={setPassword}
           onEntrar={async () => {
             limparAviso()
+            setAvisoLocal(null)
             const resposta = await login(username, password)
             if (resposta.etapa === 'ok') {
               navigate('/', { replace: true })
@@ -90,9 +94,19 @@ export default function LoginPage() {
 
       {etapa.tipo === 'mfa' && (
         <MfaEtapa
-          onVoltar={voltarParaSenha}
+          onVoltar={() => voltarParaSenha()}
           onVerificar={async (codigo) => {
-            const resposta = await verificarMfa(etapa.mfaToken, codigo)
+            let resposta
+            try {
+              resposta = await verificarMfa(etapa.mfaToken, codigo)
+            } catch (err) {
+              // Token esgotado (5 códigos errados) ou expirado: não adianta tentar de novo nesta
+              // tela; volta à senha e explica.
+              const encerrada = mensagemEtapaEncerrada(err)
+              if (!encerrada) throw err
+              voltarParaSenha(encerrada)
+              return
+            }
             if (!resposta.access_token) throw new Error('Resposta de verificação sem token.')
             await concluirLogin(resposta.access_token)
             const restantes = resposta.codigos_recuperacao_restantes

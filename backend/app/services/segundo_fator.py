@@ -95,6 +95,7 @@ def verificar_segundo_fator(db: MfaDBManager, usuario: dict, codigo: str, ctx: A
     audit.record(
         ctx, "usuario", usuario_id, "usar_codigo_recuperacao",
         depois={"codigos_restantes": restantes},
+        cur=db.cursor_atual(),  # na transação do usuário, quando houver (não ocupa outra conexão)
     )
     return restantes
 
@@ -126,6 +127,7 @@ def registrar_falha_segundo_fator(db: MfaDBManager, usuario: dict, jti: str, ctx
     audit.record(
         ctx, "usuario", usuario["id"], "falha_2fa",
         depois={"falhas_no_token": do_token, "falhas_em_15_min": do_usuario},
+        cur=db.cursor_atual(),
     )
     if do_usuario >= MAX_FALHAS_POR_USUARIO:
         db.bloquear(usuario["id"], agora + DURACAO_BLOQUEIO)

@@ -219,3 +219,110 @@ def test_iniciar_pelo_perfil_com_2fa_ativo_continua_ativo(
     resp = c.post("/api/perfil/2fa/iniciar", json={"senha": senha_padrao_teste})
     assert resp.status_code == 409
     assert _linhas("SELECT totp_ativo FROM usuarios WHERE id = %s", (usuario["id"],))[0]["totp_ativo"] == 1
+
+
+# ── Concorrência (rodada 2) ─────────────────────────────────────────────────
+
+def _em_paralelo(funcoes):
+    """Roda as funções ao mesmo tempo (largada sincronizada) e devolve os resultados em ordem."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    largada = threading.Barrier(len(funcoes))
+
+    def _rodar(f):
+        largada.wait()
+        return f()
+
+    with ThreadPoolExecutor(max_workers=len(funcoes)) as ex:
+        return list(ex.map(_rodar, funcoes))
+
+
+def test_10_codigos_errados_simultaneos_sao_todos_contados(_fastapi_app, client, tecnico_2fa):
+    from fastapi.testclient import TestClient
+
+    usuario, dados = tecnico_2fa
+    errado = _errado(dados.segredo)
+    mfa_token = _novo_token(client)
+
+    def tentar():
+        return TestClient(_fastapi_app).post(
+            "/api/auth/mfa/verificar", json={"mfa_token": mfa_token, "codigo": errado}
+        )
+
+    respostas = _em_paralelo([tentar] * 10)
+
+    assert all(r.status_code in (400, 429) for r in respostas), [r.status_code for r in respostas]
+    detalhes = [r.json()["detail"] for r in respostas]
+    assert detalhes.count("Código inválido.") == 4
+    assert detalhes.count(MSG_TOKEN_ESGOTADO) == 5
+    assert detalhes.count(MSG_BLOQUEADO) == 1
+    # Todas as falhas foram gravadas e auditadas (nenhuma perdida por deadlock).
+    assert len(_linhas("SELECT 1 FROM mfa_falhas WHERE usuario_id = %s", (usuario["id"],))) == 10
+    assert len(linhas_auditoria("usuario", "falha_2fa")) == 10
+    # Token revogado, e o usuário ficou bloqueado.
+    assert _verificar(client, mfa_token, codigo_totp(dados.segredo)).json()["detail"] == MSG_ETAPA_EXPIRADA
+    bloqueio = _linhas("SELECT mfa_bloqueado_ate FROM usuarios WHERE id = %s", (usuario["id"],))[0]
+    assert bloqueio["mfa_bloqueado_ate"] is not None
+    novo = _verificar(client, _novo_token(client), codigo_totp(dados.segredo))
+    assert novo.status_code == 429
+
+
+def test_falhas_simultaneas_de_usuarios_diferentes_sao_ambas_gravadas(
+    _fastapi_app, client, tecnico_2fa, ativar_2fa_direto, criar_usuario, senha_padrao_teste
+):
+    from fastapi.testclient import TestClient
+
+    _, dados_a = tecnico_2fa
+    outro = criar_usuario("outro.tec", senha_padrao_teste, "Técnico")
+    dados_b = ativar_2fa_direto(outro["id"])
+
+    for _rodada in range(4):
+        tokens = {"tecnico.teste": _novo_token(client), "outro.tec": _novo_token(client, "outro.tec")}
+        erros = {"tecnico.teste": _errado(dados_a.segredo), "outro.tec": _errado(dados_b.segredo)}
+
+        def tentar(nome):
+            return lambda: TestClient(_fastapi_app).post(
+                "/api/auth/mfa/verificar", json={"mfa_token": tokens[nome], "codigo": erros[nome]}
+            )
+
+        antes = len(_linhas("SELECT 1 FROM mfa_falhas"))
+        respostas = _em_paralelo([tentar("tecnico.teste"), tentar("outro.tec")])
+        assert [r.status_code for r in respostas] == [400, 400]
+        assert len(_linhas("SELECT 1 FROM mfa_falhas")) == antes + 2
+
+
+def test_registrar_falha_concorrente_nao_da_deadlock(tecnico_2fa, usuario_aprendiz):
+    """No nível do banco: 10 falhas do mesmo usuário + 1 de outro, todas ao mesmo tempo."""
+    from app.db.mfa_db import MfaDBManager
+
+    usuario, _ = tecnico_2fa
+    db = MfaDBManager()
+    agora = datetime.now(timezone.utc).replace(tzinfo=None)
+    janela = agora - timedelta(minutes=15)
+
+    funcoes = [lambda: db.registrar_falha(usuario["id"], "jti-x", agora, janela) for _ in range(10)]
+    funcoes.append(lambda: db.registrar_falha(usuario_aprendiz["id"], "jti-y", agora, janela))
+    resultados = _em_paralelo(funcoes)
+
+    do_usuario = sorted(r[1] for r in resultados[:10])
+    assert do_usuario == list(range(1, 11))  # serializadas: cada uma viu as anteriores
+    assert resultados[10] == (1, 1)
+    assert len(_linhas("SELECT 1 FROM mfa_falhas")) == 11
+
+
+def test_deadlock_na_verificacao_vira_409_nunca_500(client, tecnico_2fa, monkeypatch):
+    import pymysql
+
+    from app.db.mfa_db import MfaDBManager
+
+    _, dados = tecnico_2fa
+    mfa_token = _novo_token(client)
+
+    def _estoura(self, *a, **k):
+        raise pymysql.err.OperationalError(1213, "Deadlock found when trying to get lock")
+
+    monkeypatch.setattr(MfaDBManager, "registrar_passo", _estoura)
+    resp = _verificar(client, mfa_token, codigo_totp(dados.segredo))
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "Não foi possível verificar agora. Tente novamente."

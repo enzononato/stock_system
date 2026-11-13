@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from typing import Optional
 
+import pymysql
 from fastapi import APIRouter, HTTPException, Response, Cookie, status, Depends, Request
 
 from app.schemas.auth import (
@@ -158,21 +159,38 @@ def verificar_mfa(
 ):
     payload, usuario = _decodificar_mfa(body.mfa_token, "verificar", token_db, user_db)
     ctx = contexto_auditoria_de(usuario, request)
+    erro: Optional[MfaErro] = None
+    revogar_token = False
+    restantes = None
     try:
-        exigir_verificacao_liberada(mfa_db, usuario)
-        restantes = verificar_segundo_fator(mfa_db, usuario, body.codigo, ctx)
-    except CodigoInvalido as exc:
-        # Código errado: conta a falha. 5 no mesmo token o revogam; 10 do usuário em
-        # 15 min bloqueiam a 2ª etapa por 15 min (contadores no banco, valem entre workers).
-        try:
-            registrar_falha_segundo_fator(mfa_db, usuario, payload["jti"], ctx)
-        except MfaErro as limite:
+        # Checar o bloqueio, verificar o código e registrar a falha/sucesso numa transação só,
+        # com a linha do usuário travada: pedidos simultâneos do mesmo usuário se serializam
+        # (nenhuma falha se perde nem é contada a menos), em qualquer worker.
+        with mfa_db.transacao_do_usuario(usuario["id"]):
+            try:
+                exigir_verificacao_liberada(mfa_db, usuario)
+                restantes = verificar_segundo_fator(mfa_db, usuario, body.codigo, ctx)
+                mfa_db.limpar_falhas(usuario["id"])
+            except CodigoInvalido as exc:
+                # Código errado: conta a falha. 5 no mesmo token o revogam; 10 do usuário em
+                # 15 min bloqueiam a 2ª etapa por 15 min (contadores no banco).
+                try:
+                    registrar_falha_segundo_fator(mfa_db, usuario, payload["jti"], ctx)
+                    erro = exc
+                except MfaErro as limite:
+                    erro, revogar_token = limite, True
+            except MfaErro as exc:
+                erro = exc
+    except pymysql.MySQLError as exc:
+        if exc.args and exc.args[0] in (1205, 1213):  # espera de trava / deadlock: nunca 500
+            raise HTTPException(
+                status_code=409, detail="Não foi possível verificar agora. Tente novamente."
+            )
+        raise
+    if erro is not None:
+        if revogar_token:
             _revogar_mfa(payload, token_db)
-            raise _erro_mfa(limite)
-        raise _erro_mfa(exc)
-    except MfaErro as exc:
-        raise _erro_mfa(exc)
-    mfa_db.limpar_falhas(usuario["id"])
+        raise _erro_mfa(erro)
     _revogar_mfa(payload, token_db)
     return _emitir_sessao(response, usuario, codigos_recuperacao_restantes=restantes)
 
