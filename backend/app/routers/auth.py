@@ -3,8 +3,18 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Response, Cookie, status, Depends, Request
 
-from app.schemas.auth import LoginRequest, LoginResponse, MfaVerificarRequest, TokenResponse, UserMe
+from app.schemas.auth import (
+    CadastroTotpResponse,
+    LoginRequest,
+    LoginResponse,
+    MfaConfirmarRequest,
+    MfaTokenRequest,
+    MfaVerificarRequest,
+    TokenResponse,
+    UserMe,
+)
 from app.core.security import (
+    MFA_CADASTRO_MINUTOS,
     MFA_VERIFICAR_MINUTOS,
     create_access_token,
     create_mfa_token,
@@ -15,7 +25,7 @@ from app.core.security import (
 from app.core.config import settings
 from app.db.user_manager_db import UserDBManager
 from app.db.token_db import TokenDBManager
-from app.services.sessao import dados_do_token, validar_sessao_ativa
+from app.services.sessao import dados_do_token, exige_cadastro_2fa, validar_sessao_ativa
 from app.db.mfa_db import MfaDBManager
 from app.dependencies import (
     CurrentUser,
@@ -27,7 +37,7 @@ from app.dependencies import (
     limiter,
 )
 from app.services.mfa import MfaErro
-from app.services.segundo_fator import verificar_segundo_fator
+from app.services.segundo_fator import confirmar_cadastro, iniciar_cadastro, verificar_segundo_fator
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -109,10 +119,18 @@ def login(
 
     if user.get("totp_ativo"):
         # Senha certa, mas falta o código: nenhum cookie nem access token ainda.
+        # (Vale mesmo sem a chave TOTP no servidor: não há bypass para quem já tem 2FA.)
         return LoginResponse(
             etapa="mfa",
             mfa_token=create_mfa_token(dados_do_token(user), "verificar"),
             expira_em_segundos=MFA_VERIFICAR_MINUTOS * 60,
+        )
+    if exige_cadastro_2fa(user):
+        # Gestor sem autenticador: não recebe access nem refresh token antes de cadastrar.
+        return LoginResponse(
+            etapa="cadastro_2fa",
+            mfa_token=create_mfa_token(dados_do_token(user), "cadastrar"),
+            expira_em_segundos=MFA_CADASTRO_MINUTOS * 60,
         )
     return _emitir_sessao(response, user)
 
@@ -136,6 +154,42 @@ def verificar_mfa(
         raise _erro_mfa(exc)
     _revogar_mfa(payload, token_db)
     return _emitir_sessao(response, usuario, codigos_recuperacao_restantes=restantes)
+
+
+@router.post("/mfa/cadastro/iniciar", response_model=CadastroTotpResponse)
+def iniciar_cadastro_mfa(
+    body: MfaTokenRequest,
+    user_db: UserDBManager = Depends(get_user_db),
+    token_db: TokenDBManager = Depends(get_token_db),
+    mfa_db: MfaDBManager = Depends(get_mfa_db),
+):
+    """Gestor sem 2FA, durante o login: gera o segredo e o QR. Não gasta o token da etapa."""
+    _, usuario = _decodificar_mfa(body.mfa_token, "cadastrar", token_db, user_db)
+    try:
+        segredo, uri = iniciar_cadastro(mfa_db, usuario)
+    except MfaErro as exc:
+        raise _erro_mfa(exc)
+    return CadastroTotpResponse(segredo=segredo, otpauth_uri=uri)
+
+
+@router.post("/mfa/cadastro/confirmar", response_model=LoginResponse)
+@limiter.limit(settings.LOGIN_RATE_LIMIT)
+def confirmar_cadastro_mfa(
+    request: Request,
+    body: MfaConfirmarRequest,
+    response: Response,
+    user_db: UserDBManager = Depends(get_user_db),
+    token_db: TokenDBManager = Depends(get_token_db),
+    mfa_db: MfaDBManager = Depends(get_mfa_db),
+):
+    """Confirma o código, ativa o 2FA, abre a sessão e devolve os códigos de recuperação (uma vez)."""
+    payload, usuario = _decodificar_mfa(body.mfa_token, "cadastrar", token_db, user_db)
+    try:
+        codigos = confirmar_cadastro(mfa_db, usuario, body.codigo, contexto_auditoria_de(usuario, request))
+    except MfaErro as exc:
+        raise _erro_mfa(exc)
+    _revogar_mfa(payload, token_db)
+    return _emitir_sessao(response, usuario, codigos_recuperacao=codigos)
 
 
 @router.post("/refresh", response_model=TokenResponse)

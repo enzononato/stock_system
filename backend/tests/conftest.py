@@ -106,6 +106,7 @@ def pytest_configure(config):
     # mesmo que o backend/.env do desenvolvedor diga o contrário.
     os.environ["MAIL_BACKEND"] = "memory"
     os.environ["SCHEDULER_ENABLED"] = "false"
+    os.environ["TOTP_ENCRYPTION_KEY"] = ""
 
     host = (os.environ.get("TEST_DB_HOST") or "").strip()
     name = (os.environ.get("TEST_DB_NAME") or "").strip()

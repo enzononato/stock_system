@@ -47,6 +47,30 @@ class MfaDBManager:
             )
             self._trocar_codigos(cur, usuario_id, hashes)
 
+    def substituir_codigos(self, usuario_id: int, hashes: list[str]) -> None:
+        """Troca todos os códigos de recuperação (os antigos deixam de valer)."""
+        with get_cursor(dict_cursor=False) as cur:
+            self._trocar_codigos(cur, usuario_id, hashes)
+
+    def desativar(self, usuario_id: int) -> None:
+        """Desliga o 2FA: apaga o segredo, o último passo e os códigos. Não mexe em `sessao_versao`."""
+        with get_cursor(dict_cursor=False) as cur:
+            self._desligar(cur, usuario_id)
+
+    def _desligar(self, cur, usuario_id: int) -> None:
+        cur.execute(
+            "UPDATE usuarios SET totp_ativo = 0, totp_secret_cifrado = NULL, totp_ultimo_passo = NULL "
+            "WHERE id = %s",
+            (usuario_id,),
+        )
+        cur.execute("DELETE FROM mfa_recovery_codes WHERE usuario_id = %s", (usuario_id,))
+
+    def zerar(self, usuario_id: int) -> None:
+        """Como `desativar`, mais `sessao_versao + 1` (encerra as sessões do usuário), numa transação."""
+        with get_cursor(dict_cursor=False) as cur:
+            self._desligar(cur, usuario_id)
+            cur.execute("UPDATE usuarios SET sessao_versao = sessao_versao + 1 WHERE id = %s", (usuario_id,))
+
     def registrar_passo(self, usuario_id: int, passo: int) -> bool:
         """Anti-replay: grava o passo só se for maior que o último aceito. False se já usado."""
         with get_cursor(dict_cursor=False) as cur:

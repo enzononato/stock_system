@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.db.migrations import aplicar_pendentes, garantir_baseline
 from app.dependencies import limiter, get_inventory_db
 from app.services import scheduler
+from app.services.mfa import mfa_configurado
 from app.routers import auth, users, items, peripherals, loans, documents, history, reports, constants, unidades, audit, colaboradores, locais
 from app.routers import auth_senha
 
@@ -186,6 +187,16 @@ async def parar_agendador() -> None:
         await scheduler.parar()
     except Exception:
         logger.exception("Falha ao parar o agendador de tarefas.")
+
+
+@app.on_event("startup")
+def avisar_2fa_sem_chave() -> None:
+    """Avisa no boot que a verificação em duas etapas está desligada (sem chave TOTP válida)."""
+    if not mfa_configurado():
+        logger.warning(
+            "TOTP_ENCRYPTION_KEY ausente ou inválida: verificação em duas etapas desligada; "
+            "o Gestor entra só com a senha."
+        )
 
 
 @app.get("/api/health")

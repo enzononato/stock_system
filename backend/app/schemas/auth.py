@@ -48,3 +48,17 @@ class UserMe(BaseModel):
     id: int
     username: str
     role: str
+
+
+class MfaTokenRequest(BaseModel):
+    mfa_token: str
+
+
+class MfaConfirmarRequest(BaseModel):
+    mfa_token: str
+    codigo: str
+
+
+class CadastroTotpResponse(BaseModel):
+    segredo: str
+    otpauth_uri: str
