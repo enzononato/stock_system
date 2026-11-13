@@ -12,12 +12,14 @@ import {
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
+import { PageHeader } from '@/components/layout/PageHeader'
+import { StatusPill } from '@/components/ui/StatusPill'
 import { FileUpload } from '@/components/ui/FileUpload'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import { toast } from '@/components/ui/toast'
 import { getErrorMessage } from '@/lib/api-error'
+import { upper } from '@/lib/format'
 import { Link2, Unlink, RefreshCw } from 'lucide-react'
 
 // Tipos de equipamento que aceitam periféricos. Regra própria desta tela
@@ -38,15 +40,19 @@ function PeripheralCard({
   actionLabel,
   actionIcon,
   variant = 'default',
+  loading = false,
+  disabled = false,
 }: {
   peripheral: Peripheral
   action: () => void
   actionLabel: string
   actionIcon: React.ReactNode
   variant?: 'default' | 'destructive'
+  loading?: boolean
+  disabled?: boolean
 }) {
   return (
-    <div className="flex items-center justify-between border border-border rounded p-3 bg-surface hover:bg-surface-alt transition-colors">
+    <div className="flex flex-wrap items-center justify-between gap-2 border border-border rounded-md p-3 bg-surface hover:bg-surface-alt transition-colors">
       <div className="flex flex-col gap-0.5 min-w-0">
         <span className="text-body-sm font-medium text-foreground truncate">
           {peripheral.tipo} — {peripheral.brand || '—'} {peripheral.model || ''}
@@ -56,21 +62,17 @@ function PeripheralCard({
         </span>
       </div>
       <div className="flex items-center gap-3 shrink-0">
-        <Badge
-          variant={peripheral.status === 'Disponível' ? 'success' : peripheral.status === 'Em Uso' ? 'warning' : 'danger'}
-          showDot
-          className="text-[10px]"
-        >
-          {peripheral.status}
-        </Badge>
+        <StatusPill status={peripheral.status} />
         <Button
           size="sm"
           variant={variant === 'destructive' ? 'outline' : 'default'}
           onClick={action}
-          className={variant === 'destructive' ? 'text-destructive border-border hover:bg-surface-alt text-xs h-7' : 'text-xs h-7'}
+          loading={loading}
+          disabled={disabled}
+          className={variant === 'destructive' ? 'text-destructive border-border hover:bg-surface-alt' : undefined}
         >
-          {actionIcon}
-          <span className="ml-1">{actionLabel}</span>
+          {!loading && actionIcon}
+          {actionLabel}
         </Button>
       </div>
     </div>
@@ -191,25 +193,16 @@ export default function LinkPeripheralPage() {
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       {/* Cabeçalho */}
-      <div className="border-b border-border pb-4">
-        <div className="flex items-center gap-2">
-          <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
-            Ativos de Suporte
-          </span>
-          <span className="text-muted-foreground">•</span>
-          <span className="text-caption text-foreground font-medium">Vínculo de Periféricos</span>
-        </div>
-        <h1 className="text-heading-lg font-semibold tracking-tight text-foreground mt-0.5">
-          Vincular Periféricos
-        </h1>
-        <p className="text-body-sm text-muted-foreground mt-1">
-          Associe periféricos a equipamentos como desktops, notebooks, switches e impressoras.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Ativos de Suporte"
+        eyebrowDetail="Vínculo de Periféricos"
+        title="Vincular Periféricos"
+        description="Associe periféricos a equipamentos como desktops, notebooks, switches e impressoras."
+      />
 
       {/* Seletor de equipamento */}
-      <div className="rounded border border-border bg-surface p-5 space-y-3">
-        <Label className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
+      <div className="rounded-md border border-border bg-surface p-5 space-y-3">
+        <Label className="text-caption font-semibold uppercase tracking-wider text-brand-text">
           Selecione o Equipamento Principal
         </Label>
         <div className="max-w-xl">
@@ -219,7 +212,7 @@ export default function LinkPeripheralPage() {
             options={selectableItems.map((i) => ({
               value: String(i.id),
               label: `#${i.id} — ${i.tipo} ${i.brand || ''} ${i.model || ''}`.trim(),
-              subtitle: [i.revenda, i.identificador].filter(Boolean).join(' • '),
+              subtitle: [upper(i.revenda), i.identificador].filter(Boolean).join(' • '),
             }))}
             value={selectedItemId}
             onValueChange={handleSelectItem}
@@ -232,11 +225,11 @@ export default function LinkPeripheralPage() {
         {selectedItem && (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-caption text-muted-foreground pt-1">
             <span>
-              Status: <strong className="text-foreground">{selectedItem.status || '—'}</strong>
+              Status: <StatusPill status={selectedItem.status} />
             </span>
             <span aria-hidden="true">•</span>
             <span>
-              Unidade: <strong className="text-foreground">{selectedItem.revenda || '—'}</strong>
+              Unidade: <strong className="text-foreground">{upper(selectedItem.revenda) || '—'}</strong>
             </span>
             {selectedItem.assigned_to && (
               <>
@@ -253,10 +246,10 @@ export default function LinkPeripheralPage() {
       {selectedItemId && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Periféricos vinculados */}
-          <div className="rounded border border-border bg-surface p-5 space-y-4">
+          <div className="rounded-md border border-border bg-surface p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <div>
-                <h2 className="text-body font-semibold text-foreground">
+                <h2 className="text-body font-semibold text-brand-text">
                   Periféricos Vinculados ({linkedPeripherals.length})
                 </h2>
                 <p className="text-caption text-muted-foreground">Componentes conectados a este ativo.</p>
@@ -282,8 +275,10 @@ export default function LinkPeripheralPage() {
                       peripheral={p}
                       action={() => unlinkMutation.mutate(p.link_id!)}
                       actionLabel="Desvincular"
-                      actionIcon={<Unlink className="size-3" />}
+                      actionIcon={<Unlink />}
                       variant="destructive"
+                      loading={unlinkMutation.isPending && unlinkMutation.variables === p.link_id}
+                      disabled={unlinkMutation.isPending || linkMutation.isPending}
                     />
                     <button
                       className="text-xs text-muted-foreground hover:text-foreground hover:underline text-left ml-1 cursor-pointer"
@@ -301,9 +296,9 @@ export default function LinkPeripheralPage() {
           </div>
 
           {/* Periféricos disponíveis */}
-          <div className="rounded border border-border bg-surface p-5 space-y-4">
+          <div className="rounded-md border border-border bg-surface p-5 space-y-4">
             <div className="border-b border-border pb-3">
-              <h2 className="text-body font-semibold text-foreground">
+              <h2 className="text-body font-semibold text-brand-text">
                 Periféricos Disponíveis ({availablePeripherals.length})
               </h2>
               <p className="text-caption text-muted-foreground">Itens em estoque livres para vinculação.</p>
@@ -319,7 +314,9 @@ export default function LinkPeripheralPage() {
                     peripheral={p}
                     action={() => linkMutation.mutate(p.id)}
                     actionLabel="Vincular"
-                    actionIcon={<Link2 className="size-3" />}
+                    actionIcon={<Link2 />}
+                    loading={linkMutation.isPending && linkMutation.variables === p.id}
+                    disabled={unlinkMutation.isPending || linkMutation.isPending}
                   />
                 ))}
               </div>
@@ -330,9 +327,9 @@ export default function LinkPeripheralPage() {
 
       {/* Painel de substituição */}
       {replacingLinkId && replacingOldId && (
-        <div className="rounded border border-border bg-surface-alt p-6 space-y-4">
+        <div className="rounded-md border border-border bg-surface p-5 space-y-4">
           <div className="border-b border-border pb-2">
-            <h3 className="text-body-lg font-semibold text-foreground">
+            <h3 className="text-body-lg font-semibold text-brand-text">
               Substituição de Periférico #{replacingOldId}
             </h3>
             <p className="text-caption text-muted-foreground">
@@ -388,10 +385,11 @@ export default function LinkPeripheralPage() {
             </Button>
             <Button
               size="sm"
-              disabled={!replaceNewId || !replaceReason || replaceMutation.isPending}
+              disabled={!replaceNewId || !replaceReason}
+              loading={replaceMutation.isPending}
               onClick={() => replaceMutation.mutate()}
             >
-              {replaceMutation.isPending ? 'Substituindo…' : 'Confirmar Substituição'}
+              Confirmar Substituição
             </Button>
           </div>
         </div>
