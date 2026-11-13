@@ -446,3 +446,24 @@ class LinhaDBManager:
                 params,
             )
             return cur.fetchall()
+
+    def relatorio_custo(self) -> dict:
+        """Custo mensal por unidade, só linhas ativas (a F7 usa este método no painel)."""
+        with get_cursor(commit=False) as cur:
+            cur.execute(
+                "SELECT u.id AS unidade_id, u.nome AS unidade_nome, COUNT(*) AS quantidade, "
+                "SUM(l.custo_mensal) AS custo_total "
+                "FROM linhas l JOIN unidades u ON u.id = l.unidade_id "
+                "WHERE l.status = 'ativa' GROUP BY u.id, u.nome ORDER BY u.nome"
+            )
+            unidades = cur.fetchall()
+        custo_total = Decimal("0.00")
+        for unidade in unidades:
+            custo_total += unidade["custo_total"]
+        return {
+            "unidades": unidades,
+            "total_linhas": sum(u["quantidade"] for u in unidades),
+            "custo_total": custo_total,
+            "gerado_em": datetime.now(),
+        }
+

@@ -24,8 +24,10 @@ from app.schemas.linhas import (
     LinhaResponse,
     LinhaStatusChange,
     LinhaUpdate,
+    RelatorioCusto,
 )
 from app.services.audit import AuditContext
+from app.services.exports import Coluna, gerar_excel, gerar_pdf, resposta_arquivo
 
 router = APIRouter(prefix="/api/linhas", tags=["linhas"])
 
@@ -75,6 +77,45 @@ def listar_aparelhos(
     db: LinhaDBManager = Depends(get_linha_db),
 ):
     return db.aparelhos(busca=busca, linha_id=linha_id, limit=limit)
+
+
+@router.get("/relatorio/custo", response_model=RelatorioCusto)
+def relatorio_de_custo(
+    _: CurrentUser = Depends(gestor_or_tecnico),
+    db: LinhaDBManager = Depends(get_linha_db),
+):
+    return db.relatorio_custo()
+
+
+@router.get("/relatorio/custo/export")
+def exportar_relatorio_de_custo(
+    formato: str = "xlsx",
+    _: CurrentUser = Depends(gestor_or_tecnico),
+    db: LinhaDBManager = Depends(get_linha_db),
+):
+    if formato not in ("xlsx", "pdf"):
+        raise HTTPException(status_code=422, detail="Formato inválido: use xlsx ou pdf.")
+    relatorio = db.relatorio_custo()
+    colunas = [
+        Coluna("unidade_nome", "Unidade", largura=30, maiusculas=True),
+        Coluna("quantidade", "Linhas ativas", largura=14, tipo="numero"),
+        Coluna("custo_total", "Custo mensal", largura=18, tipo="moeda"),
+    ]
+    linhas = [
+        *relatorio["unidades"],
+        {
+            "unidade_nome": "Total",
+            "quantidade": relatorio["total_linhas"],
+            "custo_total": relatorio["custo_total"],
+        },
+    ]
+    titulo = "Custo mensal de linhas por unidade"
+    filtros = {"Status": "Somente linhas ativas"}
+    if formato == "pdf":
+        conteudo = gerar_pdf(titulo, colunas, linhas, filtros, paisagem=False)
+    else:
+        conteudo = gerar_excel(titulo, colunas, linhas, filtros)
+    return resposta_arquivo(conteudo, "custo_linhas", formato)
 
 
 @router.get("/eventos", response_model=list[LinhaEventoResponse])
