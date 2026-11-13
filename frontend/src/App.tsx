@@ -3,6 +3,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import AppLayout from '@/components/layout/AppLayout'
 import { RestrictedAccess } from '@/components/layout/RestrictedAccess'
 import LoginPage from '@/pages/LoginPage'
+import EsqueciSenhaPage from '@/pages/EsqueciSenhaPage'
+import RedefinirSenhaPage from '@/pages/RedefinirSenhaPage'
 import DashboardPage from '@/pages/DashboardPage'
 import StockPage from '@/pages/StockPage'
 import ItemDetailPage from '@/pages/ItemDetailPage'
@@ -44,6 +46,8 @@ export default function App() {
     <>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/esqueci-senha" element={<EsqueciSenhaPage />} />
+        <Route path="/redefinir-senha" element={<RedefinirSenhaPage />} />
 
         {/* Todas as rotas protegidas dentro do AppLayout */}
         <Route element={<AppLayout />}>
