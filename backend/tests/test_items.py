@@ -239,3 +239,26 @@ class TestRemoverItem:
         resp = client_gestor.request("DELETE", "/api/items/999999", data={"reason": "Perda"})
         assert resp.status_code == 404
         assert resp.json()["detail"] == "Item não encontrado."
+
+
+class TestCpfDoResponsavelPorPapel:
+    """O CPF de quem está com o equipamento só vai inteiro para Gestor e Técnico; o
+    Jovem Aprendiz recebe o CPF mascarado (`***.222.333-**`)."""
+
+    def test_lista_e_detalhe_mascaram_cpf_para_jovem_aprendiz(
+        self, client_gestor, client_tecnico, client_aprendiz, item_pendente
+    ):
+        item_id = item_pendente["id"]
+        for cliente in (client_gestor, client_tecnico):
+            assert cliente.get(f"/api/items/{item_id}").json()["cpf"] == "11122233344"
+            assert cliente.get("/api/items").json()["items"][0]["cpf"] == "11122233344"
+
+        detalhe = client_aprendiz.get(f"/api/items/{item_id}").json()
+        assert detalhe["cpf"] == "***.222.333-**"
+        assert detalhe["assigned_to"] == "Fulano de Tal"
+        lista = client_aprendiz.get("/api/items").json()["items"]
+        assert [i["cpf"] for i in lista] == ["***.222.333-**"]
+
+    def test_item_sem_responsavel_continua_sem_cpf(self, client_aprendiz, item_disponivel):
+        assert client_aprendiz.get(f"/api/items/{item_disponivel['id']}").json()["cpf"] is None
+        assert client_aprendiz.get("/api/items").json()["items"][0]["cpf"] is None

@@ -20,7 +20,7 @@ from app.dependencies import (
 )
 from app.services import audit
 from app.services.linha_do_tempo import item_existe, montar_linha_do_tempo
-from app.services.audit import AuditContext
+from app.services.audit import AuditContext, mascarar_cpf
 from app.core.storage import storage
 from app.core.config import settings
 
@@ -49,7 +49,7 @@ def list_items(
     direcao: str = Query(default="desc", alias="dir"),
     limit: int = Query(default=settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_PAGE_SIZE),
     offset: int = Query(default=0, ge=0),
-    _: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(get_current_user),
     inv: InventoryDBManager = Depends(get_inventory_db),
 ):
     # T10: os filtros são repassados para a camada de dados (SQL), em vez de
@@ -62,19 +62,27 @@ def list_items(
         tipo=tipo, status=status, revenda=revenda, search=search,
         colaborador_id=colaborador_id, sort=sort, direcao=direcao, limit=limit, offset=offset,
     )
-    return {"items": items, "total": total}
+    return {"items": [_cpf_visivel(i, user) for i in items], "total": total}
+
+
+def _cpf_visivel(item: dict, user: CurrentUser) -> dict:
+    """Gestor e Técnico veem o CPF de quem está com o equipamento; os demais papéis
+    (Jovem Aprendiz) recebem o CPF mascarado (`***.456.789-**`)."""
+    if user.role in ("Gestor", "Técnico") or not item.get("cpf"):
+        return item
+    return {**item, "cpf": mascarar_cpf(item["cpf"])}
 
 
 @router.get("/{item_id}", response_model=ItemResponse)
 def get_item(
     item_id: int,
-    _: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(get_current_user),
     inv: InventoryDBManager = Depends(get_inventory_db),
 ):
     item = inv.get_item(item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Item não encontrado.")
-    return item
+    return _cpf_visivel(item, user)
 
 
 @router.get("/{item_id}/linha-do-tempo", response_model=LinhaDoTempoResponse)
