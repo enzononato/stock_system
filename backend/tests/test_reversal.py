@@ -332,6 +332,96 @@ class TestEstornoConfereSituacaoAtual:
         assert inv_manager.find(item_id)["status"] == "Disponível"
 
 
+def _ids(inv_manager, item_id, operation):
+    """Ids dos lançamentos vivos de `operation` do item, do mais antigo ao mais novo."""
+    linhas, _ = inv_manager.list_history(item_id=item_id)
+    return sorted(h["id"] for h in linhas if h["operation"] == operation)
+
+
+def _emprestar(inv_manager, item_id, nome, cpf):
+    from datetime import datetime
+
+    ok, msg = inv_manager.issue(
+        item_id, nome, cpf, "101 - Puxada", "Analista", "TI", "Revalle Juazeiro",
+        datetime.now().strftime("%d/%m/%Y"), "teste",
+    )
+    assert ok, msg
+
+
+class TestEstornoDeLancamentoSuperado:
+    """Um lançamento antigo não é estornável quando há outro lançamento vivo, mais novo,
+    que muda a situação do mesmo equipamento -- mesmo que a situação atual coincida."""
+
+    def _ciclo_completo(self, inv_manager, item_id, forcar_devolucao_iniciada):
+        ok, msg = inv_manager.confirm_loan(item_id, "teste", "termos_assinados/a.pdf")
+        assert ok, msg
+        forcar_devolucao_iniciada(item_id)
+        ok, msg = inv_manager.confirm_return(item_id, "teste", "termos_devolucao_assinados/a.pdf")
+        assert ok, msg
+
+    def test_devolucao_antiga_com_segunda_devolucao_pendente_400(
+        self, client_gestor, senha_padrao_teste, inv_manager, item_pendente, forcar_devolucao_iniciada
+    ):
+        item_id = item_pendente["id"]
+        self._ciclo_completo(inv_manager, item_id, forcar_devolucao_iniciada)
+        _emprestar(inv_manager, item_id, "Beltrano Segundo", "52998224725")
+        ok, msg = inv_manager.confirm_loan(item_id, "teste", "termos_assinados/b.pdf")
+        assert ok, msg
+        forcar_devolucao_iniciada(item_id)
+        devolucao_1, devolucao_2 = _ids(inv_manager, item_id, "Devolução")
+        assert inv_manager.find(item_id)["status"] == "Pendente Devolução"
+
+        resp = client_gestor.post(
+            f"/api/history/{devolucao_1}/reverse", json={"password": senha_padrao_teste}
+        )
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == MSG_MUDOU
+        item = inv_manager.find(item_id)
+        assert item["status"] == "Pendente Devolução"
+        assert item["assigned_to"] == "Beltrano Segundo"
+        assert inv_manager.get_history_entry(devolucao_1)["is_reversed"] == 0
+        assert inv_manager.get_history_entry(devolucao_2)["is_reversed"] == 0
+
+        # o lançamento mais novo continua estornável
+        ok, msg = inv_manager.reverse_history_entry(devolucao_2, "teste")
+        assert ok, msg
+
+    def test_emprestimo_antigo_com_segundo_emprestimo_pendente_400(
+        self, inv_manager, item_pendente, forcar_devolucao_iniciada
+    ):
+        item_id = item_pendente["id"]
+        self._ciclo_completo(inv_manager, item_id, forcar_devolucao_iniciada)
+        _emprestar(inv_manager, item_id, "Beltrano Segundo", "52998224725")
+        emprestimo_1, emprestimo_2 = _ids(inv_manager, item_id, "Empréstimo")
+
+        assert inv_manager.reverse_history_entry(emprestimo_1, "teste") == (False, MSG_MUDOU)
+        item = inv_manager.find(item_id)
+        assert item["status"] == "Pendente"
+        assert item["assigned_to"] == "Beltrano Segundo"
+        assert item["cpf"] == "52998224725"
+        assert inv_manager.get_history_entry(emprestimo_1)["is_reversed"] == 0
+
+    def test_lancamento_mais_novo_estornado_libera_o_anterior(
+        self, inv_manager, item_indisponivel, forcar_devolucao_iniciada
+    ):
+        item_id = item_indisponivel["id"]
+        forcar_devolucao_iniciada(item_id)
+        ok, msg = inv_manager.confirm_return(item_id, "teste", "termos_devolucao_assinados/a.pdf")
+        assert ok, msg
+        confirmacao = _ids(inv_manager, item_id, "Confirmação Devolução")[0]
+        devolucao = _ids(inv_manager, item_id, "Devolução")[0]
+        assert inv_manager.reverse_history_entry(devolucao, "teste")[0] is False
+        assert inv_manager.reverse_history_entry(confirmacao, "teste")[0] is True
+        assert inv_manager.reverse_history_entry(devolucao, "teste")[0] is True
+
+    def test_edicao_posterior_nao_bloqueia(self, inv_manager, item_pendente):
+        item_id = item_pendente["id"]
+        ok, msg = inv_manager.update_item(item_id, {"brand": "Outra"}, "teste")
+        assert ok, msg
+        emprestimo = _ids(inv_manager, item_id, "Empréstimo")[0]
+        assert inv_manager.reverse_history_entry(emprestimo, "teste")[0] is True
+
+
 class TestEmprestimoSoDeItemDisponivel:
     def test_issue_recusa_quando_o_status_mudou_depois_da_leitura(
         self, inv_manager, item_disponivel, executar_sql, monkeypatch

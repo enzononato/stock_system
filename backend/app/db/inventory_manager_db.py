@@ -45,6 +45,10 @@ _SITUACAO_PRODUZIDA_POR = {
     "Cadastro": "Disponível",
 }
 MSG_ESTORNO_SITUACAO_MUDOU = "O equipamento mudou de situação depois deste lançamento."
+# Lançamentos de `history` que mudam a situação do equipamento (Edição, periféricos,
+# transferência e Estorno não mudam).
+_OPERACOES_DE_SITUACAO = (*_SITUACAO_PRODUZIDA_POR, "Exclusão")
+_OPERACOES_DE_SITUACAO_SQL = ", ".join(f"'{op}'" for op in _OPERACOES_DE_SITUACAO)
 
 # ── Geração de termos (.docx) — utilitários compartilhados ─────────────────────
 #
@@ -1224,6 +1228,21 @@ class InventoryDBManager:
         equipamento não está mais na situação que o lançamento produziu."""
         try:
             with get_cursor() as cur:
+                # Ordem das travas: linha do item SEMPRE antes (regra de manutencao_db);
+                # o item_id do lançamento é lido sem trava -- não muda depois de gravado.
+                cur.execute("SELECT item_id, operation FROM history WHERE id=%s", (history_id,))
+                previa = cur.fetchone()
+                if not previa:
+                    return False, "Lançamento não encontrado."
+                if previa["operation"] in _SITUACAO_PRODUZIDA_POR and previa["item_id"] is not None:
+                    cur.execute(
+                        "SELECT status, is_active FROM items WHERE id=%s FOR UPDATE",
+                        (previa["item_id"],),
+                    )
+                    atual = cur.fetchone()
+                else:
+                    atual = None
+
                 cur.execute("SELECT * FROM history WHERE id=%s FOR UPDATE", (history_id,))
                 entry = cur.fetchone()
                 if not entry:
@@ -1239,15 +1258,22 @@ class InventoryDBManager:
                 # Só desfaz se o equipamento ainda está na situação que este
                 # lançamento produziu: um estorno antigo não pode atropelar o que
                 # aconteceu depois (novo empréstimo, manutenção, baixa...).
-                cur.execute(
-                    "SELECT status, is_active FROM items WHERE id=%s FOR UPDATE", (item_id,)
-                )
-                atual = cur.fetchone()
                 if (
                     not atual
                     or not atual["is_active"]
                     or atual["status"] != _SITUACAO_PRODUZIDA_POR[op]
                 ):
+                    return False, MSG_ESTORNO_SITUACAO_MUDOU
+                # ...e só se ele é o lançamento vivo mais novo que muda a situação do
+                # item: a situação pode coincidir por causa de um ciclo posterior
+                # (Devolução#1 com a Devolução#2 pendente), e estornar o antigo
+                # devolveria o equipamento ao responsável do ciclo anterior.
+                cur.execute(
+                    "SELECT COUNT(*) AS total FROM history WHERE item_id=%s AND id>%s "
+                    f"AND is_reversed=0 AND operation IN ({_OPERACOES_DE_SITUACAO_SQL})",
+                    (item_id, history_id),
+                )
+                if cur.fetchone()["total"] > 0:
                     return False, MSG_ESTORNO_SITUACAO_MUDOU
                 if op == "Confirmação Devolução":
                     cur.execute(

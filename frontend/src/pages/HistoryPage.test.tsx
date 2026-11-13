@@ -278,3 +278,27 @@ describe('HistoryPage — exportação (F7)', () => {
     expect(urls[0].search).toBe('?search=SN-1&formato=pdf')
   })
 })
+
+describe('HistoryPage — estorno só no lançamento mais novo do item', () => {
+  it('esconde "Estornar" quando a página tem um lançamento mais novo que muda a situação do mesmo item', async () => {
+    const base = { operador: 'gestor.teste', data_operacao: '2026-01-10T09:00:00' }
+    server.use(
+      http.get('/api/history', () =>
+        HttpResponse.json({
+          items: [
+            { ...base, id: 25, item_id: 5, operation: 'Edição' },
+            { ...base, id: 21, item_id: 5, operation: 'Confirmação Empréstimo' },
+            { ...base, id: 20, item_id: 5, operation: 'Empréstimo' },
+            { ...base, id: 12, item_id: 9, operation: 'Cadastro' },
+          ],
+          total: 4,
+        })
+      )
+    )
+    renderWithClient(<HistoryPage />)
+    await screen.findByText(/Confirmação Empréstimo/)
+    // Confirmação #21 (item 5) e Cadastro #12 (item 9): estornáveis; Empréstimo #20 foi
+    // superado pela Confirmação #21 (a Edição #25 não muda a situação).
+    expect(screen.getAllByRole('button', { name: /Estornar/i })).toHaveLength(2)
+  })
+})

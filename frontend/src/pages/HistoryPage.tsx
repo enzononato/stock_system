@@ -43,6 +43,28 @@ const REVERSIBLE_OPS = [
   'Confirmação Devolução',
 ]
 
+/** Lançamentos que mudam a situação do equipamento (o backend usa a mesma lista). */
+const STATUS_OPS = [...REVERSIBLE_OPS, 'Exclusão']
+
+/**
+ * O backend só estorna o lançamento vivo mais novo que muda a situação do item. A
+ * lista só traz lançamentos vivos; quando a página já mostra um mais novo do mesmo
+ * item, o botão é escondido. Nos demais casos o backend recusa com a mensagem dele.
+ */
+function supersededIds(entries: HistoryEntry[]): Set<number> {
+  const newest = new Map<number, number>()
+  for (const e of entries) {
+    if (e.item_id == null || !STATUS_OPS.includes(e.operation ?? '')) continue
+    newest.set(e.item_id, Math.max(newest.get(e.item_id) ?? 0, e.id))
+  }
+  const out = new Set<number>()
+  for (const e of entries) {
+    if (e.item_id == null || !STATUS_OPS.includes(e.operation ?? '')) continue
+    if ((newest.get(e.item_id) ?? 0) > e.id) out.add(e.id)
+  }
+  return out
+}
+
 function operationSymbol(op?: string) {
   if (!op) return '•'
   if (op.includes('Empréstimo')) return '→'
@@ -113,6 +135,7 @@ export default function HistoryPage() {
   })
 
   const history = data?.items ?? []
+  const superseded = supersededIds(history)
   const total = data?.total ?? 0
   const lastPage = Math.max(1, Math.ceil(total / pageSize))
 
@@ -331,7 +354,9 @@ export default function HistoryPage() {
                   const symbol = operationSymbol(entry.operation)
                   const colorClass = operationColor(entry.operation)
                   const isReversible =
-                    REVERSIBLE_OPS.includes(entry.operation ?? '') && hasRole('Gestor')
+                    REVERSIBLE_OPS.includes(entry.operation ?? '') &&
+                    !superseded.has(entry.id) &&
+                    hasRole('Gestor')
                   const hasAttachments =
                     Boolean(entry.operacao_anexo) || Boolean(entry.termo_assinado_anexo)
                   const isExpanded = Boolean(expandedIds[entry.id])
