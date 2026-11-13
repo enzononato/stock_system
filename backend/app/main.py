@@ -74,6 +74,13 @@ _ROTULOS_DE_CAMPO = {
     "ativo": "Ativo",
     "colaborador_id": "Colaborador",
     "local_id": "Local",
+    # Campos do módulo de Acessos
+    "login": "Login",
+    "sistema_id": "Sistema",
+    "sistema_ids": "Sistemas",
+    "cargo_anterior": "Cargo anterior",
+    "cargo_novo": "Cargo novo",
+    "motivo_cancelamento": "Motivo do cancelamento",
 }
 
 # "nome" vale "Nome da unidade" nas unidades; nas rotas de colaboradores e locais é só "Nome".
