@@ -65,6 +65,13 @@ _ROTULOS_DE_CAMPO = {
     "email": "E-mail",
     "telefone": "Telefone",
     "superior_id": "Superior",
+    "unidade_id": "Unidade",
+    "situacao": "Situação",
+}
+
+# "nome" vale "Nome da unidade" nas unidades; nas rotas de colaboradores é só "Nome".
+_ROTULOS_POR_ROTA = {
+    "/api/colaboradores": {"nome": "Nome"},
 }
 
 
@@ -94,7 +101,11 @@ def erro_de_validacao(request: Request, exc: RequestValidationError) -> JSONResp
         msg = erro.get("msg", "valor inválido")
         # Pydantic prefixa mensagens de ValueError com "Value error, ".
         msg = msg.removeprefix("Value error, ")
-        rotulo = _ROTULOS_DE_CAMPO.get(campo, campo)
+        rotulos = _ROTULOS_DE_CAMPO
+        for prefixo, especificos in _ROTULOS_POR_ROTA.items():
+            if request.url.path.startswith(prefixo):
+                rotulos = {**_ROTULOS_DE_CAMPO, **especificos}
+        rotulo = rotulos.get(campo, campo)
         mensagens.append(f"{rotulo}: {msg}" if rotulo else msg)
 
     return JSONResponse(

@@ -6,7 +6,13 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core import config as _config
-from app.db.colaborador_db import ColaboradorDBManager, executar_sincronizacao
+from app.db.colaborador_db import (
+    ColaboradorDBManager,
+    CpfDuplicado,
+    MSG_SYNC_EM_ANDAMENTO,
+    SincronizacaoEmAndamento,
+    executar_sincronizacao,
+)
 from app.dependencies import (
     CurrentUser,
     get_audit_context,
@@ -21,7 +27,8 @@ from app.schemas.colaboradores import (
     ColaboradorResponse,
     ColaboradorUpdate,
     ResumoSyncResponse,
-    Situacao,
+    MSG_SITUACAO_INVALIDA,
+    SITUACOES,
     SyncStatus,
 )
 from app.schemas.common import Paginated
@@ -50,13 +57,15 @@ def _base_indisponivel(e: ColaboradoresSourceError) -> HTTPException:
 @router.get("", response_model=Paginated[ColaboradorResponse])
 def listar_colaboradores(
     busca: Optional[str] = None,
-    situacao: Optional[Situacao] = None,
+    situacao: Optional[str] = None,
     unidade_id: Optional[int] = None,
     limit: int = Query(25, ge=1, le=200),
     offset: int = Query(0, ge=0),
     _: CurrentUser = Depends(get_current_user),
     db: ColaboradorDBManager = Depends(get_colaborador_db),
 ):
+    if situacao is not None and situacao not in SITUACOES:
+        raise HTTPException(status_code=422, detail=MSG_SITUACAO_INVALIDA)
     itens, total = db.listar(
         busca=busca, situacao=situacao, unidade_id=unidade_id, limit=limit, offset=offset
     )
@@ -88,6 +97,8 @@ def sincronizar_colaboradores(
 ):
     try:
         return asdict(executar_sincronizacao(db, ctx))
+    except SincronizacaoEmAndamento:
+        raise HTTPException(status_code=409, detail=MSG_SYNC_EM_ANDAMENTO)
     except ColaboradoresSourceError as e:
         raise _base_indisponivel(e)
 
@@ -155,10 +166,11 @@ def criar_colaborador(
 ):
     try:
         novo_id = db.criar_manual(body.model_dump())
+    except CpfDuplicado as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
-        # CPF repetido é conflito; unidade/superior inexistente é dado inválido.
-        status = 409 if "CPF" in str(e) else 422
-        raise HTTPException(status_code=status, detail=str(e))
+        # Unidade/superior inexistente é dado inválido.
+        raise HTTPException(status_code=422, detail=str(e))
     criado = db.obter(novo_id)
     audit.record(ctx, "colaborador", novo_id, "criar", depois=criado)
     return criado

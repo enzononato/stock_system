@@ -12,6 +12,35 @@ from app.schemas.validators import (
 )
 
 Situacao = Literal["ativo", "afastado", "desligado"]
+SITUACOES = ("ativo", "afastado", "desligado")
+MSG_SITUACAO_INVALIDA = "Situação inválida: use ativo, afastado ou desligado."
+MSG_TEXTO_INVALIDO = "Valor inválido: informe um texto."
+MSG_NUMERO_INVALIDO = "Valor inválido: informe o número do cadastro."
+
+
+def _texto(valor):
+    """Mensagem em português para tipo errado (o padrão do Pydantic vem em inglês)."""
+    if valor is not None and not isinstance(valor, str):
+        raise ValueError(MSG_TEXTO_INVALIDO)
+    return valor
+
+
+def _inteiro_ou_none(valor):
+    if valor is None:
+        return None
+    if isinstance(valor, bool) or not isinstance(valor, (int, str)):
+        raise ValueError(MSG_NUMERO_INVALIDO)
+    if isinstance(valor, str):
+        if not valor.strip().isdigit():
+            raise ValueError(MSG_NUMERO_INVALIDO)
+        return int(valor)
+    return valor
+
+
+def _situacao(valor):
+    if valor is not None and valor not in SITUACOES:
+        raise ValueError(MSG_SITUACAO_INVALIDA)
+    return valor
 
 
 def _nome_obrigatorio(nome: Optional[str]) -> str:
@@ -38,6 +67,7 @@ class ColaboradorResponse(BaseModel):
     telefone_manual: bool
     superior_id: Optional[int] = None
     superior_nome: Optional[str] = None
+    superior_manual: bool = False
     origem: Literal["rh", "manual"]
     sincronizado_em: Optional[datetime] = None
     criado_em: datetime
@@ -66,6 +96,21 @@ class ColaboradorCreate(BaseModel):
     telefone: Optional[str] = None
     superior_id: Optional[int] = None
     situacao: Situacao = "ativo"
+
+    @field_validator("cpf", "nome", "cargo", "setor", "email", "telefone", mode="before")
+    @classmethod
+    def _v_texto(cls, v):
+        return _texto(v)
+
+    @field_validator("unidade_id", "superior_id", mode="before")
+    @classmethod
+    def _v_inteiros(cls, v):
+        return _inteiro_ou_none(v)
+
+    @field_validator("situacao", mode="before")
+    @classmethod
+    def _v_situacao_antes(cls, v):
+        return _situacao(v)
 
     @field_validator("cpf")
     @classmethod
@@ -105,6 +150,21 @@ class ColaboradorUpdate(BaseModel):
     email: Optional[str] = None
     telefone: Optional[str] = None
     superior_id: Optional[int] = None
+
+    @field_validator("nome", "cargo", "setor", "email", "telefone", mode="before")
+    @classmethod
+    def _v_texto(cls, v):
+        return _texto(v)
+
+    @field_validator("unidade_id", "superior_id", mode="before")
+    @classmethod
+    def _v_inteiros(cls, v):
+        return _inteiro_ou_none(v)
+
+    @field_validator("situacao", mode="before")
+    @classmethod
+    def _v_situacao_antes(cls, v):
+        return _situacao(v)
 
     @field_validator("nome")
     @classmethod

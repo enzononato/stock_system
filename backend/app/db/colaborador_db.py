@@ -2,22 +2,28 @@
 Camada de acesso ao cadastro de colaboradores.
 
 As tabelas `colaboradores` e `colaboradores_sync` são criadas pela migração
-0001 (e `unidades.alias_rh` pela 0002); este módulo não cria schema.
+0001 (`unidades.alias_rh` pela 0002 e `superior_manual` pela 0007); este módulo
+não cria schema.
 
 O cadastro é um espelho da base de RH (somente leitura, ver
 `app.services.colaboradores_source`) com complemento manual:
 
 - `sincronizar` grava os campos que vêm do RH; e-mail e telefone só são
-  sobrescritos enquanto ninguém os tenha editado (`email_manual`/`telefone_manual`);
+  sobrescritos enquanto ninguém os tenha editado (`email_manual`/`telefone_manual`),
+  e o superior enquanto ninguém o tenha definido ou limpado à mão (`superior_manual`).
+  Essas três escritas são condicionais no próprio SQL, então uma edição feita durante
+  a sincronização nunca é sobrescrita;
+- só uma sincronização roda por vez (`GET_LOCK`);
 - colaboradores `origem='manual'` não vêm do RH e podem ser editados por inteiro;
 - datas são gravadas em UTC e devolvidas com fuso (`+00:00`).
 """
 import logging
 import re
 import unicodedata
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Iterator, Optional
 
 import pymysql
 
@@ -27,6 +33,7 @@ from app.services import audit
 from app.services.audit import AuditContext
 from app.services.colaboradores_source import (
     ColaboradorRH,
+    ColaboradoresIndisponivel,
     ColaboradoresSourceError,
     cpf_valido,
     ler_todos,
@@ -37,9 +44,32 @@ logger = logging.getLogger(__name__)
 MSG_CAMPO_DO_RH = "Campo vem da base de RH e não pode ser editado aqui."
 MSG_SUPERIOR_DE_SI = "O colaborador não pode ser superior de si mesmo."
 MSG_CPF_DUPLICADO = "Já existe um colaborador com este CPF."
+MSG_SYNC_EM_ANDAMENTO = "Sincronização já em andamento."
+
+NOME_DO_LOCK = "patrimonio_colaboradores_sync"
+_TAMANHO_DO_LOTE = 500
+
+
+class CpfDuplicado(ValueError):
+    """Já existe colaborador com o CPF informado."""
+
+    def __init__(self):
+        super().__init__(MSG_CPF_DUPLICADO)
+
+
+class SincronizacaoEmAndamento(Exception):
+    """Outra sincronização de colaboradores está rodando."""
+
+    def __init__(self):
+        super().__init__(MSG_SYNC_EM_ANDAMENTO)
+
 
 # Campos que, em colaborador vindo do RH, só a sincronização altera.
 _CAMPOS_DO_RH = ("nome", "cargo", "setor", "unidade_id", "situacao")
+# Campos do RH que, ao adotar um colaborador manual, só valem quando o RH tem valor.
+_CAMPOS_PRESERVADOS_NA_ADOCAO = (
+    "nome", "matricula", "cargo", "setor", "unidade_rh", "unidade_id", "gestor_nome_rh",
+)
 _CAMPOS_DATA = ("sincronizado_em", "criado_em", "atualizado_em")
 _LIMITES = {
     "nome": 200, "matricula": 50, "cargo": 150, "setor": 150,
@@ -98,6 +128,11 @@ def _escapar_like(texto: str) -> str:
     return texto.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
+def _lotes(ids: list[int]) -> Iterator[list[int]]:
+    for i in range(0, len(ids), _TAMANHO_DO_LOTE):
+        yield ids[i : i + _TAMANHO_DO_LOTE]
+
+
 def _email_do_rh(valor: Optional[str]) -> Optional[str]:
     try:
         return validar_email(valor)
@@ -113,21 +148,30 @@ def _telefone_do_rh(valor: Optional[str]) -> Optional[str]:
 
 
 class _ResolvedorUnidades:
-    """Liga o nome de unidade do RH a `unidades.id`: primeiro por `alias_rh` igual
-    (sem acento/caixa), na falta por `unidades.nome` contendo o nome do RH (só se
-    houver exatamente uma)."""
+    """Liga o nome de unidade do RH a `unidades.id`, entre as unidades ativas:
+    primeiro por `alias_rh` igual (sem acento/caixa), na falta por `unidades.nome`
+    contendo o nome do RH (só se houver exatamente uma). Chaves normalizadas uma vez."""
 
     def __init__(self, unidades: list[dict]):
-        self._unidades = sorted(unidades, key=lambda u: u["id"])
+        self._unidades = [
+            (u["id"], _chave(u.get("alias_rh")), _chave(u["nome"]))
+            for u in sorted(unidades, key=lambda u: u["id"])
+        ]
+        self._cache: dict[str, Optional[int]] = {}
 
     def resolver(self, unidade_rh: Optional[str]) -> Optional[int]:
         alvo = _chave(unidade_rh)
         if not alvo:
             return None
-        for u in self._unidades:
-            if _chave(u.get("alias_rh")) == alvo:
-                return u["id"]
-        contem = [u["id"] for u in self._unidades if alvo in _chave(u["nome"])]
+        if alvo not in self._cache:
+            self._cache[alvo] = self._buscar(alvo)
+        return self._cache[alvo]
+
+    def _buscar(self, alvo: str) -> Optional[int]:
+        for id_, alias, _ in self._unidades:
+            if alias == alvo:
+                return id_
+        contem = [id_ for id_, _, nome in self._unidades if alvo in nome]
         return contem[0] if len(contem) == 1 else None
 
 
@@ -152,21 +196,48 @@ def _depurar(registros: list[ColaboradorRH]) -> tuple[list[ColaboradorRH], int, 
 class ColaboradorDBManager:
     # ── Sincronização ────────────────────────────────────────────────────────
 
+    @contextmanager
+    def bloqueio_sincronizacao(self) -> Iterator[None]:
+        """Garante uma única sincronização por vez, em todas as instâncias da API.
+
+        Segura `GET_LOCK` numa conexão só para isso, do início ao fim da sincronização
+        (a conexão que grava é outra). Levanta `SincronizacaoEmAndamento` sem esperar
+        se o bloqueio já está com outra sincronização.
+        """
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT GET_LOCK(%s, 0) AS ok", (NOME_DO_LOCK,))
+            if cur.fetchone()["ok"] != 1:
+                raise SincronizacaoEmAndamento()
+            try:
+                yield
+            finally:
+                try:
+                    cur.execute("SELECT RELEASE_LOCK(%s)", (NOME_DO_LOCK,))
+                except Exception:
+                    logger.exception("Falha ao liberar o bloqueio da sincronização de colaboradores.")
+
     def sincronizar(self, registros: list[ColaboradorRH]) -> ResumoSync:
         """Upsert por CPF dos registros da base de RH, tudo numa transação.
 
-        Colaboradores `origem='rh'` ausentes da base viram `desligado`. Uma
-        colaborador criado manualmente cujo CPF aparece na base passa a `origem='rh'`.
+        Colaboradores `origem='rh'` ausentes da base viram `desligado`. Um colaborador
+        criado manualmente cujo CPF aparece na base passa a `origem='rh'`, mas os valores
+        preenchidos à mão ficam onde o RH não tem valor. Base sem nenhum CPF válido
+        levanta `ColaboradoresSourceError` (senão todos seriam desligados).
         """
         validos, ignorados, duplicados = _depurar(registros)
+        if not validos:
+            raise ColaboradoresSourceError(
+                "A base de colaboradores não retornou nenhum CPF válido; sincronização cancelada."
+            )
         agora = _agora()
         criados = atualizados = desligados = 0
 
         with get_cursor() as cur:
-            cur.execute("SELECT id, nome, alias_rh FROM unidades")
+            cur.execute("SELECT id, nome, alias_rh FROM unidades WHERE is_active = 1")
             unidades = _ResolvedorUnidades(cur.fetchall())
             cur.execute("SELECT * FROM colaboradores")
             existentes = {linha["cpf"]: linha for linha in cur.fetchall()}
+            vistos: list[int] = []
 
             for r in validos:
                 novo = {
@@ -195,22 +266,38 @@ class ColaboradorDBManager:
                     criados += 1
                     continue
 
-                if not atual["email_manual"]:
-                    novo["email"] = email
-                if not atual["telefone_manual"]:
-                    novo["telefone"] = telefone
+                vistos.append(atual["id"])
+                if atual["origem"] == "manual":
+                    # Adoção: o RH só vence onde tem valor; o resto continua como foi preenchido.
+                    for campo in _CAMPOS_PRESERVADOS_NA_ADOCAO:
+                        if novo[campo] is None:
+                            novo[campo] = atual[campo]
                 mudou = {k: v for k, v in novo.items() if atual[k] != v}
                 if mudou:
                     sets = ", ".join(f"{k}=%s" for k in mudou)
                     cur.execute(
-                        f"UPDATE colaboradores SET {sets}, sincronizado_em=%s, atualizado_em=%s WHERE id=%s",
-                        [*mudou.values(), agora, agora, atual["id"]],
+                        f"UPDATE colaboradores SET {sets}, atualizado_em=%s WHERE id=%s",
+                        [*mudou.values(), agora, atual["id"]],
                     )
+                mudou_contato = False
+                # Condicionais no SQL: um PUT concorrente marca o flag e a escrita aqui não acontece.
+                for campo, valor in (("email", email), ("telefone", telefone)):
+                    if not atual[f"{campo}_manual"] and atual[campo] != valor:
+                        cur.execute(
+                            f"UPDATE colaboradores SET {campo}=%s, atualizado_em=%s "
+                            f"WHERE id=%s AND {campo}_manual=0",
+                            (valor, agora, atual["id"]),
+                        )
+                        mudou_contato = mudou_contato or cur.rowcount > 0
+                if mudou or mudou_contato:
                     atualizados += 1
-                else:
-                    cur.execute(
-                        "UPDATE colaboradores SET sincronizado_em=%s WHERE id=%s", (agora, atual["id"])
-                    )
+
+            for lote in _lotes(vistos):
+                cur.execute(
+                    "UPDATE colaboradores SET sincronizado_em=%s "
+                    f"WHERE id IN ({', '.join(['%s'] * len(lote))})",
+                    [agora, *lote],
+                )
 
             cpfs_na_base = {r.cpf for r in validos}
             ausentes = [
@@ -218,15 +305,15 @@ class ColaboradorDBManager:
                 for cpf, linha in existentes.items()
                 if linha["origem"] == "rh" and cpf not in cpfs_na_base and linha["situacao"] != "desligado"
             ]
-            if ausentes:
+            for lote in _lotes(ausentes):
                 cur.execute(
                     "UPDATE colaboradores SET situacao='desligado', atualizado_em=%s "
-                    f"WHERE id IN ({', '.join(['%s'] * len(ausentes))})",
-                    [agora, *ausentes],
+                    f"WHERE id IN ({', '.join(['%s'] * len(lote))})",
+                    [agora, *lote],
                 )
-                desligados = len(ausentes)
+            desligados = len(ausentes)
 
-            self._preencher_superiores(cur, agora)
+            self._alinhar_superiores(cur, agora)
 
         return ResumoSync(
             total_base=len(registros),
@@ -238,22 +325,31 @@ class ColaboradorDBManager:
         )
 
     @staticmethod
-    def _preencher_superiores(cur, agora: datetime) -> None:
-        """Segunda passada: `superior_id` vazio + `gestor_nome_rh` igual ao nome de
-        exatamente um colaborador -> preenche."""
-        cur.execute("SELECT id, nome, superior_id, gestor_nome_rh FROM colaboradores")
+    def _alinhar_superiores(cur, agora: datetime) -> None:
+        """Segunda passada: a sincronização é dona de `superior_id` enquanto
+        `superior_manual = 0`. O superior é o único colaborador ativo (não desligado)
+        com o nome de `gestor_nome_rh`; se o gestor mudou, atualiza; se não resolve
+        mais (ou não há gestor), limpa. Com `superior_manual = 1` nunca mexe."""
+        cur.execute("SELECT id, nome, situacao, origem, superior_id, superior_manual, gestor_nome_rh FROM colaboradores")
         todos = cur.fetchall()
-        por_nome: dict[str, list[int]] = {}
+        ativos_por_nome: dict[str, list[int]] = {}
         for linha in todos:
-            por_nome.setdefault(_chave(linha["nome"]), []).append(linha["id"])
+            if linha["situacao"] != "desligado":
+                ativos_por_nome.setdefault(_chave(linha["nome"]), []).append(linha["id"])
         for linha in todos:
-            if linha["superior_id"] is not None or not linha["gestor_nome_rh"]:
+            if linha["origem"] != "rh" or linha["superior_manual"]:
                 continue
-            candidatos = por_nome.get(_chave(linha["gestor_nome_rh"]), [])
-            if len(candidatos) == 1 and candidatos[0] != linha["id"]:
+            candidatos = [
+                id_
+                for id_ in ativos_por_nome.get(_chave(linha["gestor_nome_rh"]), [])
+                if id_ != linha["id"]
+            ] if linha["gestor_nome_rh"] else []
+            desejado = candidatos[0] if len(candidatos) == 1 else None
+            if desejado != linha["superior_id"]:
                 cur.execute(
-                    "UPDATE colaboradores SET superior_id=%s, atualizado_em=%s WHERE id=%s",
-                    (candidatos[0], agora, linha["id"]),
+                    "UPDATE colaboradores SET superior_id=%s, atualizado_em=%s "
+                    "WHERE id=%s AND superior_manual=0",
+                    (desejado, agora, linha["id"]),
                 )
 
     def registrar_sync_inicio(self) -> int:
@@ -357,7 +453,7 @@ class ColaboradorDBManager:
     def resolver_unidade_id(self, unidade_rh: Optional[str]) -> Optional[int]:
         """`unidades.id` para um nome de unidade da base de RH (ver `_ResolvedorUnidades`)."""
         with get_cursor(commit=False) as cur:
-            cur.execute("SELECT id, nome, alias_rh FROM unidades")
+            cur.execute("SELECT id, nome, alias_rh FROM unidades WHERE is_active = 1")
             return _ResolvedorUnidades(cur.fetchall()).resolver(unidade_rh)
 
     # ── Escrita ──────────────────────────────────────────────────────────────
@@ -371,7 +467,7 @@ class ColaboradorDBManager:
             raise ValueError(mensagem)
 
     def criar_manual(self, dados: dict) -> int:
-        """Cria um colaborador `origem='manual'`. CPF repetido -> ValueError."""
+        """Cria um colaborador `origem='manual'`. CPF repetido -> `CpfDuplicado`."""
         agora = _agora()
         campos = {
             "cpf": dados["cpf"],
@@ -386,6 +482,7 @@ class ColaboradorDBManager:
             "email_manual": 1 if dados.get("email") else 0,
             "telefone_manual": 1 if dados.get("telefone") else 0,
             "superior_id": dados.get("superior_id"),
+            "superior_manual": 1 if dados.get("superior_id") is not None else 0,
             "origem": "manual",
             "criado_em": agora,
             "atualizado_em": agora,
@@ -402,13 +499,14 @@ class ColaboradorDBManager:
                 return cur.lastrowid
         except pymysql.IntegrityError as e:
             if e.args and e.args[0] == 1062:
-                raise ValueError(MSG_CPF_DUPLICADO) from None
+                raise CpfDuplicado() from None
             raise
 
     def atualizar(self, id: int, dados: dict) -> None:
         """Aplica só as chaves de `dados` (valor `None` limpa o campo).
 
-        E-mail/telefone diferentes do gravado passam a `*_manual = 1`. `nome`, `cargo`,
+        E-mail/telefone diferentes do gravado passam a `*_manual = 1`; qualquer edição de
+        `superior_id` (definir ou limpar) marca `superior_manual = 1`. `nome`, `cargo`,
         `setor`, `unidade_id` e `situacao` só valem para `origem='manual'`. Levanta
         `LookupError` se o colaborador não existe e `ValueError` para pedido inválido.
         """
@@ -431,6 +529,8 @@ class ColaboradorDBManager:
             for campo in ("email", "telefone"):
                 if campo in dados and dados[campo] != atual[campo]:
                     novos[f"{campo}_manual"] = 1
+            if "superior_id" in dados:
+                novos["superior_manual"] = 1
             if not novos:
                 return
             sets = ", ".join(f"{k}=%s" for k in novos)
@@ -443,32 +543,37 @@ class ColaboradorDBManager:
 def executar_sincronizacao(db: ColaboradorDBManager, ctx: AuditContext) -> ResumoSync:
     """Lê a base de RH e sincroniza o cadastro, registrando início, fim e auditoria.
 
-    Falha da base (indisponível ou mal configurada) é gravada no log de sincronização
-    e relançada. Uma base que devolve zero linhas é tratada como falha: aplicar isso
-    marcaria todos os colaboradores do RH como desligados.
+    - Só uma por vez: se outra está rodando levanta `SincronizacaoEmAndamento` (sem registrar nada).
+    - Falha da base (indisponível, mal configurada, sem CPF válido) é gravada no log de
+      sincronização e relançada como está.
+    - Qualquer outro erro é gravado como `erro`, logado e relançado como
+      `ColaboradoresIndisponivel` (a API responde 503, nunca 500).
+    - Nenhuma linha fica `em_andamento` depois de uma falha.
     """
-    sync_id = db.registrar_sync_inicio()
-    try:
-        registros = ler_todos()
-        if not registros:
-            raise ColaboradoresSourceError(
-                "A base de colaboradores não retornou nenhum registro; sincronização cancelada."
-            )
-        resumo = db.sincronizar(registros)
-    except ColaboradoresSourceError as e:
-        _registrar_falha(db, sync_id, str(e))
-        raise
-    except Exception as e:
-        # Nunca o texto da exceção do driver: pode trazer host/usuário de conexão.
-        _registrar_falha(db, sync_id, f"Erro inesperado ({type(e).__name__}).")
-        raise
-    db.registrar_sync_fim(sync_id, resumo, None)
+    with db.bloqueio_sincronizacao():
+        sync_id = db.registrar_sync_inicio()
+        resumo: Optional[ResumoSync] = None
+        erro: Optional[str] = None
+        try:
+            resumo = db.sincronizar(ler_todos())
+        except ColaboradoresSourceError as e:
+            erro = str(e)
+            raise
+        except Exception as e:
+            # Só o tipo vai para o log de sincronização: o texto do driver pode trazer host/usuário.
+            logger.exception("Falha inesperada na sincronização de colaboradores.")
+            erro = f"Erro inesperado ({type(e).__name__})."
+            raise ColaboradoresIndisponivel() from None
+        finally:
+            if resumo is None and erro is None:
+                erro = "Sincronização interrompida."
+            _registrar_fim(db, sync_id, resumo, erro)
     audit.record(ctx, "colaborador", None, "sincronizar", depois=asdict(resumo))
     return resumo
 
 
-def _registrar_falha(db: ColaboradorDBManager, sync_id: int, erro: str) -> None:
+def _registrar_fim(db: ColaboradorDBManager, sync_id: int, resumo: Optional[ResumoSync], erro: Optional[str]) -> None:
     try:
-        db.registrar_sync_fim(sync_id, None, erro)
+        db.registrar_sync_fim(sync_id, resumo, erro)
     except Exception:
         logger.exception("Falha ao registrar o fim da sincronização de colaboradores.")

@@ -665,3 +665,268 @@ def test_unidade_alias_rh_criar_editar_e_limpar(client_gestor):
     assert client_gestor.put(f"/api/unidades/{unidade_id}", json={"alias_rh": None}).status_code == 200
     assert client_gestor.get(f"/api/unidades/{unidade_id}").json()["alias_rh"] is None
     assert client_gestor.get("/api/unidades").json()[0]["alias_rh"] is None
+
+
+# ── Adoção de colaborador manual pela base ──────────────────────────────────
+
+@pytest.mark.integration
+def test_adocao_preserva_valores_manuais_onde_o_rh_nao_tem(colab_db, base_rh, criar_unidade):
+    unidade = criar_unidade(nome="Unidade Manual")
+    manual_id = colab_db.criar_manual(
+        {"cpf": CPF_ATIVO, "nome": "Maria Manual", "cargo": "Cargo Manual", "setor": "Setor Manual",
+         "unidade_id": unidade["id"]}
+    )
+    # RH: sem cargo, setor preenchido, unidade que não existe no cadastro de unidades.
+    base_rh(
+        'UPDATE "colaboradores-revalle" SET "Cargo" = NULL, "Setor" = %s, "Unidade" = %s WHERE "CPF" = %s',
+        ("TI", "Unidade Inexistente", CPF_ATIVO),
+    )
+
+    _sincronizar(colab_db)
+
+    maria = colab_db.obter(manual_id)
+    assert maria["origem"] == "rh"
+    assert maria["nome"] == "Maria da Silva"  # RH tem valor: vence
+    assert maria["setor"] == "TI"  # RH tem valor: vence
+    assert maria["cargo"] == "Cargo Manual"  # RH vazio: fica o manual
+    assert maria["unidade_id"] == unidade["id"]  # unidade do RH não resolveu: fica a manual
+    assert maria["unidade_rh"] == "Unidade Inexistente"
+
+
+# ── Superior: dono é a sincronização enquanto ninguém mexe à mão ────────────
+
+def _gestor_na_base(base_rh, cpf, nome, situacao="Ativo"):
+    base_rh(
+        'INSERT INTO "colaboradores-revalle" ("CPF", "Nome Completo", "Situação") VALUES (%s, %s, %s)',
+        (cpf, nome, situacao),
+    )
+
+
+@pytest.mark.integration
+def test_superior_limpo_a_mao_continua_limpo_apos_sync(colab_db, base_rh):
+    _sincronizar(colab_db)
+    pedro = _por_cpf(colab_db, CPF_MASCARADO)
+    assert pedro["superior_id"] is not None and pedro["superior_manual"] == 0
+
+    colab_db.atualizar(pedro["id"], {"superior_id": None})
+    _sincronizar(colab_db)
+
+    pedro = colab_db.obter(pedro["id"])
+    assert pedro["superior_id"] is None
+    assert pedro["superior_manual"] == 1
+
+
+@pytest.mark.integration
+def test_superior_definido_a_mao_vence_o_rh(colab_db, base_rh):
+    _gestor_na_base(base_rh, CPF_CARLOS, "Carlos Souza")
+    _sincronizar(colab_db)
+    maria = _por_cpf(colab_db, CPF_ATIVO)
+    carlos = _por_cpf(colab_db, CPF_CARLOS)
+    ana = _por_cpf(colab_db, CPF_AFASTADO)
+    assert maria["superior_id"] == carlos["id"]
+
+    colab_db.atualizar(maria["id"], {"superior_id": ana["id"]})
+    base_rh('UPDATE "colaboradores-revalle" SET "Gestor" = %s WHERE "CPF" = %s', ("Pedro Alves", CPF_ATIVO))
+    _sincronizar(colab_db)
+
+    assert colab_db.obter(maria["id"])["superior_id"] == ana["id"]
+
+
+@pytest.mark.integration
+def test_superior_acompanha_mudanca_de_gestor_no_rh(colab_db, base_rh):
+    _gestor_na_base(base_rh, CPF_CARLOS, "Carlos Souza")
+    _gestor_na_base(base_rh, CPF_OUTRO, "Diretor Novo")
+    _sincronizar(colab_db)
+    maria_id = _por_cpf(colab_db, CPF_ATIVO)["id"]
+    carlos_id = _por_cpf(colab_db, CPF_CARLOS)["id"]
+    novo_id = _por_cpf(colab_db, CPF_OUTRO)["id"]
+    assert colab_db.obter(maria_id)["superior_id"] == carlos_id
+
+    # O gestor muda no RH: o superior acompanha.
+    base_rh('UPDATE "colaboradores-revalle" SET "Gestor" = %s WHERE "CPF" = %s', ("Diretor Novo", CPF_ATIVO))
+    _sincronizar(colab_db)
+    assert colab_db.obter(maria_id)["superior_id"] == novo_id
+    assert colab_db.obter(maria_id)["superior_manual"] == 0
+
+    # O gestor vira desligado no RH: deixa de resolver e o superior é limpo.
+    base_rh('UPDATE "colaboradores-revalle" SET "Situação" = %s WHERE "CPF" = %s', ("Desligado", CPF_OUTRO))
+    _sincronizar(colab_db)
+    assert colab_db.obter(maria_id)["superior_id"] is None
+
+    # Sem gestor no RH: continua sem superior.
+    base_rh('UPDATE "colaboradores-revalle" SET "Gestor" = NULL WHERE "CPF" = %s', (CPF_ATIVO,))
+    _sincronizar(colab_db)
+    assert colab_db.obter(maria_id)["superior_id"] is None
+
+
+@pytest.mark.integration
+def test_superior_desligado_nao_e_candidato(colab_db, base_rh):
+    _gestor_na_base(base_rh, CPF_CARLOS, "Carlos Souza", situacao="Desligado")
+    _sincronizar(colab_db)
+    assert _por_cpf(colab_db, CPF_ATIVO)["superior_id"] is None
+
+
+@pytest.mark.integration
+def test_put_superior_marca_flag_manual(client_gestor):
+    a = client_gestor.post("/api/colaboradores", json={"cpf": CPF_CARLOS, "nome": "A"}).json()
+    b = client_gestor.post("/api/colaboradores", json={"cpf": CPF_OUTRO, "nome": "B"}).json()
+    assert a["superior_manual"] is False
+
+    corpo = client_gestor.put(f"/api/colaboradores/{a['id']}", json={"superior_id": b["id"]}).json()
+    assert corpo["superior_manual"] is True
+    criado = client_gestor.post(
+        "/api/colaboradores", json={"cpf": "52998224725", "nome": "C", "superior_id": b["id"]}
+    ).json()
+    assert criado["superior_manual"] is True
+
+
+# ── Concorrência ────────────────────────────────────────────────────────────
+
+@pytest.mark.integration
+def test_sincronizacao_simultanea_responde_409(client_gestor, colab_db, base_rh):
+    import pymysql
+
+    from app.core import config as _config
+    from app.db.colaborador_db import NOME_DO_LOCK
+
+    s = _config.settings
+    outra = pymysql.connect(
+        host=s.DB_HOST, port=s.DB_PORT, user=s.DB_USER, password=s.DB_PASSWORD, database=s.DB_NAME
+    )
+    try:
+        with outra.cursor() as cur:
+            cur.execute("SELECT GET_LOCK(%s, 0)", (NOME_DO_LOCK,))
+            assert cur.fetchone()[0] == 1
+
+        resp = client_gestor.post("/api/colaboradores/sincronizar")
+
+        assert resp.status_code == 409
+        assert resp.json()["detail"] == "Sincronização já em andamento."
+        assert colab_db.ultima_sync() is None  # nada foi registrado
+        assert client_gestor.get("/api/colaboradores").json()["total"] == 0
+    finally:
+        outra.close()  # fechar a conexão libera o bloqueio
+
+    assert client_gestor.post("/api/colaboradores/sincronizar").status_code == 200
+
+
+@pytest.mark.integration
+def test_sync_nao_sobrescreve_edicao_feita_durante_a_leitura(colab_db, base_rh, monkeypatch):
+    from app.db import colaborador_db as modulo
+
+    _sincronizar(colab_db)
+    maria_id = _por_cpf(colab_db, CPF_ATIVO)["id"]
+    base_rh('UPDATE "colaboradores-revalle" SET "E-mail" = %s WHERE "CPF" = %s', ("rh@revalle.com.br", CPF_ATIVO))
+
+    original = modulo._ResolvedorUnidades.resolver
+    editou = []
+
+    def resolver_e_edita(self, unidade_rh):
+        # Primeira chamada: o instantâneo da sincronização já foi lido e nada foi escrito ainda.
+        if not editou:
+            editou.append(True)
+            colab_db.atualizar(maria_id, {"email": "mao@revalle.com.br"})
+        return original(self, unidade_rh)
+
+    monkeypatch.setattr(modulo._ResolvedorUnidades, "resolver", resolver_e_edita)
+    _sincronizar(colab_db)
+
+    assert colab_db.obter(maria_id)["email"] == "mao@revalle.com.br"
+
+
+@pytest.mark.integration
+def test_erro_inesperado_responde_503_e_nao_deixa_em_andamento(client_gestor, colab_db, base_rh, monkeypatch):
+    from app.db.colaborador_db import ColaboradorDBManager
+    from app.db.database_mysql import get_cursor
+
+    with monkeypatch.context() as m:
+        def quebrar(self, registros):
+            raise RuntimeError("segredo-do-driver")
+
+        m.setattr(ColaboradorDBManager, "sincronizar", quebrar)
+        resp = client_gestor.post("/api/colaboradores/sincronizar")
+
+    assert resp.status_code == 503
+    assert resp.json()["detail"] == MSG_INDISPONIVEL
+    ultima = colab_db.ultima_sync()
+    assert ultima["status"] == "erro"
+    assert ultima["erro"] == "Erro inesperado (RuntimeError)."
+    assert "segredo" not in json.dumps(ultima, default=str)
+    with get_cursor(commit=False) as cur:
+        cur.execute("SELECT COUNT(*) AS n FROM colaboradores_sync WHERE status = 'em_andamento'")
+        assert cur.fetchone()["n"] == 0
+    # O bloqueio foi liberado.
+    assert client_gestor.post("/api/colaboradores/sincronizar").status_code == 200
+
+
+@pytest.mark.integration
+def test_base_so_com_cpf_invalido_nao_desliga_ninguem(client_gestor, colab_db, base_rh):
+    _sincronizar(colab_db)
+    base_rh('DELETE FROM "colaboradores-revalle"')
+    base_rh('INSERT INTO "colaboradores-revalle" ("CPF", "Nome Completo") VALUES (%s, %s)', ("11111111111", "Falso"))
+
+    resp = client_gestor.post("/api/colaboradores/sincronizar")
+
+    assert resp.status_code == 503
+    assert _por_cpf(colab_db, CPF_ATIVO)["situacao"] == "ativo"
+    assert colab_db.ultima_sync()["status"] == "erro"
+
+
+# ── Desempenho: escritas em lote ────────────────────────────────────────────
+
+@pytest.mark.integration
+def test_sync_atualiza_sincronizado_em_e_desliga_em_lotes(colab_db, base_rh, executar_sql, monkeypatch):
+    from app.db import colaborador_db as modulo
+
+    monkeypatch.setattr(modulo, "_TAMANHO_DO_LOTE", 2)
+    _sincronizar(colab_db)
+    executar_sql("UPDATE colaboradores SET sincronizado_em = '2020-01-01 00:00:00'")
+    base_rh('DELETE FROM "colaboradores-revalle" WHERE "CPF" IN (%s, %s)', (CPF_ATIVO, CPF_AFASTADO))
+
+    resumo = _sincronizar(colab_db)
+
+    assert (resumo.criados, resumo.atualizados, resumo.desligados) == (0, 0, 2)
+    assert _por_cpf(colab_db, CPF_ATIVO)["situacao"] == "desligado"
+    assert _por_cpf(colab_db, CPF_AFASTADO)["situacao"] == "desligado"
+    assert _por_cpf(colab_db, CPF_MASCARADO)["sincronizado_em"].year >= 2026
+    assert _por_cpf(colab_db, CPF_DESLIGADO)["sincronizado_em"].year >= 2026
+    assert _por_cpf(colab_db, CPF_ATIVO)["sincronizado_em"].year == 2020  # ausente: não foi visto
+
+
+# ── Unidades ativas e mensagens em português ────────────────────────────────
+
+@pytest.mark.integration
+def test_unidade_inativa_nao_recebe_colaboradores(colab_db, base_rh, criar_unidade, unidade_db):
+    inativa = criar_unidade(nome="Revalle Juazeiro", alias_rh="Revalle Juazeiro")
+    ok, _ = unidade_db.deactivate_unidade(inativa["id"])
+    assert ok
+
+    _sincronizar(colab_db)
+
+    assert _por_cpf(colab_db, CPF_ATIVO)["unidade_id"] is None
+
+
+@pytest.mark.integration
+def test_mensagens_de_validacao_de_colaborador_em_portugues(client_gestor):
+    base = {"cpf": CPF_CARLOS, "nome": "Carlos"}
+
+    def detalhe(**extra):
+        return client_gestor.post("/api/colaboradores", json={**base, **extra}).json()["detail"]
+
+    assert detalhe(nome="  ") == "Nome: Nome é obrigatório."
+    assert detalhe(situacao="x") == "Situação: Situação inválida: use ativo, afastado ou desligado."
+    assert detalhe(unidade_id="abc") == "Unidade: Valor inválido: informe o número do cadastro."
+    assert detalhe(superior_id=True) == "Superior: Valor inválido: informe o número do cadastro."
+    assert detalhe(cargo=5) == "Cargo: Valor inválido: informe um texto."
+    resp = client_gestor.get("/api/colaboradores", params={"situacao": "xyz"})
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "Situação inválida: use ativo, afastado ou desligado."
+
+
+@pytest.mark.integration
+def test_rotulo_nome_das_unidades_nao_mudou(client_gestor):
+    resp = client_gestor.post(
+        "/api/unidades", json={"nome": " ", "razao_social": "X LTDA", "cnpj": "04.690.106/0001-15"}
+    )
+    assert resp.status_code == 422
+    assert resp.json()["detail"].startswith("Nome da unidade: ")
