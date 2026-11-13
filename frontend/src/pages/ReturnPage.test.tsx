@@ -1,0 +1,208 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { http, HttpResponse } from 'msw'
+import { screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { server } from '@/test/server'
+import { renderWithClient } from '@/test/render'
+import { ToastContainer } from '@/components/ui/toast'
+import ReturnPage from '@/pages/ReturnPage'
+import type { Colaborador } from '@/api/colaboradores'
+
+const maria: Colaborador = {
+  id: 7,
+  cpf: '52998224725',
+  nome: 'Maria Souza',
+  cargo: 'Analista',
+  setor: 'Financeiro',
+  situacao: 'ativo',
+  email: 'maria@gmail.com',
+  email_manual: true,
+  telefone_manual: false,
+  origem: 'rh',
+}
+
+function itemEmCampo(extra: Record<string, unknown> = {}) {
+  return {
+    id: 9,
+    tipo: 'Notebook',
+    brand: 'Dell',
+    model: 'Latitude',
+    status: 'Indisponível',
+    assigned_to: 'Maria Souza',
+    cpf: '52998224725',
+    revenda: 'Revalle Juazeiro',
+    date_issued: '2026-10-01T09:00:00',
+    ...extra,
+  }
+}
+
+function mockItens(emCampo: unknown[], pendentes: unknown[] = [], captura?: (status: string, p: URLSearchParams) => void) {
+  server.use(
+    http.get('/api/items', ({ request }) => {
+      const params = new URL(request.url).searchParams
+      const status = params.get('status') ?? ''
+      captura?.(status, params)
+      const lista = status === 'Indisponível' ? emCampo : status === 'Pendente Devolução' ? pendentes : []
+      return HttpResponse.json({ items: lista, total: lista.length })
+    })
+  )
+}
+
+function renderPage() {
+  return renderWithClient(
+    <>
+      <ReturnPage />
+      <ToastContainer />
+    </>
+  )
+}
+
+beforeEach(() => {
+  URL.createObjectURL = vi.fn(() => 'blob:x')
+  URL.revokeObjectURL = vi.fn()
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+})
+
+describe('ReturnPage — devolução com colaborador do cadastro', () => {
+  it('item sem vínculo exige escolher do cadastro e mostra desligados', async () => {
+    const buscas: URLSearchParams[] = []
+    mockItens([itemEmCampo()])
+    server.use(
+      http.get('/api/colaboradores', ({ request }) => {
+        buscas.push(new URL(request.url).searchParams)
+        return HttpResponse.json({ items: [maria], total: 1 })
+      })
+    )
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: /Iniciar Devolução/i }))
+    expect(await screen.findByRole('heading', { name: 'Iniciar devolução' })).toBeInTheDocument()
+    expect(
+      screen.getByText(/Equipamento sem colaborador do cadastro: escolha quem está devolvendo \(responsável registrado: Maria Souza\)\./)
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Gerar termo e iniciar' }))
+    expect(await screen.findByText('Selecione o colaborador.')).toBeInTheDocument()
+
+    // Colaborador desligado também devolve: a busca não filtra por situação.
+    await waitFor(() => expect(buscas.length).toBeGreaterThan(0))
+    expect(buscas.every((p) => !p.has('situacao'))).toBe(true)
+  })
+
+  it('item vinculado envia colaborador_id e, com RevSign, não baixa o termo', async () => {
+    let corpo: unknown = null
+    let baixou = false
+    mockItens([itemEmCampo({ colaborador_id: 7 })])
+    server.use(
+      http.get('/api/colaboradores', () => HttpResponse.json({ items: [maria], total: 1 })),
+      http.get('/api/colaboradores/7', () => HttpResponse.json(maria)),
+      http.post('/api/loans/9/return/initiate', async ({ request }) => {
+        corpo = await request.json()
+        return HttpResponse.json({
+          detail: 'Termo de devolução gerado.',
+          download_url: '/api/documents/files/termos_devolucao/termo.docx',
+          filename: 'termo.docx',
+          termo: { id: 3, item_id: 9, tipo: 'devolucao', status: 'enviado', destinatario_email: 'maria@gmail.com' },
+        })
+      }),
+      http.get('/api/documents/files/*', () => {
+        baixou = true
+        return new HttpResponse('x')
+      })
+    )
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: /Iniciar Devolução/i }))
+    await waitFor(() => expect(screen.getByLabelText(/E-mail do colaborador/i)).toHaveValue('maria@gmail.com'))
+    await user.click(screen.getByRole('button', { name: 'Gerar termo e iniciar' }))
+
+    expect(
+      await screen.findByText('Termo de devolução enviado para assinatura em maria@gmail.com.')
+    ).toBeInTheDocument()
+    expect(corpo).toEqual({ colaborador_id: 7 })
+    expect(baixou).toBe(false)
+    expect(screen.queryByRole('heading', { name: /Conferência Física/ })).not.toBeInTheDocument()
+  })
+
+  it('assinatura manual baixa o termo e abre a conferência física', async () => {
+    let baixou = false
+    mockItens([itemEmCampo({ colaborador_id: 7 })])
+    server.use(
+      http.get('/api/colaboradores', () => HttpResponse.json({ items: [maria], total: 1 })),
+      http.get('/api/colaboradores/7', () => HttpResponse.json(maria)),
+      http.get('/api/items/9', () => HttpResponse.json(itemEmCampo({ colaborador_id: 7 }))),
+      http.post('/api/loans/9/return/initiate', () =>
+        HttpResponse.json({
+          detail: 'Termo de devolução gerado.',
+          download_url: '/api/documents/files/termos_devolucao/termo.docx',
+          filename: 'termo.docx',
+          termo: { id: 3, item_id: 9, tipo: 'devolucao', status: 'manual', motivo: 'Integração desligada.' },
+        })
+      ),
+      http.get('/api/documents/files/termos_devolucao/termo.docx', () => {
+        baixou = true
+        return new HttpResponse(new Uint8Array([80, 75]))
+      })
+    )
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: /Iniciar Devolução/i }))
+    await waitFor(() => expect(screen.getByLabelText(/E-mail do colaborador/i)).toHaveValue('maria@gmail.com'))
+    await user.click(screen.getByRole('button', { name: 'Gerar termo e iniciar' }))
+
+    expect(await screen.findByRole('heading', { name: 'Conferência Física & Termo de Devolução' })).toBeInTheDocument()
+    await waitFor(() => expect(baixou).toBe(true))
+  })
+
+  it('grava o e-mail no cadastro quando o colaborador ainda não tem', async () => {
+    let corpoPut: unknown = null
+    const semEmail = { ...maria, email: null, email_manual: false }
+    mockItens([itemEmCampo({ colaborador_id: 7 })])
+    server.use(
+      http.get('/api/colaboradores', () => HttpResponse.json({ items: [semEmail], total: 1 })),
+      http.get('/api/colaboradores/7', () => HttpResponse.json(semEmail)),
+      http.put('/api/colaboradores/7', async ({ request }) => {
+        corpoPut = await request.json()
+        return HttpResponse.json({ ...maria, email: 'maria.souza@gmail.com' })
+      }),
+      http.post('/api/loans/9/return/initiate', () =>
+        HttpResponse.json({
+          detail: 'Termo de devolução gerado.',
+          download_url: '/api/documents/files/termos_devolucao/termo.docx',
+          filename: 'termo.docx',
+          termo: { id: 3, item_id: 9, tipo: 'devolucao', status: 'enviado', destinatario_email: 'maria.souza@gmail.com' },
+        })
+      )
+    )
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: /Iniciar Devolução/i }))
+    const campo = await screen.findByLabelText(/E-mail do colaborador/i)
+    await user.click(screen.getByRole('button', { name: 'Gerar termo e iniciar' }))
+    expect(await screen.findByText('Informe o e-mail do colaborador.')).toBeInTheDocument()
+
+    await user.type(campo, 'maria.souza@gmail.com')
+    await user.click(screen.getByRole('button', { name: 'Gerar termo e iniciar' }))
+    expect(
+      await screen.findByText('Termo de devolução enviado para assinatura em maria.souza@gmail.com.')
+    ).toBeInTheDocument()
+    expect(corpoPut).toEqual({ email: 'maria.souza@gmail.com' })
+  })
+
+  it('tabelas usam a paginação padrão', async () => {
+    const limites: Record<string, string[]> = {}
+    mockItens([itemEmCampo()], [itemEmCampo({ id: 10, status: 'Pendente Devolução' })], (status, p) => {
+      ;(limites[status] ??= []).push(p.get('limit') ?? '')
+    })
+    renderPage()
+
+    await waitFor(() => expect(screen.getAllByText('Mostrando 1–1 de 1')).toHaveLength(2))
+    expect(limites['Indisponível']).toContain('25')
+    expect(limites['Pendente Devolução']).toContain('25')
+    expect(screen.getAllByText('REVALLE JUAZEIRO').length).toBeGreaterThan(0)
+  })
+})
