@@ -1,12 +1,16 @@
 from pydantic import BaseModel, field_validator
 from typing import Optional
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 
 from app.schemas.validators import (
+    blank_to_none,
     validar_nota_fiscal,
     normalizar_mac,
     validar_ip,
     validar_data_br,
+    validar_valor_monetario,
+    validar_data_nao_futura,
 )
 
 
@@ -28,6 +32,21 @@ class _ItemDomainValidators:
     @classmethod
     def _validar_ip(cls, v):
         return validar_ip(v)
+
+    @field_validator("valor_compra")
+    @classmethod
+    def _validar_valor_compra(cls, v):
+        return validar_valor_monetario(v, "valor de compra")
+
+    @field_validator("data_compra")
+    @classmethod
+    def _validar_data_compra(cls, v):
+        return validar_data_nao_futura(v, "data da compra")
+
+    @field_validator("garantia_ate")
+    @classmethod
+    def _validar_garantia_ate(cls, v):
+        return validar_data_br(v, campo="fim da garantia")
 
 
 class ItemCreate(BaseModel, _ItemDomainValidators):
@@ -60,6 +79,11 @@ class ItemCreate(BaseModel, _ItemDomainValidators):
     local_instalacao: Optional[str] = None
     poe: Optional[str] = None
     quantidade_portas: Optional[str] = None
+    # Compra e local (F4). Datas dd/mm/aaaa; o router converte para `date`.
+    valor_compra: Optional[Decimal] = None
+    data_compra: Optional[str] = None
+    garantia_ate: Optional[str] = None
+    local_id: Optional[int] = None
 
     @field_validator("date_registered")
     @classmethod
@@ -95,6 +119,27 @@ class ItemUpdate(BaseModel, _ItemDomainValidators):
     local_instalacao: Optional[str] = None
     poe: Optional[str] = None
     quantidade_portas: Optional[str] = None
+    # Compra e local (F4). Chave ausente = não muda; `null` explícito limpa o campo.
+    valor_compra: Optional[Decimal] = None
+    data_compra: Optional[str] = None
+    garantia_ate: Optional[str] = None
+    local_id: Optional[int] = None
+
+
+class TransferenciaCreate(BaseModel):
+    para_unidade_id: int
+    para_local_id: Optional[int] = None
+    motivo: str
+
+    @field_validator("motivo")
+    @classmethod
+    def _validar_motivo(cls, v):
+        v = blank_to_none(v)
+        if v is None:
+            raise ValueError("Informe o motivo da transferência.")
+        if len(v) > 255:
+            raise ValueError("O motivo deve ter no máximo 255 caracteres.")
+        return v
 
 
 class ItemResponse(BaseModel):
@@ -132,6 +177,19 @@ class ItemResponse(BaseModel):
     date_registered: Optional[datetime]
     date_issued: Optional[datetime]
     peripheral_count: Optional[int] = 0
+    # Vínculos (migração 0004); nome/setor/cargo/superior vêm de JOINs em colaboradores.
+    colaborador_id: Optional[int] = None
+    local_id: Optional[int] = None
+    local_nome: Optional[str] = None
+    colaborador_nome: Optional[str] = None
+    colaborador_setor: Optional[str] = None
+    colaborador_cargo: Optional[str] = None
+    superior_nome: Optional[str] = None
+    # Compra (F4): JSON "4599.90" / "2026-01-10".
+    valor_compra: Optional[Decimal] = None
+    data_compra: Optional[date] = None
+    garantia_ate: Optional[date] = None
+    nf_anexo_key: Optional[str] = None
 
     class Config:
         from_attributes = True

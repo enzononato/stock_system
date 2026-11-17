@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { Trash2, ArrowLeft, ShieldAlert } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from '@/components/ui/toast'
 
 import { getItem, listItemsPaginated, removeItem } from '@/api/items'
@@ -10,6 +10,7 @@ import { FileUpload } from '@/components/ui/FileUpload'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { StatusPill } from '@/components/ui/StatusPill'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
@@ -18,8 +19,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  ApagamentoDadosFields,
+  apagamentoCompleto,
+  apagamentoInicial,
+  paraApagamentoInput,
+  type ApagamentoState,
+} from '@/features/ciclo-vida/ApagamentoDadosFields'
 import { useConstants } from '@/hooks/useConstants'
 import { getErrorMessage } from '@/lib/api-error'
+import { upper } from '@/lib/format'
 import { formatDate } from '@/lib/utils'
 
 // Esta tela só tem um bloco de dados, e é uma lista de SELEÇÃO — o operador
@@ -32,11 +41,25 @@ const ITEM_SEARCH_LIMIT = 20
 export default function RemovePage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { removalReasons, removalReasonsAttachment, isLoading: constantsLoading } = useConstants()
+  const [searchParams] = useSearchParams()
+  const {
+    removalReasons,
+    removalReasonsAttachment,
+    tiposExigemApagamento,
+    motivosSemPosse,
+    metodosApagamento,
+    isLoading: constantsLoading,
+  } = useConstants()
 
-  const [selectedId, setSelectedId] = useState('')
+  // `?item=<id>` abre a tela com o equipamento já escolhido (atalho "Dar baixa" da aba
+  // Manutenções para equipamento sem conserto, que não aparece na busca de Disponível).
+  const [selectedId, setSelectedId] = useState(() => {
+    const doLink = searchParams.get('item') ?? ''
+    return /^\d+$/.test(doLink) ? doLink : ''
+  })
   const [reason, setReason] = useState('')
   const [attachment, setAttachment] = useState<File | null>(null)
+  const [apagamento, setApagamento] = useState<ApagamentoState>(apagamentoInicial)
   // Confirmação de ciência: este é o portão da única ação irreversível do
   // sistema — o botão de confirmar só destrava com os requisitos preenchidos
   // (equipamento, motivo, comprovante quando exigido e esta ciência).
@@ -75,13 +98,39 @@ export default function RemovePage() {
   // (removalReasonsAttachment), não mais de um objeto hardcoded local.
   const needsAttachment = reason ? Boolean(removalReasonsAttachment[reason]) : false
 
+  // Apagamento de dados (LGPD): obrigatório para os tipos com armazenamento; "não se aplica"
+  // só vale para roubo ou perda. Os dois conjuntos vêm de /api/constants.
+  const exige = tiposExigemApagamento.includes(selectedItem?.tipo ?? '')
+  const permiteNaoAplica = motivosSemPosse.includes(reason)
+  const apagamentoOk = !exige || apagamentoCompleto(apagamento, permiteNaoAplica)
+
+  function trocarMotivo(novo: string) {
+    setReason(novo)
+    // Trocar para um motivo que não aceita mais "não se aplica" zera a escolha.
+    if (!motivosSemPosse.includes(novo) && apagamento.dadosApagados === 'nao_aplica') {
+      setApagamento({ ...apagamento, dadosApagados: '' })
+    }
+  }
+
+  // O item vindo do link (`?item=`) pode não estar na lista de Disponíveis: entra como opção
+  // para o gatilho mostrar o equipamento escolhido.
+  const opcoes = [...disponiveis]
+  if (selectedItem && !opcoes.some((i) => i.id === selectedItem.id)) opcoes.unshift(selectedItem)
+
   const mutation = useMutation({
-    mutationFn: () => removeItem(Number(selectedId), reason, attachment ?? undefined),
+    mutationFn: () =>
+      removeItem(
+        Number(selectedId),
+        reason,
+        attachment ?? undefined,
+        exige ? paraApagamentoInput(apagamento) : undefined
+      ),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['items'] })
       setSelectedId('')
       setReason('')
       setAttachment(null)
+      setApagamento(apagamentoInicial())
       setConfirmedUnderstanding(false)
       toast('Equipamento baixado e removido do estoque com sucesso.')
     },
@@ -102,6 +151,10 @@ export default function RemovePage() {
     }
     if (needsAttachment && !attachment) {
       toast('Este motivo de baixa exige o upload de comprovante (laudo/B.O./nota).', 'error')
+      return
+    }
+    if (!apagamentoOk) {
+      toast('Registre o apagamento dos dados do equipamento (LGPD).', 'error')
       return
     }
     if (!confirmedUnderstanding) {
@@ -177,7 +230,7 @@ export default function RemovePage() {
                 (marca, modelo, identificador) — o da FT_STC prometia busca por
                 ID e revenda, que o `search` do servidor não cobre. */}
             <SearchableSelect
-              options={disponiveis.map((i) => ({
+              options={opcoes.map((i) => ({
                 value: String(i.id),
                 label: `#${i.id} — ${i.tipo ?? ''} ${i.brand ?? ''} ${i.model ?? ''}`.trim(),
                 subtitle: [i.revenda, i.identificador].filter(Boolean).join(' • '),
@@ -211,7 +264,7 @@ export default function RemovePage() {
                 </div>
                 <div>
                   <span className="text-muted-foreground block">Revenda</span>
-                  <span className="font-medium text-foreground">{selectedItem.revenda || '—'}</span>
+                  <span className="font-medium text-foreground">{upper(selectedItem.revenda) || '—'}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground block">Identificador</span>
@@ -233,15 +286,8 @@ export default function RemovePage() {
                 </div>
                 <div>
                   <span className="text-muted-foreground block">Status</span>
-                  {/* Mostra o status real vindo do servidor (a ficha é buscada
-                      por id), no mesmo selo em caixa alta da FT_STC. */}
-                  <Badge
-                    variant={selectedItem.status === 'Disponível' ? 'success' : 'default'}
-                    showDot
-                    className="font-mono text-[10px] border-border text-foreground"
-                  >
-                    {(selectedItem.status ?? '—').toUpperCase()}
-                  </Badge>
+                  {/* Status real vindo do servidor (a ficha é buscada por id). */}
+                  <StatusPill status={selectedItem.status} />
                 </div>
               </div>
             </div>
@@ -252,7 +298,7 @@ export default function RemovePage() {
             <Label className="text-caption font-medium text-foreground">
               Motivo Formal da Remoção *
             </Label>
-            <Select value={reason} onValueChange={setReason} required disabled={constantsLoading}>
+            <Select value={reason} onValueChange={trocarMotivo} required disabled={constantsLoading}>
               <SelectTrigger className="h-9">
                 <SelectValue placeholder="Selecione a justificativa da baixa" />
               </SelectTrigger>
@@ -295,6 +341,22 @@ export default function RemovePage() {
             </div>
           )}
 
+          {/* Apagamento de dados (LGPD): tipos com armazenamento exigem o registro; os demais, não. */}
+          {selectedItem && exige && (
+            <ApagamentoDadosFields
+              tipo={selectedItem.tipo ?? ''}
+              value={apagamento}
+              onChange={setApagamento}
+              metodos={metodosApagamento}
+              permiteNaoAplica={permiteNaoAplica}
+            />
+          )}
+          {selectedItem && !exige && (
+            <p className="text-caption text-muted-foreground">
+              Este tipo de equipamento não armazena dados pessoais: o apagamento será registrado como "não se aplica".
+            </p>
+          )}
+
           {/* Confirmação de ciência — o portão final antes da baixa definitiva.
               Diferente da FT_STC, o texto NÃO fica dentro de um <label>
               envolvente: só o quadrado do Checkbox (já corrigido) é clicável. */}
@@ -326,16 +388,17 @@ export default function RemovePage() {
             <Button
               type="submit"
               size="sm"
+              loading={mutation.isPending}
               disabled={
-                mutation.isPending ||
                 !selectedId ||
                 !reason ||
                 (needsAttachment && !attachment) ||
+                !apagamentoOk ||
                 !confirmedUnderstanding
               }
             >
               <Trash2 className="mr-1.5 size-3.5" />
-              {mutation.isPending ? 'Processando…' : 'Confirmar Baixa Definitiva'}
+              Confirmar Baixa Definitiva
             </Button>
           </div>
         </form>

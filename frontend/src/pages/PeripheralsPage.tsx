@@ -23,9 +23,14 @@ import {
 import { listItemsPaginated, type Item } from '@/api/items'
 import { useAuth } from '@/contexts/AuthContext'
 import { useConstants } from '@/hooks/useConstants'
+import { usePageSize } from '@/hooks/usePageSize'
 import { getErrorMessage } from '@/lib/api-error'
+import { upper } from '@/lib/format'
 import { exportToCsv, formatDate } from '@/lib/utils'
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
+import { PageHeader } from '@/components/layout/PageHeader'
+import { Pagination } from '@/components/ui/Pagination'
+import { StatusPill } from '@/components/ui/StatusPill'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -56,25 +61,6 @@ const LINK_ALLOWED_TYPES = ['Desktop', 'Notebook', 'Switch', 'Impressora']
 // filtrar no cliente — mesmo padrão de LinkPeripheralPage.
 const ITEM_SEARCH_LIMIT_PER_TYPE = 10
 
-const TABLE_PAGE_SIZE = 7
-
-function StatusBadge({ status }: { status?: string }) {
-  const symbol = status === 'Disponível' ? '●' : status === 'Em Uso' ? '●' : '○'
-  return (
-    <span
-      className={`font-mono text-caption font-semibold ${
-        status === 'Disponível'
-          ? 'text-foreground'
-          : status === 'Em Uso'
-            ? 'text-foreground'
-            : 'text-muted-foreground'
-      }`}
-    >
-      {symbol} {status ?? '—'}
-    </span>
-  )
-}
-
 function itemLabel(i: Item) {
   return `#${i.id} — ${i.tipo ?? ''} ${i.brand ?? ''} ${i.model ?? ''}`
 }
@@ -99,7 +85,8 @@ export default function PeripheralsPage() {
   const [filterTipo, setFilterTipo] = useState('all')
   const [filterStatus, setFilterStatus] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
-  const [tablePage, setTablePage] = useState(0)
+  const [tablePage, setTablePage] = useState(1)
+  const [pageSize, setPageSize] = usePageSize('perifericos')
 
   // Detalhe / relação. Guarda um snapshot do periférico escolhido para a
   // ficha continuar aberta mesmo que um filtro do servidor o tire da lista.
@@ -108,7 +95,7 @@ export default function PeripheralsPage() {
   const [selectedItemId, setSelectedItemId] = useState('')
   const [selectedItemSnapshot, setSelectedItemSnapshot] = useState<Item | null>(null)
 
-  const { data: peripherals = [], isLoading } = useQuery({
+  const { data: peripherals = [], isLoading, isFetching } = useQuery({
     queryKey: ['peripherals', filterTipo, filterStatus],
     queryFn: () =>
       listPeripherals({
@@ -131,16 +118,14 @@ export default function PeripheralsPage() {
     )
   })
 
-  const totalTablePages = Math.max(1, Math.ceil(filteredPeripherals.length / TABLE_PAGE_SIZE))
-  const paginatedPeripherals = filteredPeripherals.slice(
-    tablePage * TABLE_PAGE_SIZE,
-    (tablePage + 1) * TABLE_PAGE_SIZE
-  )
+  const totalTablePages = Math.max(1, Math.ceil(filteredPeripherals.length / pageSize))
+  const paginaAtual = Math.min(tablePage, totalTablePages)
+  const paginatedPeripherals = filteredPeripherals.slice((paginaAtual - 1) * pageSize, paginaAtual * pageSize)
 
   // Se um filtro/busca reduzir o total a ponto da página atual deixar de
   // existir, volta para a última página válida.
   useEffect(() => {
-    if (tablePage > totalTablePages - 1) setTablePage(totalTablePages - 1)
+    if (tablePage > totalTablePages) setTablePage(totalTablePages)
   }, [tablePage, totalTablePages])
 
   const selectedPeripheral =
@@ -192,7 +177,7 @@ export default function PeripheralsPage() {
   ].map((i) => ({
     value: String(i.id),
     label: itemLabel(i),
-    subtitle: i.revenda || undefined,
+    subtitle: upper(i.revenda) || undefined,
   }))
 
   function handleSelectItem(val: string) {
@@ -256,23 +241,13 @@ export default function PeripheralsPage() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Cabeçalho */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-border pb-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
-              Inventário Relacional
-            </span>
-            <span className="text-muted-foreground">•</span>
-            <span className="text-caption text-foreground font-medium">Master / Detail</span>
-          </div>
-          <h1 className="text-heading-lg font-semibold tracking-tight text-foreground mt-0.5">
-            Periféricos e Vínculos
-          </h1>
-          <p className="text-body-sm text-muted-foreground mt-1">
-            Gestão de periféricos — mouse, teclado, monitor, headset — com rastreabilidade relacional ao ativo principal.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+      <PageHeader
+        eyebrow="Inventário Relacional"
+        eyebrowDetail="Master / Detail"
+        title="Periféricos e Vínculos"
+        description="Gestão de periféricos — mouse, teclado, monitor, headset — com rastreabilidade relacional ao ativo principal."
+        actions={
+          <>
           <Button
             variant="outline"
             size="sm"
@@ -292,35 +267,31 @@ export default function PeripheralsPage() {
                 ]
               )
             }
-            className="text-xs h-8"
           >
-            <Download className="mr-1.5 size-3.5" />
+            <Download />
             Exportar CSV
           </Button>
           {canManage && (
-            <Button
-              size="sm"
-              onClick={() => setShowCreateForm((p) => !p)}
-              className="text-xs h-8"
-            >
-              <Plus className="mr-1.5 size-3.5" />
+            <Button size="sm" onClick={() => setShowCreateForm((p) => !p)}>
+              <Plus />
               Novo Periférico
             </Button>
           )}
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Painel de Cadastro Rápido (colapsável) */}
       {showCreateForm && canManage && (
-        <div className="rounded border border-border bg-surface p-5 space-y-4">
+        <div className="rounded-md border border-border bg-surface p-5 space-y-4">
           <div className="border-b border-border pb-2.5">
-            <h2 className="text-body font-semibold text-foreground">Cadastrar Novo Periférico</h2>
+            <h2 className="text-body font-semibold text-brand-text">Cadastrar Novo Periférico</h2>
             <p className="text-caption text-muted-foreground">
               Registre um periférico individual para posterior vinculação a um ativo.
             </p>
           </div>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-caption font-medium">Tipo *</Label>
                 <Select value={tipo} onValueChange={setTipo} required disabled={constantsLoading}>
@@ -366,22 +337,11 @@ export default function PeripheralsPage() {
               </div>
             </div>
             <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setShowCreateForm(false)}
-                className="text-xs h-8"
-              >
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowCreateForm(false)}>
                 Cancelar
               </Button>
-              <Button
-                type="submit"
-                size="sm"
-                disabled={createMutation.isPending}
-                className="text-xs h-8"
-              >
-                {createMutation.isPending ? 'Cadastrando…' : 'Cadastrar Periférico'}
+              <Button type="submit" size="sm" loading={createMutation.isPending}>
+                Cadastrar Periférico
               </Button>
             </div>
           </form>
@@ -391,7 +351,7 @@ export default function PeripheralsPage() {
       {/* Grade Mestre / Detalhe */}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
         {/* MESTRE — Lista de Periféricos */}
-        <div className="rounded border border-border bg-surface p-5 space-y-4">
+        <div className="min-w-0 rounded-md border border-border bg-surface p-5 space-y-4">
           {/* Barra de filtros */}
           <div className="flex flex-col sm:flex-row gap-3 border-b border-border pb-4">
             <div className="relative flex-1">
@@ -400,8 +360,9 @@ export default function PeripheralsPage() {
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value)
-                  setTablePage(0)
+                  setTablePage(1)
                 }}
+                aria-label="Buscar periféricos"
                 placeholder="Buscar por ID, tipo, marca, S/N…"
                 className="pl-8 h-8 text-body-sm"
               />
@@ -410,11 +371,11 @@ export default function PeripheralsPage() {
               value={filterTipo}
               onValueChange={(val) => {
                 setFilterTipo(val)
-                setTablePage(0)
+                setTablePage(1)
               }}
               disabled={constantsLoading}
             >
-              <SelectTrigger className="w-36 h-8 text-body-sm">
+              <SelectTrigger aria-label="Tipo" className="w-full sm:w-36 h-8 text-body-sm">
                 <SelectValue placeholder="Tipo" />
               </SelectTrigger>
               <SelectContent>
@@ -430,10 +391,10 @@ export default function PeripheralsPage() {
               value={filterStatus}
               onValueChange={(val) => {
                 setFilterStatus(val)
-                setTablePage(0)
+                setTablePage(1)
               }}
             >
-              <SelectTrigger className="w-36 h-8 text-body-sm">
+              <SelectTrigger aria-label="Status" className="w-full sm:w-36 h-8 text-body-sm">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
@@ -446,8 +407,8 @@ export default function PeripheralsPage() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-body-sm">
-              <thead className="border-b border-border text-caption uppercase tracking-wider text-muted-foreground">
+            <table className="w-full min-w-[640px] text-left text-body-sm">
+              <thead className="bg-brand-soft text-brand-soft-foreground text-caption uppercase tracking-wider">
                 <tr>
                   <th className="py-2 px-3 font-semibold">ID</th>
                   <th className="py-2 px-3 font-semibold">Tipo</th>
@@ -481,7 +442,7 @@ export default function PeripheralsPage() {
                       <tr
                         key={p.id}
                         onClick={() => handleSelectPeripheral(p)}
-                        className={`cursor-pointer transition-colors ${isSelected ? 'bg-surface-alt' : 'hover:bg-surface-alt'}`}
+                        className={`cursor-pointer transition-colors ${isSelected ? 'bg-brand-soft text-brand-soft-foreground' : 'hover:bg-surface-alt'}`}
                       >
                         <td className="py-2 px-3 font-mono font-semibold">#{p.id}</td>
                         <td className="py-2 px-3 font-medium">{p.tipo}</td>
@@ -492,7 +453,7 @@ export default function PeripheralsPage() {
                           {p.identificador || '—'}
                         </td>
                         <td className="py-2 px-3">
-                          <StatusBadge status={p.status} />
+                          <StatusPill status={p.status} />
                         </td>
                         <td className="py-2 px-3 font-mono text-muted-foreground">
                           {formatDate(p.date_registered)}
@@ -510,43 +471,27 @@ export default function PeripheralsPage() {
             </table>
           </div>
 
-          <div className="flex items-center justify-between border-t border-border pt-3">
-            <span className="text-caption text-muted-foreground">
-              {totalTablePages > 1
-                ? `Página ${tablePage + 1} de ${totalTablePages} (${filteredPeripherals.length} periféricos)`
-                : `${filteredPeripherals.length} periférico${filteredPeripherals.length !== 1 ? 's' : ''}`}
-            </span>
-            {totalTablePages > 1 && (
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={tablePage === 0}
-                  onClick={() => setTablePage((p) => Math.max(0, p - 1))}
-                  className="text-xs h-7 px-2.5"
-                >
-                  ← Anterior
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={tablePage >= totalTablePages - 1}
-                  onClick={() => setTablePage((p) => p + 1)}
-                  className="text-xs h-7 px-2.5"
-                >
-                  Próxima →
-                </Button>
-              </div>
-            )}
+          <div className="border-t border-border pt-3">
+            <Pagination
+              page={tablePage}
+              pageSize={pageSize}
+              total={filteredPeripherals.length}
+              onPageChange={setTablePage}
+              onPageSizeChange={(n) => {
+                setPageSize(n)
+                setTablePage(1)
+              }}
+              isFetching={isFetching}
+            />
           </div>
         </div>
 
         {/* DETALHE — Painel de Relações */}
-        <div className="rounded border border-border bg-surface p-5 space-y-4 min-h-[400px]">
+        <div className="rounded-md border border-border bg-surface p-5 space-y-4 min-h-[400px]">
           {selectedPeripheral ? (
             <>
               <div className="border-b border-border pb-3">
-                <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground block">
+                <span className="text-caption font-semibold uppercase tracking-wider text-brand-text block">
                   Ficha do Periférico
                 </span>
                 <p className="text-body-lg font-semibold text-foreground mt-0.5">
@@ -563,7 +508,7 @@ export default function PeripheralsPage() {
               <div className="space-y-2 text-caption">
                 <div className="flex justify-between py-1 border-b border-border">
                   <span className="text-muted-foreground">Status</span>
-                  <StatusBadge status={selectedPeripheral.status} />
+                  <StatusPill status={selectedPeripheral.status} />
                 </div>
                 <div className="flex justify-between py-1 border-b border-border">
                   <span className="text-muted-foreground">Vinculado</span>
@@ -584,7 +529,7 @@ export default function PeripheralsPage() {
               {/* Ações de Gestão */}
               {canManage && (
                 <div className="space-y-3 pt-3 border-t border-border">
-                  <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground block">
+                  <span className="text-caption font-semibold uppercase tracking-wider text-brand-text block">
                     Ações de Gestão
                   </span>
 
@@ -592,11 +537,11 @@ export default function PeripheralsPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      disabled={unlinkMutation.isPending}
+                      loading={unlinkMutation.isPending}
                       onClick={() => unlinkMutation.mutate(selectedPeripheral.link_id!)}
-                      className="w-full text-xs h-8"
+                      className="w-full"
                     >
-                      <Unlink className="mr-1.5 size-3.5" />
+                      <Unlink />
                       Desvincular do Ativo
                     </Button>
                   ) : (
@@ -616,11 +561,11 @@ export default function PeripheralsPage() {
                       {selectedItemId && (
                         <Button
                           size="sm"
-                          disabled={linkMutation.isPending}
+                          loading={linkMutation.isPending}
                           onClick={() => linkMutation.mutate(selectedPeripheral.id)}
-                          className="w-full text-xs h-8"
+                          className="w-full"
                         >
-                          <Link2 className="mr-1.5 size-3.5" />
+                          <Link2 />
                           Confirmar Vínculo
                         </Button>
                       )}
@@ -632,10 +577,11 @@ export default function PeripheralsPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        disabled={deleteMutation.isPending || selectedPeripheral.status === 'Em Uso'}
-                        className="w-full text-xs h-8 text-destructive hover:bg-surface-alt"
+                        loading={deleteMutation.isPending}
+                        disabled={selectedPeripheral.status === 'Em Uso'}
+                        className="w-full text-destructive hover:bg-surface-alt"
                       >
-                        <Trash2 className="mr-1.5 size-3.5" />
+                        <Trash2 />
                         Inativar Periférico
                       </Button>
                     </AlertDialogTrigger>

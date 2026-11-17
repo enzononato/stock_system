@@ -64,9 +64,9 @@ export default function Sidebar({ className, onNavigate }: SidebarProps) {
             className="h-14 w-auto max-w-[205px] object-contain filter brightness-0 dark:brightness-100 drop-shadow-md transition-transform duration-200 group-hover:scale-[1.02]"
           />
         </div>
-        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-alt border border-border">
+        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-brand-soft">
           <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-available)] motion-safe:animate-pulse" />
-          <span className="text-[10px] font-semibold text-foreground tracking-widest uppercase font-mono">
+          <span className="text-[10px] font-semibold text-brand-soft-foreground tracking-widest uppercase font-mono">
             Controle de Patrimônio
           </span>
         </div>
@@ -85,13 +85,13 @@ export default function Sidebar({ className, onNavigate }: SidebarProps) {
               <button
                 type="button"
                 onClick={() => alternarGrupo(group.title)}
-                className="flex w-full items-center justify-between px-2.5 py-1 text-caption text-muted-foreground hover:text-foreground transition-colors cursor-pointer group/hdr"
+                className="flex w-full items-center justify-between px-2.5 py-1 text-caption text-brand-text hover:text-foreground transition-colors cursor-pointer group/hdr"
                 aria-expanded={aberto}
               >
                 <span className="font-semibold tracking-wider">{group.title}</span>
                 <ChevronRight
                   className={cn(
-                    'size-3.5 text-muted-foreground transition-transform duration-micro group-hover/hdr:text-foreground',
+                    'size-3.5 text-brand-text transition-transform duration-micro group-hover/hdr:text-foreground',
                     aberto && 'rotate-90'
                   )}
                   aria-hidden="true"
@@ -113,12 +113,14 @@ export default function Sidebar({ className, onNavigate }: SidebarProps) {
                           // partir do hover/focus do item inteiro, não só do SVG.
                           'group flex items-center gap-2.5 px-2.5 py-1.5 rounded text-body-sm transition-colors duration-micro',
                           isActive
-                            ? 'bg-surface-alt text-foreground font-semibold border-l-2 border-foreground'
+                            ? 'bg-lime text-lime-foreground font-semibold'
                             : 'text-muted-foreground hover:text-foreground hover:bg-surface-alt'
                         )
                       }
                     >
-                      <item.icon size={18} />
+                      <span aria-hidden="true" className="inline-flex shrink-0">
+                        <item.icon size={18} />
+                      </span>
                       <span className="truncate">{item.label}</span>
                     </NavLink>
                   ))}

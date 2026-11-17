@@ -23,8 +23,32 @@ from app.db.database_mysql import get_cursor
 from app.core.config import TERMO_MODELOS, TERMO_DEVOLUCAO_MODELOS
 from app.db.utils import format_cpf, format_date
 from app.db.unidade_db import get_unidade_manager
+from app.services.baixa import Apagamento, motivo_bloqueio_baixa
 
 logger = logging.getLogger(__name__)
+
+# Respostas de `confirm_loan`/`confirm_return` quando outra confirmação ganhou a corrida
+# (os routers as devolvem como 409).
+MSG_EMPRESTIMO_JA_CONFIRMADO = "O empréstimo já foi confirmado."
+MSG_DEVOLUCAO_JA_CONFIRMADA = "A devolução já foi confirmada."
+
+# Motivo gravado em `transferencias` quando o empréstimo muda a unidade do equipamento (F7).
+MOTIVO_TRANSFERENCIA_EMPRESTIMO = "Empréstimo para colaborador de outra unidade"
+
+# Estorno: situação (items.status, com is_active=1) que cada operação estornável deixa
+# no equipamento. O estorno só é aceito enquanto o item continua nela.
+_SITUACAO_PRODUZIDA_POR = {
+    "Empréstimo": "Pendente",
+    "Confirmação Empréstimo": "Indisponível",
+    "Devolução": "Pendente Devolução",
+    "Confirmação Devolução": "Disponível",
+    "Cadastro": "Disponível",
+}
+MSG_ESTORNO_SITUACAO_MUDOU = "O equipamento mudou de situação depois deste lançamento."
+# Lançamentos de `history` que mudam a situação do equipamento (Edição, periféricos,
+# transferência e Estorno não mudam).
+_OPERACOES_DE_SITUACAO = (*_SITUACAO_PRODUZIDA_POR, "Exclusão")
+_OPERACOES_DE_SITUACAO_SQL = ", ".join(f"'{op}'" for op in _OPERACOES_DE_SITUACAO)
 
 # ── Geração de termos (.docx) — utilitários compartilhados ─────────────────────
 #
@@ -168,6 +192,52 @@ def _texto_perifericos(linked_peripherals, texto_vazio: str) -> str:
     )
 
 
+# Colunas e JOINs que preenchem os vínculos do item (colaborador, superior, local).
+# Todos LEFT JOIN por chave primária: item sem vínculo continua aparecendo, 1 linha por item.
+_CAMPOS_VINCULOS = (
+    "c.nome AS colaborador_nome, c.setor AS colaborador_setor, "
+    "c.cargo AS colaborador_cargo, s.nome AS superior_nome, l.nome AS local_nome"
+)
+_JOINS_VINCULOS = (
+    "LEFT JOIN colaboradores c ON c.id = i.colaborador_id "
+    "LEFT JOIN colaboradores s ON s.id = c.superior_id "
+    "LEFT JOIN locais l ON l.id = i.local_id"
+)
+
+
+# Ordenação da listagem de itens: chave pública -> expressões SQL. O ORDER BY é montado
+# só a partir desta tabela (nunca do texto recebido).
+ORDENACOES_ITEMS: dict[str, tuple[str, ...]] = {
+    "id": ("i.id",),
+    "tipo": ("i.tipo",),
+    "equipamento": ("i.brand", "i.model"),
+    "status": ("CAST(i.status AS CHAR)",),
+    # Mesma regra da coluna exibida (colaborador_nome, senão assigned_to), vazio tratado como ausente.
+    "colaborador": ("COALESCE(NULLIF(c.nome, ''), NULLIF(i.assigned_to, ''))",),
+    "setor": ("c.setor",),
+    "cargo": ("c.cargo",),
+    "unidade": ("i.revenda",),
+    "cadastro": ("i.date_registered",),
+}
+
+
+def montar_order_by_items(sort: str, direcao: str) -> str:
+    """Monta o ORDER BY de list_items. Vazio/NULL fica no fim nas duas direções; desempate i.id DESC."""
+    if sort not in ORDENACOES_ITEMS:
+        raise ValueError("Ordenação inválida.")
+    if direcao not in ("asc", "desc"):
+        raise ValueError("Direção da ordenação inválida: use asc ou desc.")
+    d = direcao.upper()
+    expressoes = ORDENACOES_ITEMS[sort]
+    termos: list[str] = []
+    if sort not in ("id", "cadastro"):
+        termos.append(f"NULLIF({expressoes[0]}, '') IS NULL")
+    termos.extend(f"{e} {d}" for e in expressoes)
+    if sort != "id":
+        termos.append("i.id DESC")
+    return ", ".join(termos)
+
+
 class InventoryDBManager:
     def __init__(self):
         self._create_tables()
@@ -271,31 +341,54 @@ class InventoryDBManager:
             logger.exception("Erro de banco de dados")
             return False, "Erro ao processar a operação. Tente novamente."
 
-    def update_item(self, item_id: int, item_data: dict, logged_user: str):
+    def update_item(self, item_id: int, item_data: dict, logged_user: str, details: str | None = None):
         sets = ", ".join([f"{k}=%s" for k in item_data.keys()])
         values = list(item_data.values()) + [item_id]
         try:
             with get_cursor(dict_cursor=False) as cur:
                 cur.execute(f"UPDATE items SET {sets} WHERE id=%s", values)
                 cur.execute(
-                    "INSERT INTO history (item_id, operador, data_operacao, operation) VALUES (%s,%s,%s,'Edição')",
-                    (item_id, logged_user, datetime.now()),
+                    "INSERT INTO history (item_id, operador, data_operacao, operation, details) "
+                    "VALUES (%s,%s,%s,'Edição',%s)",
+                    (item_id, logged_user, datetime.now(), details),
                 )
             return True, f"Item {item_id} atualizado."
         except pymysql.MySQLError:
             logger.exception("Erro de banco de dados")
             return False, "Erro ao processar a operação. Tente novamente."
 
-    def remove(self, item_id: int, logged_user: str, reason: str, storage_key: str = None):
-        """Remove (soft-delete) um item. storage_key é a chave do anexo no storage backend."""
-        item = self.find(item_id)
-        if not item:
-            return False, "ID não encontrado."
-        if item["status"] != "Disponível":
-            return False, "Não é possível remover produto emprestado."
+    def remove(
+        self,
+        item_id: int,
+        logged_user: str,
+        reason: str,
+        storage_key: str = None,
+        apagamento: Apagamento | None = None,
+        comprovante_key: str | None = None,
+    ):
+        """Remove (soft-delete) um item. storage_key é a chave do anexo no storage backend.
 
+        Com `apagamento` (F4), o registro de apagamento de dados entra em
+        `baixas_apagamento` na MESMA transação da baixa, ligado à linha de
+        histórico `Exclusão`. Chamadas antigas sem `apagamento` continuam valendo."""
         try:
-            with get_cursor(dict_cursor=False) as cur:
+            with get_cursor() as cur:
+                cur.execute(
+                    "SELECT * FROM items WHERE id=%s AND is_active=1 FOR UPDATE", (item_id,)
+                )
+                item = cur.fetchone()
+                if not item:
+                    return False, "ID não encontrado."
+                cur.execute(
+                    "SELECT COUNT(*) AS total FROM manutencoes "
+                    "WHERE item_id=%s AND status IN ('aberta','enviada','em_reparo')",
+                    (item_id,),
+                )
+                bloqueio = motivo_bloqueio_baixa(item, cur.fetchone()["total"] > 0)
+                if bloqueio:
+                    return False, bloqueio
+
+                agora = datetime.now()
                 cur.execute("UPDATE items SET is_active=0 WHERE id=%s", (item_id,))
                 cur.execute(
                     """INSERT INTO history
@@ -304,13 +397,25 @@ class InventoryDBManager:
                      operacao_anexo, poe, quantidade_portas)
                     VALUES (%s,%s,%s,'Exclusão',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     (
-                        item_id, logged_user, datetime.now(), reason,
+                        item_id, logged_user, agora, reason,
                         item.get("tipo"), item.get("brand"), item.get("model"),
                         item.get("identificador"), item.get("nota_fiscal"),
                         item.get("fornecedor"), storage_key,
                         item.get("poe"), item.get("quantidade_portas"),
                     ),
                 )
+                if apagamento is not None:
+                    history_id = cur.lastrowid
+                    cur.execute(
+                        "INSERT INTO baixas_apagamento (item_id, history_id, dados_apagados, metodo, "
+                        "apagado_por, apagado_em, comprovante_key, registrado_por, registrado_em) "
+                        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                        (
+                            item_id, history_id, apagamento.dados_apagados, apagamento.metodo,
+                            apagamento.apagado_por, apagamento.apagado_em, comprovante_key,
+                            logged_user, agora,
+                        ),
+                    )
             return True, f"Aparelho {item_id} removido do estoque."
         except pymysql.MySQLError:
             logger.exception("Erro de banco de dados")
@@ -323,6 +428,9 @@ class InventoryDBManager:
         status: str | None = None,
         revenda: str | None = None,
         search: str | None = None,
+        colaborador_id: int | None = None,
+        sort: str = "id",
+        direcao: str = "desc",
         limit: int | None = None,
         offset: int = 0,
     ) -> tuple[list[dict], int]:
@@ -345,6 +453,9 @@ class InventoryDBManager:
         if revenda:
             where.append("i.revenda = %s")
             params.append(revenda)
+        if colaborador_id is not None:
+            where.append("i.colaborador_id = %s")
+            params.append(colaborador_id)
         if search:
             like = f"%{search}%"
             where.append(
@@ -353,21 +464,25 @@ class InventoryDBManager:
             )
             params.extend([like, like, like, like, like])
         where_sql = " AND ".join(where)
+        order_by = montar_order_by_items(sort, direcao)
 
         with get_cursor(commit=False) as cur:
             cur.execute(f"SELECT COUNT(*) as total FROM items i WHERE {where_sql}", params)
             total = cur.fetchone()["total"]
 
-            # GROUP BY (por causa do peripheral_count) impede reaproveitar o
-            # COUNT(*) direto na mesma query — por isso a contagem acima é
-            # feita à parte, sem o LEFT JOIN/GROUP BY.
+            # Os JOINs de colaborador/superior/local são LEFT JOINs por chave primária:
+            # nunca multiplicam nem removem linhas. O peripheral_count é uma subconsulta
+            # (em vez de COUNT + GROUP BY) para as colunas dos JOINs poderem ir no SELECT
+            # sem depender de ONLY_FULL_GROUP_BY.
             query = f"""
-                SELECT i.*, COUNT(ep.peripheral_id) as peripheral_count
+                SELECT i.*,
+                    (SELECT COUNT(ep.peripheral_id) FROM equipment_peripherals ep
+                     WHERE ep.equipment_id = i.id) AS peripheral_count,
+                    {_CAMPOS_VINCULOS}
                 FROM items i
-                LEFT JOIN equipment_peripherals ep ON i.id = ep.equipment_id
+                {_JOINS_VINCULOS}
                 WHERE {where_sql}
-                GROUP BY i.id
-                ORDER BY i.id DESC
+                ORDER BY {order_by}
             """
             query_params = list(params)
             if limit is not None:
@@ -380,6 +495,22 @@ class InventoryDBManager:
     def find(self, item_id: int):
         with get_cursor(commit=False) as cur:
             cur.execute("SELECT * FROM items WHERE id=%s AND is_active=1", (item_id,))
+            return cur.fetchone()
+
+    def get_item(self, item_id: int):
+        """Como `find`, mas com colaborador (nome, setor, cargo), superior e local
+        preenchidos por LEFT JOIN. Usado pela API de leitura; as regras internas
+        (empréstimo, auditoria) continuam em `find`, só com as colunas da tabela."""
+        with get_cursor(commit=False) as cur:
+            cur.execute(
+                f"""
+                SELECT i.*, {_CAMPOS_VINCULOS}
+                FROM items i
+                {_JOINS_VINCULOS}
+                WHERE i.id = %s AND i.is_active = 1
+                """,
+                (item_id,),
+            )
             return cur.fetchone()
 
     # ── Peripherals ────────────────────────────────────────────────────────────
@@ -403,6 +534,18 @@ class InventoryDBManager:
                 return False, "Já existe um periférico com este Identificador (Nº de Série)."
             logger.exception("Erro de banco de dados")
             return False, "Erro ao processar a operação. Tente novamente."
+
+    def get_peripheral(self, peripheral_id: int):
+        """Periférico por id, ativo ou não (usado para o "antes/depois" da auditoria)."""
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT * FROM peripherals WHERE id=%s", (peripheral_id,))
+            return cur.fetchone()
+
+    def get_peripheral_link(self, link_id: int):
+        """Vínculo equipamento↔periférico (id, equipment_id, peripheral_id) ou None."""
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT * FROM equipment_peripherals WHERE id=%s", (link_id,))
+            return cur.fetchone()
 
     def list_peripherals(self, status_filter="", type_filter="", include_inactive=False):
         where = []
@@ -548,7 +691,7 @@ class InventoryDBManager:
 
     def issue(
         self, pid, user, cpf, center_cost, cargo, setor, revenda, date_issue, logged_user: str,
-        pessoa_juridica: bool = False,
+        pessoa_juridica: bool = False, colaborador_id: int | None = None,
     ):
         item = self.find(pid)
         if not item:
@@ -569,12 +712,37 @@ class InventoryDBManager:
         if item.get("date_registered") and dt_issue.date() < item["date_registered"].date():
             return False, f"Data de empréstimo não pode ser anterior ao cadastro ({format_date(str(item['date_registered']))})."
 
+        # Ruling 23: empréstimo para colaborador de outra unidade muda `items.revenda`;
+        # a mudança é registrada em `transferencias` na MESMA transação e o local antigo
+        # (que é da unidade anterior) é limpo.
+        nova_unidade = (revenda or "").strip()
+        muda_unidade = bool(nova_unidade) and (
+            (item.get("revenda") or "").strip().casefold() != nova_unidade.casefold()
+        )
+
         try:
             with get_cursor(dict_cursor=False) as cur:
+                # `AND status='Disponível'`: o `find` acima leu o item sem trava; se outro
+                # fluxo (manutenção, outro empréstimo) mudou o status nesse meio tempo, o
+                # UPDATE não casa e nada é gravado (nem histórico, nem transferência).
                 cur.execute(
-                    "UPDATE items SET status='Pendente', assigned_to=%s, cpf=%s, date_issued=%s, revenda=%s, pessoa_juridica=%s WHERE id=%s",
-                    (user, cpf, dt_issue, revenda, pessoa_juridica, pid),
+                    "UPDATE items SET status='Pendente', assigned_to=%s, cpf=%s, date_issued=%s, revenda=%s, pessoa_juridica=%s, colaborador_id=%s"
+                    + (", local_id=NULL" if muda_unidade else "")
+                    + " WHERE id=%s AND status='Disponível'",
+                    (user, cpf, dt_issue, revenda, pessoa_juridica, colaborador_id, pid),
                 )
+                if cur.rowcount == 0:
+                    return False, "Este item não está disponível para empréstimo."
+                if muda_unidade:
+                    cur.execute(
+                        "INSERT INTO transferencias (item_id, de_unidade, para_unidade, de_local_id, "
+                        "para_local_id, motivo, transferido_por, transferido_em) "
+                        "VALUES (%s,%s,%s,%s,NULL,%s,%s,%s)",
+                        (
+                            pid, item.get("revenda") or None, revenda, item.get("local_id"),
+                            MOTIVO_TRANSFERENCIA_EMPRESTIMO, logged_user, dt_issue,
+                        ),
+                    )
                 # pessoa_juridica também vai para o histórico (não só para items):
                 # é o que permite reverse_history_entry() restaurar o valor correto
                 # se uma Devolução for estornada depois (ver esse método mais abaixo).
@@ -606,7 +774,15 @@ class InventoryDBManager:
                 if not last_loan:
                     raise Exception("Registro de empréstimo original não encontrado no histórico.")
 
-                cur.execute("UPDATE items SET status='Indisponível' WHERE id=%s", (item_id,))
+                # Transição atômica: duas confirmações simultâneas (upload manual e
+                # RevSign, ou dois operadores) passam pelo `find` acima com o item
+                # ainda Pendente, mas só uma consegue este UPDATE (a outra espera o
+                # lock da linha e depois não casa mais com status='Pendente').
+                cur.execute(
+                    "UPDATE items SET status='Indisponível' WHERE id=%s AND status='Pendente'", (item_id,)
+                )
+                if cur.rowcount == 0:
+                    return False, MSG_EMPRESTIMO_JA_CONFIRMADO
 
                 # Antes chamava self.list_peripherals_for_equipment(item_id), o que abria
                 # uma segunda conexão em paralelo à desta transação. Agora usa o mesmo cursor.
@@ -661,9 +837,36 @@ class InventoryDBManager:
         Gera o termo de devolução em memória e inicia o processo (status → Pendente Devolução).
         Retorna (True, bytes_do_docx, filename) ou (False, msg_erro, None).
         """
+        ok, result, filename = self.render_return_term(item_id)
+        if not ok:
+            return False, result, None
+        doc_bytes = result
+
+        # Atualiza status e registra no histórico
+        try:
+            with get_cursor(dict_cursor=False) as cur:
+                cur.execute("UPDATE items SET status='Pendente Devolução' WHERE id=%s", (item_id,))
+                cur.execute(
+                    "INSERT INTO history (item_id, operador, data_operacao, operation) VALUES (%s,%s,%s,'Devolução')",
+                    (item_id, logged_user, datetime.now()),
+                )
+        except pymysql.MySQLError:
+            logger.exception("Erro de banco de dados")
+            return False, "Erro ao processar a operação. Tente novamente.", None
+
+        return True, doc_bytes, filename
+
+    def render_return_term(self, item_id: int, *, status_permitidos: tuple[str, ...] = ("Indisponível",)):
+        """
+        Só gera o .docx do termo de devolução (não toca no banco nem muda o status).
+        `status_permitidos` diz em que situações do item o termo pode ser gerado.
+        Retorna (True, bytes_do_docx, filename) ou (False, msg_erro, None).
+        """
         item = self.find(item_id)
-        if not item or item["status"] != "Indisponível":
-            return False, "Apenas itens com status 'Indisponível' podem ter termo de devolução gerado.", None
+        if not item or item["status"] not in status_permitidos:
+            if status_permitidos == ("Indisponível",):
+                return False, "Apenas itens com status 'Indisponível' podem ter termo de devolução gerado.", None
+            return False, "Este equipamento não está com devolução pendente.", None
 
         user = item.get("assigned_to")
         if not user:
@@ -722,18 +925,6 @@ class InventoryDBManager:
             logger.exception("Erro ao gerar documento")
             return False, "Erro ao gerar o documento.", None
 
-        # Atualiza status e registra no histórico
-        try:
-            with get_cursor(dict_cursor=False) as cur:
-                cur.execute("UPDATE items SET status='Pendente Devolução' WHERE id=%s", (item_id,))
-                cur.execute(
-                    "INSERT INTO history (item_id, operador, data_operacao, operation) VALUES (%s,%s,%s,'Devolução')",
-                    (item_id, logged_user, datetime.now()),
-                )
-        except pymysql.MySQLError:
-            logger.exception("Erro de banco de dados")
-            return False, "Erro ao processar a operação. Tente novamente.", None
-
         safe_user = user.replace(" ", "_")
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"termo_devolucao_{item_id}_{safe_user}_{revenda}_{timestamp}.docx"
@@ -748,9 +939,12 @@ class InventoryDBManager:
         try:
             with get_cursor() as cur:
                 cur.execute(
-                    "UPDATE items SET status='Disponível', assigned_to=NULL, cpf=NULL, date_issued=NULL, pessoa_juridica=0 WHERE id=%s",
+                    "UPDATE items SET status='Disponível', assigned_to=NULL, cpf=NULL, date_issued=NULL, pessoa_juridica=0, colaborador_id=NULL WHERE id=%s AND status='Pendente Devolução'",
                     (item_id,),
                 )
+                if cur.rowcount == 0:
+                    # Outra confirmação já concluiu a devolução (transição atômica).
+                    return False, MSG_DEVOLUCAO_JA_CONFIRMADA
 
                 # Antes chamava self.list_peripherals_for_equipment(item_id) (2a conexão);
                 # agora usa o mesmo cursor da transação.
@@ -800,11 +994,18 @@ class InventoryDBManager:
         (bloco do EMPREGADOR) e do equipamento/empréstimo.
         Retorna (True, bytes_do_docx, filename) ou (False, msg_erro, None).
         """
+        return self.render_loan_term(item_id)
+
+    def render_loan_term(self, item_id: int, *, status_permitidos: tuple[str, ...] = ("Pendente",)):
+        """Corpo de `generate_loan_term_bytes`; `status_permitidos` diz em que situações do item
+        o termo pode ser gerado (o termo de "uso" é gerado com o item `Indisponível`)."""
         item = self.find(item_id)
         if not item:
             return False, "Equipamento não encontrado.", None
-        if item["status"] != "Pendente":
-            return False, "Este equipamento não está pendente de empréstimo.", None
+        if item["status"] not in status_permitidos:
+            if status_permitidos == ("Pendente",):
+                return False, "Este equipamento não está pendente de empréstimo.", None
+            return False, "Este equipamento não está com um colaborador.", None
 
         revenda = item.get("revenda")
 
@@ -892,13 +1093,16 @@ class InventoryDBManager:
     # ── History ────────────────────────────────────────────────────────────────
 
     def list_history(
-        self, *, search: str | None = None, limit: int | None = None, offset: int = 0
+        self, *, search: str | None = None, limit: int | None = None, offset: int = 0,
+        item_id: int | None = None,
     ) -> tuple[list[dict], int]:
         """Retorna (linhas, total_sem_paginacao).
 
         A busca é feita no banco, e não na página já carregada: com paginação
         server-side, filtrar no cliente só varreria as linhas visíveis e daria a
         impressão falsa de que o histórico inteiro foi pesquisado.
+
+        `item_id` (opcional) restringe às linhas desse item; combina com `search` (AND).
         """
         # As colunas exibidas vêm de COALESCE entre history, items e peripherals,
         # e o MySQL não aceita alias de SELECT no WHERE — por isso as expressões
@@ -916,6 +1120,9 @@ class InventoryDBManager:
 
         condicoes = ["h.is_reversed = 0"]
         filtro_params: list = []
+        if item_id is not None:
+            condicoes.append("h.item_id = %s")
+            filtro_params.append(item_id)
         if search and search.strip():
             termo = f"%{search.strip()}%"
             condicoes.append("(" + " OR ".join(f"{c} LIKE %s" for c in campos_busca) + ")")
@@ -994,10 +1201,49 @@ class InventoryDBManager:
             cur.execute(sql, (ano, mes, ano, mes, ano, mes, ano, mes))
             return cur.fetchall()
 
+    def get_history_entry(self, history_id: int):
+        """Linha crua de `history` por id, ou None."""
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT * FROM history WHERE id=%s", (history_id,))
+            return cur.fetchone()
+
+    def ultimo_history_id(self, item_id: int, operation: str) -> int | None:
+        """Id do último lançamento não estornado de `operation` para o item, ou None."""
+        with get_cursor(commit=False) as cur:
+            cur.execute(
+                """SELECT id FROM history WHERE item_id=%s AND operation=%s AND is_reversed=0
+                ORDER BY data_operacao DESC, id DESC LIMIT 1""",
+                (item_id, operation),
+            )
+            row = cur.fetchone()
+        return row["id"] if row else None
+
+    def vincular_colaborador(self, item_id: int, colaborador_id: int) -> None:
+        """Grava o colaborador responsável no item (sem mexer em mais nada)."""
+        with get_cursor(dict_cursor=False) as cur:
+            cur.execute("UPDATE items SET colaborador_id=%s WHERE id=%s", (colaborador_id, item_id))
+
     def reverse_history_entry(self, history_id: int, logged_user: str):
+        """Estorna um lançamento de `history`. Recusa (sem alterar nada) quando o
+        equipamento não está mais na situação que o lançamento produziu."""
         try:
             with get_cursor() as cur:
-                cur.execute("SELECT * FROM history WHERE id=%s", (history_id,))
+                # Ordem das travas: linha do item SEMPRE antes (regra de manutencao_db);
+                # o item_id do lançamento é lido sem trava -- não muda depois de gravado.
+                cur.execute("SELECT item_id, operation FROM history WHERE id=%s", (history_id,))
+                previa = cur.fetchone()
+                if not previa:
+                    return False, "Lançamento não encontrado."
+                if previa["operation"] in _SITUACAO_PRODUZIDA_POR and previa["item_id"] is not None:
+                    cur.execute(
+                        "SELECT status, is_active FROM items WHERE id=%s FOR UPDATE",
+                        (previa["item_id"],),
+                    )
+                    atual = cur.fetchone()
+                else:
+                    atual = None
+
+                cur.execute("SELECT * FROM history WHERE id=%s FOR UPDATE", (history_id,))
                 entry = cur.fetchone()
                 if not entry:
                     return False, "Lançamento não encontrado."
@@ -1007,10 +1253,41 @@ class InventoryDBManager:
                 op = entry["operation"]
                 item_id = entry["item_id"]
 
+                if op not in _SITUACAO_PRODUZIDA_POR:
+                    return False, f"Não é possível estornar uma operação do tipo '{op}'."
+                # Só desfaz se o equipamento ainda está na situação que este
+                # lançamento produziu: um estorno antigo não pode atropelar o que
+                # aconteceu depois (novo empréstimo, manutenção, baixa...).
+                if (
+                    not atual
+                    or not atual["is_active"]
+                    or atual["status"] != _SITUACAO_PRODUZIDA_POR[op]
+                ):
+                    return False, MSG_ESTORNO_SITUACAO_MUDOU
+                # ...e só se ele é o lançamento vivo mais novo que muda a situação do
+                # item: a situação pode coincidir por causa de um ciclo posterior
+                # (Devolução#1 com a Devolução#2 pendente), e estornar o antigo
+                # devolveria o equipamento ao responsável do ciclo anterior.
+                cur.execute(
+                    "SELECT COUNT(*) AS total FROM history WHERE item_id=%s AND id>%s "
+                    f"AND is_reversed=0 AND operation IN ({_OPERACOES_DE_SITUACAO_SQL})",
+                    (item_id, history_id),
+                )
+                if cur.fetchone()["total"] > 0:
+                    return False, MSG_ESTORNO_SITUACAO_MUDOU
+                if op == "Confirmação Devolução":
+                    cur.execute(
+                        "SELECT COUNT(*) AS total FROM manutencoes "
+                        "WHERE item_id=%s AND status IN ('aberta','enviada','em_reparo')",
+                        (item_id,),
+                    )
+                    if cur.fetchone()["total"] > 0:
+                        return False, MSG_ESTORNO_SITUACAO_MUDOU
+
                 if op == "Confirmação Empréstimo":
                     cur.execute("UPDATE items SET status='Pendente' WHERE id=%s", (item_id,))
                 elif op == "Empréstimo":
-                    cur.execute("UPDATE items SET status='Disponível', assigned_to=NULL, cpf=NULL, date_issued=NULL, pessoa_juridica=0 WHERE id=%s", (item_id,))
+                    cur.execute("UPDATE items SET status='Disponível', assigned_to=NULL, cpf=NULL, date_issued=NULL, pessoa_juridica=0, colaborador_id=NULL WHERE id=%s", (item_id,))
                 elif op == "Confirmação Devolução":
                     cur.execute("UPDATE items SET status='Pendente Devolução' WHERE id=%s", (item_id,))
                 elif op == "Devolução":
@@ -1026,14 +1303,20 @@ class InventoryDBManager:
                     last_loan = cur.fetchone()
                     if not last_loan:
                         return False, "Não foi possível encontrar o empréstimo original."
+                    # O vínculo de cadastro (zerado por confirm_return) volta quando o CPF
+                    # do empréstimo ainda corresponde a um colaborador.
+                    colaborador_id = None
+                    cpf_digitos = "".join(ch for ch in (last_loan["cpf"] or "") if ch.isdigit())
+                    if cpf_digitos:
+                        cur.execute("SELECT id FROM colaboradores WHERE cpf=%s", (cpf_digitos,))
+                        achado = cur.fetchone()
+                        colaborador_id = achado["id"] if achado else None
                     cur.execute(
-                        "UPDATE items SET status='Indisponível', assigned_to=%s, cpf=%s, date_issued=%s, pessoa_juridica=%s WHERE id=%s",
-                        (last_loan["usuario"], last_loan["cpf"], last_loan["data_operacao"], last_loan.get("pessoa_juridica") or 0, item_id),
+                        "UPDATE items SET status='Indisponível', assigned_to=%s, cpf=%s, date_issued=%s, pessoa_juridica=%s, colaborador_id=%s WHERE id=%s",
+                        (last_loan["usuario"], last_loan["cpf"], last_loan["data_operacao"], last_loan.get("pessoa_juridica") or 0, colaborador_id, item_id),
                     )
                 elif op == "Cadastro":
                     cur.execute("UPDATE items SET is_active=0 WHERE id=%s", (item_id,))
-                else:
-                    return False, f"Não é possível estornar uma operação do tipo '{op}'."
 
                 cur.execute("UPDATE history SET is_reversed=1 WHERE id=%s", (history_id,))
                 cur.execute(

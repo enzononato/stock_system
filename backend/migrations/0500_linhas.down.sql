@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS linha_eventos;
+DROP TABLE IF EXISTS linhas;

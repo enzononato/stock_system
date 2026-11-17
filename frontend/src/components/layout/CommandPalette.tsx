@@ -137,11 +137,13 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                 className={cn(
                   'flex w-full items-center gap-2.5 px-3.5 py-2 text-body-sm text-left transition-colors duration-micro',
                   index === activeIndex
-                    ? 'bg-surface-alt text-foreground'
+                    ? 'bg-brand-soft text-brand-soft-foreground'
                     : 'text-muted-foreground hover:bg-surface-alt hover:text-foreground'
                 )}
               >
-                <item.icon size={16} className="shrink-0" aria-hidden="true" />
+                <span aria-hidden="true" className="inline-flex shrink-0">
+                  <item.icon size={16} />
+                </span>
                 <span className="truncate">{item.label}</span>
               </button>
             </li>

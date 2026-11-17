@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Request, Query
@@ -11,11 +12,16 @@ from app.dependencies import (
     gestor_or_tecnico,
     get_inventory_db,
     get_user_db,
+    get_audit_context,
     limiter,
     CurrentUser,
 )
+from app.services import audit, termos
+from app.services.audit import AuditContext
 from app.core.security import verify_password
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/history", tags=["history"])
 
@@ -28,13 +34,16 @@ def list_history(
     ),
     limit: int = Query(default=settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_PAGE_SIZE),
     offset: int = Query(default=0, ge=0),
+    item_id: Optional[int] = Query(
+        default=None, description="Restringe o histórico a um item (combina com `search`)."
+    ),
     _: CurrentUser = Depends(gestor_or_tecnico),
     inv: InventoryDBManager = Depends(get_inventory_db),
 ):
     # A busca precisa acontecer no banco: com paginação server-side, filtrar no
     # cliente varreria apenas a página carregada e daria a impressão falsa de
     # ter pesquisado o histórico inteiro.
-    rows, total = inv.list_history(search=search, limit=limit, offset=offset)
+    rows, total = inv.list_history(search=search, limit=limit, offset=offset, item_id=item_id)
     return {"items": rows, "total": total}
 
 
@@ -47,6 +56,7 @@ def reverse_entry(
     current_user: CurrentUser = Depends(gestor_only),
     inv: InventoryDBManager = Depends(get_inventory_db),
     user_db: UserDBManager = Depends(get_user_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
     # T6: estorno é uma operação destrutiva sobre o histórico; exige
     # reconfirmação de senha do operador logado, não apenas o role.
@@ -60,7 +70,25 @@ def reverse_entry(
     if not user or not verify_password(body.password, user["password"]):
         raise HTTPException(status_code=403, detail="Senha incorreta. Ação não autorizada.")
 
+    entrada = inv.get_history_entry(history_id) or {}
     ok, msg = inv.reverse_history_entry(history_id, current_user.username)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
+    base = {
+        "operation": entrada.get("operation"),
+        "item_id": entrada.get("item_id"),
+        "peripheral_id": entrada.get("peripheral_id"),
+    }
+    audit.record(
+        ctx, "historico", history_id, "estornar",
+        antes={"is_reversed": 0, **base}, depois={"is_reversed": 1, **base},
+    )
+    try:
+        termos.cancelar_por_estorno(history_id, ctx)
+    except Exception:
+        logger.exception("Falha ao cancelar as solicitações de termo do lançamento %s.", history_id)
+    try:
+        termos.reabrir_por_estorno(entrada, ctx)
+    except Exception:
+        logger.exception("Falha ao reabrir a solicitação de termo do lançamento %s.", history_id)
     return {"detail": msg}

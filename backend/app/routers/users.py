@@ -1,8 +1,15 @@
+import logging
+
 from fastapi import APIRouter, HTTPException, Depends
 
-from app.schemas.users import UserCreate, UserResponse, PasswordUpdate
+from app.schemas.users import UserCreate, UserResponse, UserUpdate, PasswordUpdate
 from app.db.user_manager_db import UserDBManager
-from app.dependencies import gestor_only, get_user_db, CurrentUser
+from app.db.mfa_db import MfaDBManager
+from app.dependencies import gestor_only, get_user_db, get_mfa_db, get_audit_context, CurrentUser
+from app.services import audit, segundo_fator
+from app.services.audit import AuditContext
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -17,11 +24,83 @@ def create_user(
     body: UserCreate,
     _: CurrentUser = Depends(gestor_only),
     user_db: UserDBManager = Depends(get_user_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
-    ok, msg = user_db.add_user(body.username, body.password, body.role)
+    ok, msg = user_db.add_user(body.username, body.password, body.role, body.email)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
+    # O usuário já foi gravado: ler o id para a auditoria não pode derrubar a resposta.
+    try:
+        # get_user_by_username traz o hash da senha: copiamos só os campos seguros.
+        criado = user_db.get_user_by_username(body.username) or {}
+        audit.record(
+            ctx, "usuario", criado.get("id"), "criar",
+            depois={
+                "id": criado.get("id"), "username": body.username,
+                "role": body.role, "email": body.email,
+            },
+        )
+    except Exception:
+        logger.exception("Falha ao preparar auditoria (entidade=usuario, acao=criar).")
     return {"detail": msg}
+
+
+@router.put("/{user_id}", response_model=UserResponse)
+def update_user(
+    user_id: int,
+    body: UserUpdate,
+    _: CurrentUser = Depends(gestor_only),
+    user_db: UserDBManager = Depends(get_user_db),
+    ctx: AuditContext = Depends(get_audit_context),
+):
+    """Só o Gestor edita o e-mail (canal de recuperação de senha)."""
+    antes = user_db.get_user_by_id(user_id)
+    if not antes:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    ok, msg = user_db.update_email(user_id, body.email)
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    audit.record_diff(
+        ctx, "usuario", user_id, "editar",
+        {"email": antes.get("email")},
+        depois={"email": body.email},
+    )
+    atual = user_db.get_user_by_id(user_id) or {}
+    return UserResponse(
+        id=atual.get("id", user_id),
+        username=atual.get("username", antes["username"]),
+        role=atual.get("role", antes["role"]),
+        email=atual.get("email"),
+        totp_ativo=bool(atual.get("totp_ativo")),
+    )
+
+
+@router.delete("/{user_id}/2fa")
+def zerar_2fa_do_usuario(
+    user_id: int,
+    current_user: CurrentUser = Depends(gestor_only),
+    user_db: UserDBManager = Depends(get_user_db),
+    mfa_db: MfaDBManager = Depends(get_mfa_db),
+    ctx: AuditContext = Depends(get_audit_context),
+):
+    """O Gestor zera o 2FA de outro usuário (perdeu o celular e os códigos). Não precisa da chave TOTP."""
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Você não pode zerar a sua própria verificação em duas etapas. "
+                "Peça a outro Gestor ou use o comando no servidor."
+            ),
+        )
+    alvo = user_db.get_user_by_id(user_id)
+    if not alvo:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    if not alvo.get("totp_ativo"):
+        raise HTTPException(
+            status_code=400, detail="Este usuário não tem a verificação em duas etapas ativa."
+        )
+    segundo_fator.zerar_2fa(mfa_db, alvo, ctx, origem="tela de usuários")
+    return {"detail": "Verificação em duas etapas zerada."}
 
 
 @router.delete("/{user_id}")
@@ -29,6 +108,7 @@ def remove_user(
     user_id: int,
     current_user: CurrentUser = Depends(gestor_only),
     user_db: UserDBManager = Depends(get_user_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
     # T5: um Gestor não pode remover a si mesmo, nem remover o último
     # Gestor do sistema (o que causaria lockout — ninguém mais poderia
@@ -46,6 +126,10 @@ def remove_user(
     ok, msg = user_db.remove_user(user_id)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
+    audit.record(
+        ctx, "usuario", user_id, "excluir",
+        antes={"id": target["id"], "username": target["username"], "role": target["role"]},
+    )
     return {"detail": msg}
 
 
@@ -55,6 +139,7 @@ def update_password(
     body: PasswordUpdate,
     _: CurrentUser = Depends(gestor_only),
     user_db: UserDBManager = Depends(get_user_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
     # 404 para usuário inexistente, coerente com remove_user e com o resto da API.
     # Antes, a troca de senha de um id inexistente respondia 200 "Senha alterada
@@ -65,6 +150,11 @@ def update_password(
     ok, msg = user_db.update_password(user_id, body.new_password)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
+    # Como na redefinição por e-mail: senha nova encerra todas as sessões abertas
+    # do usuário (quem estava logado com a senha antiga precisa entrar de novo).
+    user_db.revogar_sessoes(user_id)
+    # Nunca a senha nem o hash: só o fato de que foi alterada.
+    audit.record(ctx, "usuario", user_id, "editar", depois={"senha": "alterada"})
     return {"detail": msg}
 
 

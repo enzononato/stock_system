@@ -9,18 +9,25 @@ import {
   CheckCircle2,
 } from 'lucide-react'
 
+import type { Colaborador } from '@/api/colaboradores'
 import { listItemsPaginated } from '@/api/items'
 import { initiateLoan } from '@/api/loans'
 import { useConstants } from '@/hooks/useConstants'
+import { usePageSize } from '@/hooks/usePageSize'
 import { getErrorMessage } from '@/lib/api-error'
-import { isValidCpf, maskCpfInput } from '@/lib/utils'
+import { upper } from '@/lib/format'
+import { formatCpf } from '@/lib/utils'
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
+import { ColaboradorSelect } from '@/components/colaboradores/ColaboradorSelect'
+import { ColaboradorEmailField } from '@/components/termos/ColaboradorEmailField'
+import { garantirEmailDoColaborador } from '@/components/termos/colaboradorEmail'
 import { ConfirmacaoTermo, generateAndDownloadLoanTerm } from '@/components/equipment/ConfirmacaoTermo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Badge } from '@/components/ui/badge'
+import { Pagination } from '@/components/ui/Pagination'
+import { StatusPill } from '@/components/ui/StatusPill'
 import {
   Select,
   SelectContent,
@@ -40,13 +47,12 @@ import { toast } from '@/components/ui/toast'
 //   real no servidor (limit/offset), com o visual de tabela da FT_STC.
 // - Os contadores do cabeçalho usam o `total` devolvido pelo servidor.
 const ITEM_SEARCH_LIMIT = 20
-const PENDENTES_PAGE_SIZE = 7
 
 // Assistente de 4 passos: `currentStep` mora aqui na página porque o
 // `Stepper` é só a barra visual — não sabe nada de empréstimo nem valida.
 const STEPS: Step[] = [
   { id: 'equipamento', label: 'Equipamento', description: 'Ativo disponível' },
-  { id: 'usuario', label: 'Colaborador', description: 'Responsável e CPF' },
+  { id: 'usuario', label: 'Colaborador', description: 'Cadastro e e-mail' },
   { id: 'condicoes', label: 'Condições', description: 'Setor e centro de custo' },
   { id: 'confirmacao', label: 'Confirmação', description: 'Emissão de termo' },
 ]
@@ -61,8 +67,11 @@ export default function LoanPage() {
 
   // Estado do formulário
   const [selectedItemId, setSelectedItemId] = useState('')
-  const [usuario, setUsuario] = useState('')
-  const [cpf, setCpf] = useState('')
+  // Colaborador do cadastro (nome, CPF, cargo e setor vêm dele) e o e-mail que
+  // recebe o link de assinatura — obrigatório, gravado no cadastro ao avançar.
+  const [colaborador, setColaborador] = useState<Colaborador | null>(null)
+  const [email, setEmail] = useState('')
+  const [salvandoEmail, setSalvandoEmail] = useState(false)
   const [centerCost, setCenterCost] = useState('')
   const [setor, setSetor] = useState('')
   const [cargo, setCargo] = useState('')
@@ -105,39 +114,50 @@ export default function LoanPage() {
   const disponivelTotal = disponivelCountData?.total ?? 0
 
   // Empréstimos pendentes de termo (tabela de NAVEGAÇÃO, paginada no servidor)
-  const [pendentesPage, setPendentesPage] = useState(0)
-  const { data: pendentesData } = useQuery({
-    queryKey: ['items', 'pendentes-confirmacao', pendentesPage],
+  const [pendentesPageSize, setStoredPendentesPageSize] = usePageSize('emprestimo-pendentes')
+  const [pendentesPage, setPendentesPage] = useState(1)
+  const setPendentesPageSize = (n: number) => {
+    setStoredPendentesPageSize(n)
+    setPendentesPage(1)
+  }
+  const {
+    data: pendentesData,
+    isFetching: pendentesFetching,
+  } = useQuery({
+    queryKey: ['items', 'pendentes-confirmacao', pendentesPage, pendentesPageSize],
     queryFn: () =>
       listItemsPaginated({
         status: 'Pendente',
-        limit: PENDENTES_PAGE_SIZE,
-        offset: pendentesPage * PENDENTES_PAGE_SIZE,
+        limit: pendentesPageSize,
+        offset: (pendentesPage - 1) * pendentesPageSize,
       }),
     placeholderData: keepPreviousData,
   })
   const pendentes = pendentesData?.items ?? []
   const pendentesTotal = pendentesData?.total ?? 0
-  const pendentesTotalPages = Math.ceil(pendentesTotal / PENDENTES_PAGE_SIZE)
+  const pendentesLastPage = Math.max(1, Math.ceil(pendentesTotal / pendentesPageSize))
   // Se a última página esvaziar (termo anexado em outro lugar), volta para a
   // última página que ainda existe em vez de mostrar uma tabela vazia.
   useEffect(() => {
-    if (pendentesTotalPages > 0 && pendentesPage > pendentesTotalPages - 1) {
-      setPendentesPage(pendentesTotalPages - 1)
-    }
-  }, [pendentesPage, pendentesTotalPages])
+    if (pendentesData && pendentesPage > pendentesLastPage) setPendentesPage(pendentesLastPage)
+  }, [pendentesData, pendentesPage, pendentesLastPage])
 
   const loanMutation = useMutation({
     mutationFn: initiateLoan,
-    onSuccess: (_, vars) => {
+    onSuccess: ({ termo }, vars) => {
       void queryClient.invalidateQueries({ queryKey: ['items'] })
-      setPendingItemId(vars.item_id)
-      toast('Empréstimo iniciado! Agora gere e assine o termo.')
+      if (termo?.status === 'enviado') {
+        // O RevSign já mandou o link de assinatura: não há PDF para anexar agora.
+        toast(`Empréstimo iniciado. Termo enviado para assinatura em ${termo.destinatario_email}.`)
+      } else {
+        setPendingItemId(vars.item_id)
+        toast('Empréstimo iniciado! Agora gere e assine o termo.')
+      }
       // Reinicia o assistente para o próximo empréstimo — o painel de
       // confirmação segue seu próprio ciclo de vida, via `pendingItemId`.
       setSelectedItemId('')
-      setUsuario('')
-      setCpf('')
+      setColaborador(null)
+      setEmail('')
       setCenterCost('')
       setSetor('')
       setCargo('')
@@ -151,10 +171,16 @@ export default function LoanPage() {
     },
   })
 
+  // Cargo e setor vêm do cadastro quando preenchidos; senão, dos campos da etapa 3.
+  const cargoDoCadastro = colaborador?.cargo?.trim() || ''
+  const setorDoCadastro = colaborador?.setor?.trim() || ''
+  const cargoFinal = cargoDoCadastro || cargo
+  const setorFinal = setorDoCadastro || setor
+
   // Validação por etapa: cada passo só libera o "Próximo" com seus próprios
-  // campos válidos — CPF no passo 2 (Colaborador), revenda e setor no passo 3
-  // (Condições).
-  function handleNext() {
+  // campos válidos — colaborador do cadastro e e-mail no passo 2, revenda e
+  // setor no passo 3 (Condições).
+  async function handleNext() {
     if (currentStep === 0) {
       if (!selectedItemId) { toast('Selecione um equipamento disponível.', 'error'); return }
       // Preenchimento automático da revenda a partir do item selecionado.
@@ -163,15 +189,27 @@ export default function LoanPage() {
       return
     }
     if (currentStep === 1) {
-      if (!usuario.trim()) { toast('Informe o nome do colaborador.', 'error'); return }
-      // isValidCpf confere os dígitos verificadores (rejeita 111.111.111-11 etc.).
-      if (!isValidCpf(cpf)) { toast('CPF inválido.', 'error'); return }
-      setCurrentStep(2)
+      if (!colaborador) { toast('Selecione o colaborador.', 'error'); return }
+      setSalvandoEmail(true)
+      try {
+        // Valida o e-mail e, se mudou, grava no cadastro: é para ele que o RevSign envia o termo.
+        const atualizado = await garantirEmailDoColaborador(colaborador, email)
+        setColaborador(atualizado)
+        setEmail(atualizado.email ?? email.trim().toLowerCase())
+        if (atualizado.unidade_nome && revendas.includes(atualizado.unidade_nome)) {
+          setRevenda(atualizado.unidade_nome)
+        }
+        setCurrentStep(2)
+      } catch (err) {
+        toast(getErrorMessage(err), 'error')
+      } finally {
+        setSalvandoEmail(false)
+      }
       return
     }
     if (currentStep === 2) {
       if (!revenda) { toast('Selecione a revenda.', 'error'); return }
-      if (!setor) { toast('Selecione o setor.', 'error'); return }
+      if (!setorFinal) { toast('Selecione o setor.', 'error'); return }
       setCurrentStep(3)
     }
   }
@@ -184,20 +222,24 @@ export default function LoanPage() {
     // Reconfere tudo no envio final, caso o operador tenha voltado e
     // alterado algum campo já validado.
     if (!selectedItemId) { toast('Selecione um item.', 'error'); return }
-    if (!isValidCpf(cpf)) { toast('CPF inválido.', 'error'); return }
+    if (!colaborador) { toast('Selecione o colaborador.', 'error'); return }
     if (!revenda) { toast('Selecione a revenda.', 'error'); return }
-    if (!setor) { toast('Selecione o setor.', 'error'); return }
+    if (!setorFinal) { toast('Selecione o setor.', 'error'); return }
     loanMutation.mutate({
       item_id: Number(selectedItemId),
-      usuario,
-      cpf,
+      colaborador_id: colaborador.id,
       center_cost: centerCost,
-      cargo,
-      setor,
+      cargo: cargoFinal,
+      setor: setorFinal,
       revenda,
       date_issue: dateIssue,
       pessoa_juridica: pessoaJuridica,
     })
+  }
+
+  function escolherColaborador(c: Colaborador | null) {
+    setColaborador(c)
+    setEmail(c?.email ?? '')
   }
 
   const isLastStep = currentStep === STEPS.length - 1
@@ -330,55 +372,73 @@ export default function LoanPage() {
                   2. Dados do Colaborador Responsável
                 </h2>
                 <p className="text-caption text-muted-foreground mt-0.5">
-                  Informe quem receberá a custódia do equipamento.
+                  Escolha quem receberá a custódia do equipamento no cadastro de colaboradores.
                 </p>
               </div>
 
               <div className="space-y-4 pt-2 border-t border-border">
                 <div className="space-y-1.5">
-                  <Label className="text-caption font-medium text-foreground">
-                    Nome Completo do Colaborador *
+                  <Label id="emprestimo-colaborador-rotulo" className="text-caption font-medium text-foreground">
+                    Colaborador *
                   </Label>
-                  <Input
-                    value={usuario}
-                    onChange={(e) => setUsuario(e.target.value)}
-                    placeholder="Ex: João da Silva"
-                    required
-                    className="h-9"
-                  />
+                  <div role="group" aria-labelledby="emprestimo-colaborador-rotulo">
+                    <ColaboradorSelect
+                      value={colaborador?.id ?? null}
+                      onChange={escolherColaborador}
+                      disabled={salvandoEmail}
+                    />
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label className="text-caption font-medium text-foreground">
-                      CPF do Colaborador *
-                    </Label>
-                    <Input
-                      value={cpf}
-                      onChange={(e) => setCpf(maskCpfInput(e.target.value))}
-                      placeholder="000.000.000-00"
-                      maxLength={14}
-                      required
-                      className="font-mono h-9"
-                    />
+                {colaborador && (
+                  <div className="rounded border border-border bg-surface-alt p-4 space-y-2 text-caption">
+                    <div className="flex justify-between border-b border-border pb-1.5">
+                      <span className="text-muted-foreground">Nome</span>
+                      <span className="font-semibold text-foreground">{upper(colaborador.nome)}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-border pb-1.5">
+                      <span className="text-muted-foreground">CPF</span>
+                      <span className="font-mono text-foreground">{formatCpf(colaborador.cpf)}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-border pb-1.5">
+                      <span className="text-muted-foreground">Cargo</span>
+                      <span className="text-foreground">{colaborador.cargo || '—'}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-border pb-1.5">
+                      <span className="text-muted-foreground">Setor</span>
+                      <span className="text-foreground">{colaborador.setor || '—'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Unidade</span>
+                      <span className="text-foreground">
+                        {upper(colaborador.unidade_nome ?? colaborador.unidade_rh) || '—'}
+                      </span>
+                    </div>
                   </div>
+                )}
 
-                  {/* Toggle "É pessoa jurídica": muda apenas o texto legal do
-                      termo. O rótulo da main foi mantido (o da FT_STC citava
-                      "terceirizado", que nem sempre é pessoa jurídica). */}
-                  <div className="flex items-center gap-2 pt-6">
-                    <Checkbox
-                      id="pj"
-                      checked={pessoaJuridica}
-                      onCheckedChange={setPessoaJuridica}
-                    />
-                    <label
-                      htmlFor="pj"
-                      className="text-caption text-foreground cursor-pointer select-none"
-                    >
-                      É pessoa jurídica
-                    </label>
-                  </div>
+                <ColaboradorEmailField
+                  colaborador={colaborador}
+                  value={email}
+                  onChange={setEmail}
+                  disabled={salvandoEmail}
+                />
+
+                {/* Toggle "É pessoa jurídica": muda apenas o texto legal do
+                    termo. O rótulo da main foi mantido (o da FT_STC citava
+                    "terceirizado", que nem sempre é pessoa jurídica). */}
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="pj"
+                    checked={pessoaJuridica}
+                    onCheckedChange={setPessoaJuridica}
+                  />
+                  <label
+                    htmlFor="pj"
+                    className="text-caption text-foreground cursor-pointer select-none"
+                  >
+                    É pessoa jurídica
+                  </label>
                 </div>
               </div>
             </div>
@@ -419,28 +479,42 @@ export default function LoanPage() {
 
                 <div className="space-y-1.5">
                   <Label className="text-caption font-medium text-foreground">Setor *</Label>
-                  <Select value={setor} onValueChange={setSetor} disabled={constantsLoading}>
-                    <SelectTrigger className="h-9">
-                      <SelectValue placeholder="Selecione o setor" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {setores.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {s}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {setorDoCadastro ? (
+                    <>
+                      <Input value={setorDoCadastro} readOnly aria-label="Setor" className="h-9" />
+                      <p className="text-xs text-muted-foreground">Do cadastro do colaborador</p>
+                    </>
+                  ) : (
+                    <Select value={setor} onValueChange={setSetor} disabled={constantsLoading}>
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder="Selecione o setor" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {setores.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {s}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
                   <Label className="text-caption font-medium text-foreground">Cargo / Função</Label>
-                  <Input
-                    value={cargo}
-                    onChange={(e) => setCargo(e.target.value)}
-                    placeholder="Ex: Analista Comercial"
-                    className="h-9"
-                  />
+                  {cargoDoCadastro ? (
+                    <>
+                      <Input value={cargoDoCadastro} readOnly aria-label="Cargo" className="h-9" />
+                      <p className="text-xs text-muted-foreground">Do cadastro do colaborador</p>
+                    </>
+                  ) : (
+                    <Input
+                      value={cargo}
+                      onChange={(e) => setCargo(e.target.value)}
+                      placeholder="Ex: Analista Comercial"
+                      className="h-9"
+                    />
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
@@ -498,16 +572,20 @@ export default function LoanPage() {
                 </div>
                 <div className="flex justify-between border-b border-border pb-1.5">
                   <span className="text-muted-foreground">Colaborador</span>
-                  <span className="font-semibold text-foreground">{usuario}</span>
+                  <span className="font-semibold text-foreground">{upper(colaborador?.nome)}</span>
                 </div>
                 <div className="flex justify-between border-b border-border pb-1.5">
                   <span className="text-muted-foreground">CPF</span>
-                  <span className="font-mono text-foreground">{cpf}</span>
+                  <span className="font-mono text-foreground">{formatCpf(colaborador?.cpf)}</span>
+                </div>
+                <div className="flex justify-between gap-3 border-b border-border pb-1.5">
+                  <span className="text-muted-foreground">E-mail para assinatura</span>
+                  <span className="min-w-0 break-all text-right text-foreground">{colaborador?.email ?? email}</span>
                 </div>
                 <div className="flex justify-between border-b border-border pb-1.5">
                   <span className="text-muted-foreground">Revenda / Setor</span>
                   <span className="text-foreground">
-                    {revenda} • {setor}
+                    {upper(revenda)} • {upper(setorFinal)}
                   </span>
                 </div>
                 <div className="flex justify-between border-b border-border pb-1.5">
@@ -516,13 +594,7 @@ export default function LoanPage() {
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Status Pós-Registro</span>
-                  <Badge
-                    variant="warning"
-                    showDot
-                    className="font-mono text-[10px] border-border text-foreground"
-                  >
-                    PENDENTE TERMO
-                  </Badge>
+                  <StatusPill status="Pendente" />
                 </div>
               </div>
             </div>
@@ -542,7 +614,7 @@ export default function LoanPage() {
             </Button>
 
             {!isLastStep ? (
-              <Button type="button" size="sm" onClick={handleNext}>
+              <Button type="button" size="sm" onClick={handleNext} loading={salvandoEmail}>
                 Próximo
                 <ArrowRight className="ml-1.5 size-3.5" />
               </Button>
@@ -551,10 +623,10 @@ export default function LoanPage() {
                 type="button"
                 size="sm"
                 onClick={handleConfirmar}
-                disabled={loanMutation.isPending}
+                loading={loanMutation.isPending}
               >
                 <CheckCircle2 className="mr-1.5 size-3.5" />
-                {loanMutation.isPending ? 'Processando…' : 'Confirmar Empréstimo'}
+                Confirmar Empréstimo
               </Button>
             )}
           </div>
@@ -610,7 +682,10 @@ export default function LoanPage() {
               <li>
                 • O status passará para <strong>Pendente</strong> até que o termo assinado seja anexado.
               </li>
-              <li>• O CPF é validado pelos dígitos verificadores oficiais.</li>
+              <li>
+                • O colaborador vem do cadastro; o e-mail é obrigatório (pode ser pessoal) e recebe o link de
+                assinatura.
+              </li>
               <li>
                 • O termo de responsabilidade pode ser gerado e baixado imediatamente após a confirmação.
               </li>
@@ -652,7 +727,7 @@ export default function LoanPage() {
                       {item.tipo} {item.brand}
                     </td>
                     <td className="py-2.5 px-3 font-medium">{item.assigned_to}</td>
-                    <td className="py-2.5 px-3 text-muted-foreground">{item.revenda || '—'}</td>
+                    <td className="py-2.5 px-3 text-muted-foreground">{upper(item.revenda) || '—'}</td>
                     <td className="py-2.5 px-3 text-right">
                       <div className="flex justify-end gap-2">
                         <Button
@@ -679,34 +754,14 @@ export default function LoanPage() {
             </table>
           </div>
 
-          {/* Paginação dos pendentes */}
-          {pendentesTotalPages > 1 && (
-            <div className="flex items-center justify-between pt-2 border-t border-border text-xs text-muted-foreground">
-              <span>
-                Página {pendentesPage + 1} de {pendentesTotalPages}
-              </span>
-              <div className="flex gap-1">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={pendentesPage === 0}
-                  onClick={() => setPendentesPage((p) => Math.max(0, p - 1))}
-                  className="h-6 px-2 text-xs"
-                >
-                  ←
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={pendentesPage >= pendentesTotalPages - 1}
-                  onClick={() => setPendentesPage((p) => p + 1)}
-                  className="h-6 px-2 text-xs"
-                >
-                  →
-                </Button>
-              </div>
-            </div>
-          )}
+          <Pagination
+            page={Math.min(pendentesPage, pendentesLastPage)}
+            pageSize={pendentesPageSize}
+            total={pendentesTotal}
+            onPageChange={setPendentesPage}
+            onPageSizeChange={setPendentesPageSize}
+            isFetching={pendentesFetching}
+          />
         </div>
       )}
     </div>

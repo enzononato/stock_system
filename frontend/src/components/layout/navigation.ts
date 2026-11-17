@@ -1,5 +1,11 @@
 import type { ComponentType } from 'react'
-import type { LucideIcon } from 'lucide-react'
+import { Contact, MapPin, ScrollText, type LucideIcon } from 'lucide-react'
+import { Smartphone } from 'lucide-react'
+import { QrCode } from 'lucide-react'
+import { ClipboardCheck } from 'lucide-react'
+import { AppWindow, Boxes, KeyRound } from 'lucide-react'
+import { Wrench } from 'lucide-react'
+import { UserCog } from 'lucide-react'
 import {
   DashboardIcon,
   EstoqueIcon,
@@ -19,7 +25,10 @@ import {
  * Props mínimas que qualquer ícone de navegação precisa aceitar. Os ícones do
  * lucide-react atendem este contrato de sobra (aceitam qualquer atributo SVG);
  * os ícones animados da sidebar (API mais restrita: size/className/
- * strokeWidth/title/aria-hidden) também o atendem. `NavIcon` é a união dos
+ * strokeWidth/title/aria-hidden) também o atendem. Atenção: os animados
+ * renderizam `role="img" aria-label={title}` e IGNORAM `aria-hidden`; quem os
+ * usa ao lado de um rótulo (Sidebar, CommandPalette) os envolve num
+ * `<span aria-hidden="true">` para o nome acessível não duplicar. `NavIcon` é a união dos
  * dois — não é um cast, é o tipo real de cada ícone usado em `navGroups`.
  */
 export interface NavIconProps {
@@ -66,6 +75,10 @@ export const navGroups: NavGroup[] = [
       { to: '/stock', label: 'Estoque', icon: EstoqueIcon },
       { to: '/register', label: 'Cadastro', icon: PatrimoniosIcon, roles: ['Gestor', 'Técnico'] },
       { to: '/history', label: 'Histórico', icon: MovimentacoesIcon, roles: ['Gestor', 'Técnico'] },
+      { to: '/locais', label: 'Locais', icon: MapPin, roles: ['Gestor', 'Técnico'] },
+      { to: '/linhas', label: 'Linhas', icon: Smartphone },
+      { to: '/etiquetas', label: 'Etiquetas', icon: QrCode, roles: ['Gestor', 'Técnico'] },
+      { to: '/inventarios', label: 'Inventários', icon: ClipboardCheck, roles: ['Gestor', 'Técnico'] },
     ],
   },
   {
@@ -75,6 +88,7 @@ export const navGroups: NavGroup[] = [
       { to: '/return', label: 'Devoluções', icon: DevolucoesIcon, roles: ['Gestor', 'Técnico'] },
       { to: '/peripherals', label: 'Periféricos', icon: PerifericosIcon, roles: ['Gestor', 'Técnico'] },
       { to: '/link', label: 'Vincular Periférico', icon: MovimentacoesIcon, roles: ['Gestor', 'Técnico'] },
+      { to: '/manutencoes', label: 'Manutenções', icon: Wrench, roles: ['Gestor', 'Técnico'] },
     ],
   },
   {
@@ -82,11 +96,25 @@ export const navGroups: NavGroup[] = [
     items: [
       { to: '/users', label: 'Usuários', icon: UsuariosIcon, roles: ['Gestor'] },
       { to: '/unidades', label: 'Unidades', icon: EmpresasIcon, roles: ['Gestor'] },
+      { to: '/colaboradores', label: 'Colaboradores', icon: Contact, roles: ['Gestor', 'Técnico'] },
       { to: '/terms', label: 'Termos de Resp.', icon: TermosIcon, roles: ['Gestor', 'Técnico'] },
       { to: '/report', label: 'Relatórios', icon: RelatoriosIcon, roles: ['Gestor', 'Técnico'] },
       { to: '/charts', label: 'Indicadores', icon: DashboardIcon },
       { to: '/remove', label: 'Baixa de Ativos', icon: LixeiraIcon, roles: ['Gestor'] },
+      { to: '/auditoria', label: 'Auditoria', icon: ScrollText, roles: ['Gestor'] },
     ],
+  },
+  {
+    title: 'Acessos',
+    items: [
+      { to: '/acessos/eventos', label: 'Eventos', icon: KeyRound, roles: ['Gestor', 'Técnico'] },
+      { to: '/acessos/sistemas', label: 'Sistemas', icon: AppWindow, roles: ['Gestor'] },
+      { to: '/acessos/pacotes', label: 'Pacotes por função', icon: Boxes, roles: ['Gestor'] },
+    ],
+  },
+  {
+    title: 'Conta',
+    items: [{ to: '/perfil', label: 'Meu perfil', icon: UserCog }],
   },
 ]
 

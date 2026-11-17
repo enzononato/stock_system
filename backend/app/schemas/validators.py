@@ -6,7 +6,8 @@ variantes de Create/Update de um mesmo recurso.
 """
 import ipaddress
 import re
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Optional
 
 _MAC_RE = re.compile(
@@ -101,3 +102,71 @@ def validar_data_br(
     except ValueError:
         raise ValueError(f"Formato de {campo} inválido. Use dd/mm/aaaa.")
     return data
+
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def validar_email(email: Optional[str]) -> Optional[str]:
+    """E-mail é opcional; quando preenchido, vai para minúsculas e precisa ter
+    o formato `algo@dominio.ext`."""
+    email = blank_to_none(email)
+    if email is None:
+        return None
+    email = email.lower()
+    if not _EMAIL_RE.match(email):
+        raise ValueError("E-mail inválido.")
+    return email
+
+
+def normalizar_telefone(telefone: Optional[str]) -> Optional[str]:
+    """Telefone é opcional; guarda só os dígitos (DDD + número, 10 ou 11
+    dígitos). Um `55` de país na frente é removido quando sobram 12 ou 13
+    dígitos."""
+    telefone = blank_to_none(telefone)
+    if telefone is None:
+        return None
+    digitos = re.sub(r"\D", "", telefone)
+    if len(digitos) in (12, 13) and digitos.startswith("55"):
+        digitos = digitos[2:]
+    if len(digitos) not in (10, 11) or not 11 <= int(digitos[:2]) <= 99:
+        raise ValueError("Telefone inválido: informe DDD + número.")
+    return digitos
+
+
+_LIMITE_VALOR_MONETARIO = Decimal("9999999999.99")
+
+
+def validar_valor_monetario(valor: Optional[Decimal], campo: str) -> Optional[Decimal]:
+    """Valor em reais (DECIMAL(12,2)): não negativo, até 2 casas, dentro do limite
+    da coluna. Devolve o valor com exatamente 2 casas; `None` fica `None`."""
+    if valor is None:
+        return None
+    if not valor.is_finite():
+        raise ValueError(f"Informe um {campo} válido.")
+    if valor < 0:
+        raise ValueError(f"Informe um {campo} maior ou igual a zero.")
+    centavos = Decimal("0.01")
+    if valor != valor.quantize(centavos):
+        raise ValueError(f"Use no máximo duas casas decimais no {campo}.")
+    if valor > _LIMITE_VALOR_MONETARIO:
+        raise ValueError(f"O {campo} excede o limite permitido.")
+    return valor.quantize(centavos)
+
+
+def validar_data_nao_futura(data: Optional[str], campo: str) -> Optional[str]:
+    """Data dd/mm/aaaa que não pode estar depois de hoje (hora local do servidor)."""
+    data = validar_data_br(data, campo=campo)
+    if data is None:
+        return None
+    if datetime.strptime(data, "%d/%m/%Y").date() > date.today():
+        raise ValueError(f"A {campo} não pode ser no futuro.")
+    return data
+
+
+def data_br_para_date(data: Optional[str]) -> Optional[date]:
+    """Converte dd/mm/aaaa (já validada) em `date`; vazio vira `None`."""
+    data = blank_to_none(data)
+    if data is None:
+        return None
+    return datetime.strptime(data, "%d/%m/%Y").date()

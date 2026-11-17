@@ -4,6 +4,8 @@ export interface User {
   id: number
   username: string
   role: string
+  email: string | null
+  totp_ativo: boolean
 }
 
 export async function listUsers() {
@@ -11,9 +13,24 @@ export async function listUsers() {
   return res.data as User[]
 }
 
-export async function createUser(data: { username: string; password: string; role: string }) {
+export async function createUser(data: {
+  username: string
+  password: string
+  role: string
+  email?: string | null
+}) {
   const res = await api.post('/users', data)
   return res.data
+}
+
+export async function updateUserEmail(id: number, email: string | null) {
+  const res = await api.put(`/users/${id}`, { email })
+  return res.data as User
+}
+
+export async function zerar2fa(id: number) {
+  const res = await api.delete(`/users/${id}/2fa`)
+  return res.data as { detail: string }
 }
 
 export async function removeUser(id: number) {

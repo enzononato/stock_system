@@ -115,6 +115,7 @@ class UnidadeCreate(BaseModel):
     cep: Optional[str] = None
     cidade: Optional[str] = None
     uf: Optional[str] = None
+    alias_rh: Optional[str] = None
 
     @field_validator("nome")
     @classmethod
@@ -141,7 +142,7 @@ class UnidadeCreate(BaseModel):
     def _v_uf(cls, v):
         return validar_uf(v)
 
-    @field_validator("endereco", "cidade")
+    @field_validator("endereco", "cidade", "alias_rh")
     @classmethod
     def _v_opcionais(cls, v):
         return blank_to_none(v)
@@ -155,6 +156,7 @@ class UnidadeUpdate(BaseModel):
     cep: Optional[str] = None
     cidade: Optional[str] = None
     uf: Optional[str] = None
+    alias_rh: Optional[str] = None
 
     @field_validator("nome")
     @classmethod
@@ -181,7 +183,7 @@ class UnidadeUpdate(BaseModel):
     def _v_uf(cls, v):
         return validar_uf(v)
 
-    @field_validator("endereco", "cidade")
+    @field_validator("endereco", "cidade", "alias_rh")
     @classmethod
     def _v_opcionais(cls, v):
         return blank_to_none(v)
@@ -196,6 +198,7 @@ class UnidadeResponse(BaseModel):
     cep: Optional[str] = None
     cidade: Optional[str] = None
     uf: Optional[str] = None
+    alias_rh: Optional[str] = None
     is_active: bool
 
     class Config:

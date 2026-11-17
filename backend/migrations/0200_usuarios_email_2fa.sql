@@ -1,0 +1,33 @@
+-- F2: e-mail dos usuários do sistema, segredo TOTP (2FA) e versão da sessão.
+-- A tabela usuarios não é criada pelo baseline: em um banco novo, nasce aqui.
+CREATE TABLE IF NOT EXISTS usuarios (id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(100) UNIQUE NOT NULL, password VARCHAR(255) NOT NULL, role ENUM('Gestor','Técnico','Jovem Aprendiz') NOT NULL);
+SET @faltando := (SELECT COUNT(*) = 0 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'usuarios' AND column_name = 'email');
+SET @sql := IF(@faltando, 'ALTER TABLE usuarios ADD COLUMN email VARCHAR(200) NULL', 'DO 0');
+PREPARE passo FROM @sql;
+EXECUTE passo;
+DEALLOCATE PREPARE passo;
+SET @faltando := (SELECT COUNT(*) = 0 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'usuarios' AND column_name = 'totp_secret_cifrado');
+SET @sql := IF(@faltando, 'ALTER TABLE usuarios ADD COLUMN totp_secret_cifrado VARCHAR(255) NULL', 'DO 0');
+PREPARE passo FROM @sql;
+EXECUTE passo;
+DEALLOCATE PREPARE passo;
+SET @faltando := (SELECT COUNT(*) = 0 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'usuarios' AND column_name = 'totp_ativo');
+SET @sql := IF(@faltando, 'ALTER TABLE usuarios ADD COLUMN totp_ativo TINYINT(1) NOT NULL DEFAULT 0', 'DO 0');
+PREPARE passo FROM @sql;
+EXECUTE passo;
+DEALLOCATE PREPARE passo;
+SET @faltando := (SELECT COUNT(*) = 0 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'usuarios' AND column_name = 'totp_ultimo_passo');
+SET @sql := IF(@faltando, 'ALTER TABLE usuarios ADD COLUMN totp_ultimo_passo BIGINT NULL', 'DO 0');
+PREPARE passo FROM @sql;
+EXECUTE passo;
+DEALLOCATE PREPARE passo;
+SET @faltando := (SELECT COUNT(*) = 0 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'usuarios' AND column_name = 'sessao_versao');
+SET @sql := IF(@faltando, 'ALTER TABLE usuarios ADD COLUMN sessao_versao INT NOT NULL DEFAULT 0', 'DO 0');
+PREPARE passo FROM @sql;
+EXECUTE passo;
+DEALLOCATE PREPARE passo;
+SET @faltando := (SELECT COUNT(*) = 0 FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'usuarios' AND index_name = 'uq_usuarios_email');
+SET @sql := IF(@faltando, 'CREATE UNIQUE INDEX uq_usuarios_email ON usuarios (email)', 'DO 0');
+PREPARE passo FROM @sql;
+EXECUTE passo;
+DEALLOCATE PREPARE passo;

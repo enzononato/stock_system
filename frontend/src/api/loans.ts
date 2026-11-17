@@ -1,12 +1,16 @@
 import api, { downloadAuthenticated } from './client'
+import type { TermoSolicitacao } from './termos'
 
-export async function initiateLoan(data: {
+export interface LoanPayload {
   item_id: number
-  usuario: string
-  cpf: string
+  /** Colaborador do cadastro: nome, CPF, cargo e setor vêm dele no servidor. */
+  colaborador_id?: number
+  /** Campos antigos (payload sem colaborador do cadastro). */
+  usuario?: string
+  cpf?: string
   center_cost: string
-  cargo: string
-  setor: string
+  cargo?: string
+  setor?: string
   revenda: string
   date_issue: string
   /**
@@ -15,9 +19,12 @@ export async function initiateLoan(data: {
    * de fato representante de pessoa jurídica.
    */
   pessoa_juridica?: boolean
-}) {
+}
+
+/** `termo` é a solicitação de assinatura criada junto (null se não foi possível criá-la). */
+export async function initiateLoan(data: LoanPayload): Promise<{ detail: string; termo: TermoSolicitacao | null }> {
   const res = await api.post('/loans', data)
-  return res.data
+  return res.data as { detail: string; termo: TermoSolicitacao | null }
 }
 
 export async function confirmLoan(itemId: number, signedPdf: File) {
@@ -27,9 +34,15 @@ export async function confirmLoan(itemId: number, signedPdf: File) {
   return res.data
 }
 
-export async function initiateReturn(itemId: number) {
-  const res = await api.post(`/loans/${itemId}/return/initiate`)
-  return res.data as { detail: string; download_url: string; filename: string }
+/**
+ * `body.colaborador_id` identifica quem está devolvendo (necessário para equipamento sem
+ * colaborador do cadastro). Sem `body`, nenhum corpo é enviado.
+ */
+export async function initiateReturn(itemId: number, body?: { colaborador_id?: number }) {
+  const res = body
+    ? await api.post(`/loans/${itemId}/return/initiate`, body)
+    : await api.post(`/loans/${itemId}/return/initiate`)
+  return res.data as { detail: string; download_url: string; filename: string; termo: TermoSolicitacao | null }
 }
 
 /**

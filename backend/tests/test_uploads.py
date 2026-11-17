@@ -7,6 +7,8 @@ import os
 
 import pytest
 
+from tests.dados_baixa import APAGAMENTO_OK
+
 pytestmark = pytest.mark.integration
 
 TAMANHO_MAXIMO = 20 * 1024 * 1024
@@ -17,7 +19,7 @@ class TestLimiteDeTamanhoDeUpload:
         conteudo_grande = b"a" * (TAMANHO_MAXIMO + 1)
         resp = client_gestor.request(
             "DELETE", f"/api/items/{item_disponivel['id']}",
-            data={"reason": "Perda"},
+            data={"reason": "Perda", **APAGAMENTO_OK},  # MUDANÇA INTENCIONAL (F4): apagamento de dados
             files={"attachment": ("grande.pdf", conteudo_grande, "application/pdf")},
         )
         assert resp.status_code == 413
@@ -40,7 +42,7 @@ class TestLimiteDeTamanhoDeUpload:
         conteudo_no_limite = b"a" * TAMANHO_MAXIMO
         resp = client_gestor.request(
             "DELETE", f"/api/items/{item_disponivel['id']}",
-            data={"reason": "Perda"},
+            data={"reason": "Perda", **APAGAMENTO_OK},  # MUDANÇA INTENCIONAL (F4): apagamento de dados
             files={"attachment": ("no_limite.pdf", conteudo_no_limite, "application/pdf")},
         )
         assert resp.status_code == 200
@@ -59,7 +61,7 @@ class TestSanitizacaoDeNomeDeArquivo:
 
         resp = client_gestor.request(
             "DELETE", f"/api/items/{item_disponivel['id']}",
-            data={"reason": "Perda"},
+            data={"reason": "Perda", **APAGAMENTO_OK},  # MUDANÇA INTENCIONAL (F4): apagamento de dados
             files={"attachment": ("../../../evil.txt", b"conteudo-malicioso", "text/plain")},
         )
         assert resp.status_code == 200
@@ -81,7 +83,7 @@ class TestSanitizacaoDeNomeDeArquivo:
 
         resp = client_gestor.request(
             "DELETE", f"/api/items/{item_disponivel['id']}",
-            data={"reason": "Perda"},
+            data={"reason": "Perda", **APAGAMENTO_OK},  # MUDANÇA INTENCIONAL (F4): apagamento de dados
             files={"attachment": ("////", b"conteudo", "text/plain")},
         )
         assert resp.status_code == 200

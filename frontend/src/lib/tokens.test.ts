@@ -96,19 +96,23 @@ function listarArquivosFonte(dir: string): string[] {
 }
 
 describe('tokens de design', () => {
-  it('define a paleta monocromática no modo claro', () => {
-    expect(css).toContain('--canvas: #F7F7F5')
+  it('define a paleta de base neutra com azul da marca no modo claro', () => {
+    expect(css).toContain('--canvas: #F5F7FB')
     expect(css).toContain('--surface: #FFFFFF')
     expect(css).toContain('--surface-alt: #F0F0ED')
     expect(css).toContain('--border: #D9D9D4')
     expect(css).toContain('--border-strong: #BDBDB7')
     expect(css).toContain('--text-primary: #111111')
+    expect(css).toContain('--primary: #0131CD')
+    expect(css).toContain('--lime: #B9FC01')
   })
 
   it('define a paleta do modo escuro', () => {
     expect(css).toContain('--canvas: #050505')
     expect(css).toContain('--surface: #0C0C0C')
     expect(css).toContain('--text-primary: #F2F2F0')
+    expect(css).toContain('--ring: #B9FC01')
+    expect(css).toContain('--brand-text: #7D97FF')
   })
 
   it('define os raios editoriais (2/4/6/8px)', () => {
@@ -118,12 +122,14 @@ describe('tokens de design', () => {
     expect(css).toContain('--radius-lg: 8px')
   })
 
-  it('mantém cor semântica apenas para status', () => {
+  it('mantém os tokens de status (cor funcional) além da marca azul e do destaque lime', () => {
     expect(css).toContain('--status-available')
     expect(css).toContain('--status-loaned')
     expect(css).toContain('--status-pending')
     expect(css).toContain('--status-return')
     expect(css).toContain('--status-danger')
+    expect(css).toContain('--status-maintenance')
+    expect(css).toContain('--status-retired')
   })
 
   it('expõe os utilitários de tipografia editorial', () => {
@@ -146,7 +152,7 @@ describe('tokens de design', () => {
   })
 
   it('registra os tokens novos no tailwind.config.js', () => {
-    for (const t of ['canvas', 'surface', 'border-strong', 'sidebar', 'micro']) {
+    for (const t of ['canvas', 'surface', 'border-strong', 'sidebar', 'micro', 'brand', 'lime']) {
       expect(config).toContain(t)
     }
   })
@@ -175,7 +181,7 @@ describe('guarda contra opacidade em token customizado', () => {
     // Sanidade: se `colors` for movido para fora do tailwind.config.js (ex.:
     // um módulo importado), a extração acima degenera silenciosamente para
     // uma lista vazia e o teste passaria para sempre sem checar nada. Hoje
-    // existem 29 tokens — exigir mais de 20 garante que a lista real foi
+    // existem 35 tokens — exigir mais de 20 garante que a lista real foi
     // derivada.
     expect(tokens.length).toBeGreaterThan(20)
 
@@ -216,5 +222,26 @@ describe('guarda contra opacidade em token customizado', () => {
     }
 
     expect(ofensores, `Modificador de opacidade sobre token customizado (emite CSS vazio):\n${ofensores.join('\n')}`).toEqual([])
+  })
+})
+
+describe('guarda contra azul da marca como cor de texto', () => {
+  it('nenhum arquivo usa text-primary (use text-brand-text); text-primary-foreground é permitido', () => {
+    // --primary é #0131CD nos dois temas: sobre o fundo escuro (#0C0C0C) dá só
+    // ~2,2:1 e o texto some. Texto/ícone azul deve usar --brand-text, que vai
+    // para #7D97FF no tema escuro. bg-primary e text-primary-foreground seguem
+    // válidos. O lookbehind evita casar --text-primary (token) e text-text-primary.
+    const padrao = /(?<![\w-])text-primary(?!-foreground)/
+    const srcDir = resolve(__dirname, '..')
+    const arquivos = listarArquivosFonte(srcDir).filter((a) => !a.endsWith('tokens.test.ts'))
+    expect(arquivos.length).toBeGreaterThan(20)
+
+    const ofensores: string[] = []
+    for (const arquivo of arquivos) {
+      readFileSync(arquivo, 'utf8').split(/\r?\n/).forEach((linha, i) => {
+        if (padrao.test(linha)) ofensores.push(`${relative(srcDir, arquivo)}:${i + 1}`)
+      })
+    }
+    expect(ofensores, `text-primary (ilegível no tema escuro):\n${ofensores.join('\n')}`).toEqual([])
   })
 })

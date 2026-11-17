@@ -117,4 +117,9 @@ describe('CommandPalette', () => {
 
     expect(screen.queryByRole('dialog', { name: 'Paleta de comandos' })).not.toBeInTheDocument()
   })
+
+  it('opção ativa usa variação de azul', () => {
+    render(<Harness initialOpen />)
+    expect(screen.getAllByRole('option')[0]).toHaveClass('bg-brand-soft')
+  })
 })

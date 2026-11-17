@@ -9,11 +9,14 @@ from app.schemas.unidades import (
     IndicadoresResponse,
 )
 from app.db.unidade_db import UnidadeDBManager
+from app.services import audit
+from app.services.audit import AuditContext
 from app.dependencies import (
     get_current_user,
     gestor_only,
     gestor_or_tecnico,
     get_unidade_db,
+    get_audit_context,
     CurrentUser,
 )
 
@@ -60,12 +63,14 @@ def create_unidade(
     body: UnidadeCreate,
     current_user: CurrentUser = Depends(gestor_only),
     db: UnidadeDBManager = Depends(get_unidade_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
     data = body.model_dump(exclude_none=True)
     ok, msg = db.add_unidade(data)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
     criada = db.get_unidade_por_nome(data["nome"])
+    audit.record(ctx, "unidade", criada["id"] if criada else None, "criar", depois=criada or data)
     return {"detail": msg, "id": criada["id"] if criada else None}
 
 
@@ -75,18 +80,26 @@ def update_unidade(
     body: UnidadeUpdate,
     current_user: CurrentUser = Depends(gestor_only),
     db: UnidadeDBManager = Depends(get_unidade_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
     existente = db.get_unidade(unidade_id)
     if not existente:
         raise HTTPException(status_code=404, detail="Unidade não encontrada.")
 
     data = body.model_dump(exclude_none=True)
+    # `alias_rh` enviado ("" ou null) limpa o alias; o exclude_none acima o descartaria.
+    if "alias_rh" in body.model_fields_set:
+        data["alias_rh"] = body.alias_rh
     if not data:
         raise HTTPException(status_code=400, detail="Nenhum campo para atualizar.")
 
     ok, msg = db.update_unidade(unidade_id, data)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
+    audit.record_diff(
+        ctx, "unidade", unidade_id, "editar", existente,
+        obter_depois=lambda: db.get_unidade(unidade_id) or {},
+    )
     return {"detail": msg}
 
 
@@ -95,6 +108,7 @@ def deactivate_unidade(
     unidade_id: int,
     current_user: CurrentUser = Depends(gestor_only),
     db: UnidadeDBManager = Depends(get_unidade_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
     """Inativa (nunca apaga) uma unidade. A camada de dados recusa (400)
     caso ainda existam itens ativos associados."""
@@ -105,6 +119,10 @@ def deactivate_unidade(
     ok, msg = db.deactivate_unidade(unidade_id)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
+    audit.record_diff(
+        ctx, "unidade", unidade_id, "desativar", existente,
+        obter_depois=lambda: db.get_unidade(unidade_id) or {},
+    )
     return {"detail": msg}
 
 
@@ -113,6 +131,7 @@ def reactivate_unidade(
     unidade_id: int,
     current_user: CurrentUser = Depends(gestor_only),
     db: UnidadeDBManager = Depends(get_unidade_db),
+    ctx: AuditContext = Depends(get_audit_context),
 ):
     """Reverte a inativação de uma unidade. Depois de reativada, o nome volta
     a aparecer em /api/constants automaticamente (a consulta lá já filtra só
@@ -124,4 +143,8 @@ def reactivate_unidade(
     ok, msg = db.reactivate_unidade(unidade_id)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
+    audit.record_diff(
+        ctx, "unidade", unidade_id, "reativar", existente,
+        obter_depois=lambda: db.get_unidade(unidade_id) or {},
+    )
     return {"detail": msg}

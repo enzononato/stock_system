@@ -8,15 +8,23 @@ import {
   PackageCheck,
 } from 'lucide-react'
 
-import { getItem, listItemsPaginated } from '@/api/items'
-import { confirmReturn, downloadReturnTerm } from '@/api/loans'
+import { downloadAuthenticated } from '@/api/client'
+import { getColaborador, getColaboradorPorCpf, type Colaborador } from '@/api/colaboradores'
+import { getItem, listItemsPaginated, type Item } from '@/api/items'
+import { confirmReturn, initiateReturn } from '@/api/loans'
+import { usePageSize } from '@/hooks/usePageSize'
 import { getErrorMessage } from '@/lib/api-error'
-import { formatDate } from '@/lib/utils'
+import { upper } from '@/lib/format'
+import { formatCpf, formatDate } from '@/lib/utils'
+import { ColaboradorSelect } from '@/components/colaboradores/ColaboradorSelect'
+import { ColaboradorEmailField } from '@/components/termos/ColaboradorEmailField'
+import { garantirEmailDoColaborador } from '@/components/termos/colaboradorEmail'
 import { FileUpload } from '@/components/ui/FileUpload'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Pagination } from '@/components/ui/Pagination'
+import { StatusPill } from '@/components/ui/StatusPill'
 import {
   Dialog,
   DialogContent,
@@ -32,12 +40,157 @@ import { toast } from '@/components/ui/toast'
 // (limit/offset/search), em vez de buscar um lote fixo de itens e filtrar no
 // cliente — que ficava incorreto em silêncio quando o total passava do teto
 // de página do backend.
-const PAGE_SIZE = 7
+
+const MSG_CPF_NAO_CONFERE = 'O CPF do colaborador escolhido não confere com o do responsável pelo equipamento.'
+
+const MSG_FORA_DO_CADASTRO = (cpf: string) =>
+  `O responsável pelo equipamento (CPF ${formatCpf(cpf)}) não está no cadastro de colaboradores. Sincronize ou cadastre-o antes da devolução.`
+
+type ResultadoDevolucao = Awaited<ReturnType<typeof initiateReturn>>
+
+interface IniciarDevolucaoDialogProps {
+  item: Item
+  onClose: () => void
+  onConcluido: (resultado: ResultadoDevolucao, colaborador: Colaborador) => void
+}
+
+/**
+ * Escolha de quem devolve antes de gerar o termo: o colaborador do cadastro vinculado ao
+ * equipamento (fixo) ou, em equipamento antigo sem vínculo, qualquer colaborador — inclusive
+ * desligado, que também devolve. O e-mail é obrigatório porque o RevSign envia o termo para ele.
+ */
+function IniciarDevolucaoDialog({ item, onClose, onConcluido }: IniciarDevolucaoDialogProps) {
+  const vinculadoId = item.colaborador_id ?? null
+  const cpfDoItem = (item.cpf ?? '').replace(/\D/g, '')
+  const [escolhido, setEscolhido] = useState<Colaborador | null>(null)
+  const [email, setEmail] = useState('')
+
+  const { data: vinculado } = useQuery({
+    queryKey: ['colaboradores', 'detalhe', vinculadoId],
+    queryFn: () => getColaborador(vinculadoId as number),
+    enabled: vinculadoId !== null,
+  })
+  const colaborador = vinculadoId !== null ? (vinculado ?? null) : escolhido
+
+  useEffect(() => {
+    if (vinculado) setEmail(vinculado.email ?? '')
+  }, [vinculado])
+
+  // Equipamento antigo (sem vínculo de cadastro): o termo sai com o nome e o CPF registrados no
+  // equipamento, então já deixa escolhido o colaborador desse CPF (se houver no cadastro).
+  const { data: doCpf } = useQuery({
+    queryKey: ['colaboradores', 'por-cpf', cpfDoItem],
+    queryFn: () => getColaboradorPorCpf(cpfDoItem),
+    enabled: vinculadoId === null && cpfDoItem !== '',
+    retry: false,
+  })
+  // Só o colaborador já cadastrado (id) pode ser escolhido; o que existe apenas na base de RH
+  // (`id: null`) não tem cadastro para receber o termo.
+  const doCpfCadastrado = doCpf && doCpf.id != null ? doCpf : null
+  const responsavelForaDoCadastro = !!doCpf && doCpf.id == null
+  useEffect(() => {
+    if (doCpfCadastrado) {
+      setEscolhido((atual) => atual ?? doCpfCadastrado)
+      setEmail((atual) => atual || (doCpfCadastrado.email ?? ''))
+    }
+  }, [doCpfCadastrado])
+
+  function escolher(c: Colaborador | null) {
+    setEscolhido(c)
+    setEmail(c?.email ?? '')
+  }
+
+  const cpfNaoConfere =
+    vinculadoId === null &&
+    cpfDoItem !== '' &&
+    colaborador !== null &&
+    colaborador.cpf.replace(/\D/g, '') !== cpfDoItem
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      if (!colaborador) throw new Error('Selecione o colaborador.')
+      if (cpfNaoConfere) throw new Error(MSG_CPF_NAO_CONFERE)
+      if (responsavelForaDoCadastro) throw new Error(MSG_FORA_DO_CADASTRO(cpfDoItem))
+      const atualizado = await garantirEmailDoColaborador(colaborador, email)
+      const resultado = await initiateReturn(item.id, { colaborador_id: atualizado.id })
+      return { resultado, atualizado }
+    },
+    onSuccess: ({ resultado, atualizado }) => onConcluido(resultado, atualizado),
+    onError: (err: unknown) => toast(getErrorMessage(err, 'Erro ao gerar termo de devolução.'), 'error'),
+  })
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-lg border border-border bg-surface p-6">
+        <DialogHeader>
+          <DialogTitle className="text-body-lg font-semibold text-foreground">Iniciar devolução</DialogTitle>
+          <DialogDescription className="text-caption text-muted-foreground">
+            {item.tipo} {item.brand} {item.model} — responsável registrado: {item.assigned_to}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {vinculadoId === null && (
+            <p className="text-caption text-muted-foreground">
+              Equipamento sem colaborador do cadastro: escolha quem está devolvendo (responsável registrado:{' '}
+              {item.assigned_to}).
+            </p>
+          )}
+          <div className="space-y-1.5">
+            <span id="devolucao-colaborador-rotulo" className="text-caption font-medium text-foreground">
+              Colaborador *
+            </span>
+            <div role="group" aria-labelledby="devolucao-colaborador-rotulo">
+              <ColaboradorSelect
+                value={colaborador?.id ?? vinculadoId}
+                onChange={escolher}
+                somenteAtivos={false}
+                disabled={vinculadoId !== null || mutation.isPending}
+              />
+            </div>
+            {responsavelForaDoCadastro && (
+              <p role="alert" className="text-xs text-destructive">
+                {MSG_FORA_DO_CADASTRO(cpfDoItem)}
+              </p>
+            )}
+            {cpfNaoConfere && (
+              <p role="alert" className="text-xs text-destructive">
+                {MSG_CPF_NAO_CONFERE}
+              </p>
+            )}
+          </div>
+          <ColaboradorEmailField
+            colaborador={colaborador}
+            value={email}
+            onChange={setEmail}
+            disabled={mutation.isPending}
+          />
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" size="sm" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => mutation.mutate()}
+            loading={mutation.isPending}
+            disabled={cpfNaoConfere || responsavelForaDoCadastro}
+          >
+            Gerar termo e iniciar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 export default function ReturnPage() {
   const queryClient = useQueryClient()
   const [pendingReturnId, setPendingReturnId] = useState<number | null>(null)
   const [signedPdf, setSignedPdf] = useState<File | null>(null)
+  // Equipamento cuja devolução está sendo iniciada (diálogo "Iniciar devolução").
+  const [iniciando, setIniciando] = useState<Item | null>(null)
 
   // Checklist de inspeção física: o operador confirma o estado do
   // equipamento antes de reintegrá-lo ao estoque disponível — sem os três
@@ -61,25 +214,30 @@ export default function ReturnPage() {
 
   // Equipamentos em campo (aguardando geração do termo de devolução): busca
   // com debounce enviada ao servidor.
-  const [indisponivelPage, setIndisponivelPage] = useState(0)
+  const [emCampoPageSize, setStoredEmCampoPageSize] = usePageSize('devolucao-em-campo')
+  const [indisponivelPage, setIndisponivelPage] = useState(1)
+  const setEmCampoPageSize = (n: number) => {
+    setStoredEmCampoPageSize(n)
+    setIndisponivelPage(1)
+  }
   const [searchActive, setSearchActive] = useState('')
   const [searchActiveAplicado, setSearchActiveAplicado] = useState('')
   useEffect(() => {
     const timer = setTimeout(() => {
       setSearchActiveAplicado(searchActive.trim())
-      setIndisponivelPage(0)
+      setIndisponivelPage(1)
     }, 400)
     return () => clearTimeout(timer)
   }, [searchActive])
 
-  const { data: activeData } = useQuery({
-    queryKey: ['items', 'devolucao-ativos', indisponivelPage, searchActiveAplicado],
+  const { data: activeData, isFetching: activeFetching } = useQuery({
+    queryKey: ['items', 'devolucao-ativos', indisponivelPage, emCampoPageSize, searchActiveAplicado],
     queryFn: () =>
       listItemsPaginated({
         status: 'Indisponível',
         search: searchActiveAplicado || undefined,
-        limit: PAGE_SIZE,
-        offset: indisponivelPage * PAGE_SIZE,
+        limit: emCampoPageSize,
+        offset: (indisponivelPage - 1) * emCampoPageSize,
       }),
     placeholderData: keepPreviousData,
   })
@@ -90,7 +248,7 @@ export default function ReturnPage() {
   // página pequena que vem do servidor, não sobre um lote grande.
   const indisponivel = (activeData?.items ?? []).filter((i) => Boolean(i.assigned_to))
   const indisponivelTotal = activeData?.total ?? 0
-  const indisponivelTotalPages = Math.ceil(indisponivelTotal / PAGE_SIZE)
+  const indisponivelLastPage = Math.max(1, Math.ceil(indisponivelTotal / emCampoPageSize))
 
   // Contador "Em Campo" do cabeçalho: total real no servidor, sem a busca
   // (que alteraria o número enquanto o operador digita).
@@ -101,49 +259,57 @@ export default function ReturnPage() {
   const emCampoTotal = emCampoCountData?.total ?? 0
 
   // Devoluções pendentes de confirmação (termo já gerado, aguardando upload)
-  const [pendentesPage, setPendentesPage] = useState(0)
-  const { data: pendentesData } = useQuery({
-    queryKey: ['items', 'devolucao-pendentes', pendentesPage],
+  const [pendentesPageSize, setStoredPendentesPageSize] = usePageSize('devolucao-pendentes')
+  const [pendentesPage, setPendentesPage] = useState(1)
+  const setPendentesPageSize = (n: number) => {
+    setStoredPendentesPageSize(n)
+    setPendentesPage(1)
+  }
+  const { data: pendentesData, isFetching: pendentesFetching } = useQuery({
+    queryKey: ['items', 'devolucao-pendentes', pendentesPage, pendentesPageSize],
     queryFn: () =>
       listItemsPaginated({
         status: 'Pendente Devolução',
-        limit: PAGE_SIZE,
-        offset: pendentesPage * PAGE_SIZE,
+        limit: pendentesPageSize,
+        offset: (pendentesPage - 1) * pendentesPageSize,
       }),
     placeholderData: keepPreviousData,
   })
   const pendenteDevolucao = pendentesData?.items ?? []
   const pendenteDevolucaoTotal = pendentesData?.total ?? 0
-  const pendentesTotalPages = Math.ceil(pendenteDevolucaoTotal / PAGE_SIZE)
+  const pendentesLastPage = Math.max(1, Math.ceil(pendenteDevolucaoTotal / pendentesPageSize))
 
   // Se a última página esvaziar (item mudou de status), volta para a última
   // página que ainda existe em vez de mostrar uma tabela vazia.
   useEffect(() => {
-    if (pendentesTotalPages > 0 && pendentesPage > pendentesTotalPages - 1) {
-      setPendentesPage(pendentesTotalPages - 1)
-    }
-  }, [pendentesPage, pendentesTotalPages])
+    if (pendentesData && pendentesPage > pendentesLastPage) setPendentesPage(pendentesLastPage)
+  }, [pendentesData, pendentesPage, pendentesLastPage])
   useEffect(() => {
-    if (indisponivelTotalPages > 0 && indisponivelPage > indisponivelTotalPages - 1) {
-      setIndisponivelPage(indisponivelTotalPages - 1)
-    }
-  }, [indisponivelPage, indisponivelTotalPages])
+    if (activeData && indisponivelPage > indisponivelLastPage) setIndisponivelPage(indisponivelLastPage)
+  }, [activeData, indisponivelPage, indisponivelLastPage])
 
-  const initiateMutation = useMutation({
-    // downloadReturnTerm encapsula initiate + download autenticado: abrir a
-    // URL em outra aba nunca envia o header Authorization (sempre 401).
-    mutationFn: (itemId: number) => downloadReturnTerm(itemId),
-    onSuccess: (_, itemId) => {
-      void queryClient.invalidateQueries({ queryKey: ['items'] })
-      setPendingReturnId(itemId)
+  function devolucaoIniciada(resultado: ResultadoDevolucao, colaborador: Colaborador) {
+    const item = iniciando
+    void queryClient.invalidateQueries({ queryKey: ['items'] })
+    setIniciando(null)
+    if (resultado.termo?.status === 'enviado') {
+      // O RevSign já mandou o termo: não há documento para baixar nem conferência a abrir agora.
+      toast(
+        `Termo de devolução enviado para assinatura em ${resultado.termo.destinatario_email ?? colaborador.email}.`
+      )
+      return
+    }
+    // Assinatura manual: baixa o termo (download autenticado, nunca window.open) e abre a conferência.
+    downloadAuthenticated(resultado.download_url, resultado.filename).catch((err: unknown) => {
+      toast(getErrorMessage(err, 'Não foi possível baixar o termo de devolução.'), 'error')
+    })
+    if (item) {
+      setPendingReturnId(item.id)
       setSignedPdf(null)
       resetChecklist()
-      toast('Termo de devolução gerado! Realize a inspeção física e anexe o documento.')
-    },
-    onError: (err: unknown) => {
-      toast(getErrorMessage(err, 'Erro ao gerar termo de devolução.'), 'error')
-    },
-  })
+    }
+    toast('Termo de devolução gerado! Realize a inspeção física e anexe o documento.')
+  }
 
   const confirmMutation = useMutation({
     mutationFn: ({ itemId, pdf }: { itemId: number; pdf: File }) => confirmReturn(itemId, pdf),
@@ -203,6 +369,15 @@ export default function ReturnPage() {
         </div>
       </div>
 
+      {/* Escolha do colaborador que devolve e geração do termo */}
+      {iniciando && (
+        <IniciarDevolucaoDialog
+          item={iniciando}
+          onClose={() => setIniciando(null)}
+          onConcluido={devolucaoIniciada}
+        />
+      )}
+
       {/* Modal de conferência física e termo de devolução */}
       <Dialog
         open={pendingReturnId !== null}
@@ -238,7 +413,7 @@ export default function ReturnPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Revenda:</span>
-                <span className="text-foreground">{activeSelectedItem.revenda || '—'}</span>
+                <span className="text-foreground">{upper(activeSelectedItem.revenda) || '—'}</span>
               </div>
             </div>
           )}
@@ -284,7 +459,8 @@ export default function ReturnPage() {
             </Button>
             <Button
               size="sm"
-              disabled={confirmMutation.isPending || !signedPdf || !checklistCompleto}
+              disabled={!signedPdf || !checklistCompleto}
+              loading={confirmMutation.isPending}
               onClick={() => {
                 if (pendingReturnId && signedPdf) {
                   confirmMutation.mutate({ itemId: pendingReturnId, pdf: signedPdf })
@@ -292,7 +468,7 @@ export default function ReturnPage() {
               }}
             >
               <CheckCircle2 className="mr-1.5 size-3.5" />
-              {confirmMutation.isPending ? 'Concluindo…' : 'Finalizar Devolução'}
+              Finalizar Devolução
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -310,9 +486,7 @@ export default function ReturnPage() {
                 Equipamentos cujo termo de devolução já foi gerado e aguardam upload da via assinada.
               </p>
             </div>
-            <Badge variant="warning" showDot className="font-mono text-[11px] border-border">
-              RECOLHIMENTO
-            </Badge>
+            <StatusPill status="Pendente Devolução" />
           </div>
 
           <div className="overflow-x-auto">
@@ -338,7 +512,7 @@ export default function ReturnPage() {
                     <td className="py-2 px-3 font-mono text-muted-foreground">
                       {item.cpf || '—'}
                     </td>
-                    <td className="py-2 px-3 text-muted-foreground">{item.revenda || '—'}</td>
+                    <td className="py-2 px-3 text-muted-foreground">{upper(item.revenda) || '—'}</td>
                     <td className="py-2 px-3 text-right">
                       <Button
                         size="sm"
@@ -358,34 +532,14 @@ export default function ReturnPage() {
             </table>
           </div>
 
-          {pendentesTotalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-border pt-3">
-              <span className="text-caption text-muted-foreground">
-                Página {pendentesPage + 1} de {pendentesTotalPages} (
-                {pendenteDevolucaoTotal} pendentes)
-              </span>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={pendentesPage === 0}
-                  onClick={() => setPendentesPage((p) => Math.max(0, p - 1))}
-                  className="text-xs h-7 px-2.5"
-                >
-                  ← Anterior
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={pendentesPage >= pendentesTotalPages - 1}
-                  onClick={() => setPendentesPage((p) => p + 1)}
-                  className="text-xs h-7 px-2.5"
-                >
-                  Próxima →
-                </Button>
-              </div>
-            </div>
-          )}
+          <Pagination
+            page={Math.min(pendentesPage, pendentesLastPage)}
+            pageSize={pendentesPageSize}
+            total={pendenteDevolucaoTotal}
+            onPageChange={setPendentesPage}
+            onPageSizeChange={setPendentesPageSize}
+            isFetching={pendentesFetching}
+          />
         </div>
       )}
 
@@ -444,7 +598,7 @@ export default function ReturnPage() {
                     <td className="py-2 px-3 font-mono text-muted-foreground">
                       {item.cpf || '—'}
                     </td>
-                    <td className="py-2 px-3 text-muted-foreground">{item.revenda || '—'}</td>
+                    <td className="py-2 px-3 text-muted-foreground">{upper(item.revenda) || '—'}</td>
                     <td className="py-2 px-3 font-mono text-muted-foreground">
                       {formatDate(item.date_issued)}
                     </td>
@@ -452,12 +606,12 @@ export default function ReturnPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        disabled={initiateMutation.isPending}
-                        onClick={() => initiateMutation.mutate(item.id)}
+                        loading={iniciando?.id === item.id}
+                        onClick={() => setIniciando(item)}
                         className="text-xs h-7 px-2.5"
                       >
                         <FileDown className="mr-1 size-3" />
-                        {initiateMutation.isPending ? 'Gerando…' : 'Iniciar Devolução'}
+                        Iniciar Devolução
                       </Button>
                     </td>
                   </tr>
@@ -467,33 +621,15 @@ export default function ReturnPage() {
           </div>
         )}
 
-        {indisponivelTotalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-border pt-3">
-            <span className="text-caption text-muted-foreground">
-              Página {indisponivelPage + 1} de {indisponivelTotalPages} (
-              {indisponivelTotal} registros)
-            </span>
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={indisponivelPage === 0}
-                onClick={() => setIndisponivelPage((p) => Math.max(0, p - 1))}
-                className="text-xs h-7 px-2.5"
-              >
-                ← Anterior
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={indisponivelPage >= indisponivelTotalPages - 1}
-                onClick={() => setIndisponivelPage((p) => p + 1)}
-                className="text-xs h-7 px-2.5"
-              >
-                Próxima →
-              </Button>
-            </div>
-          </div>
+        {indisponivelTotal > 0 && (
+          <Pagination
+            page={Math.min(indisponivelPage, indisponivelLastPage)}
+            pageSize={emCampoPageSize}
+            total={indisponivelTotal}
+            onPageChange={setIndisponivelPage}
+            onPageSizeChange={setEmCampoPageSize}
+            isFetching={activeFetching}
+          />
         )}
       </div>
     </div>

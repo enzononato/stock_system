@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
@@ -6,9 +8,25 @@ from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
+from app import jobs
 from app.core.config import settings
+from app.db.migrations import aplicar_pendentes, garantir_baseline
 from app.dependencies import limiter, get_inventory_db
-from app.routers import auth, users, items, peripherals, loans, documents, history, reports, constants, unidades
+from app.services import scheduler
+from app.routers import acessos, acesso_eventos
+from app.routers import auth, users, items, peripherals, loans, documents, history, reports, constants, unidades, audit, colaboradores, locais
+from app.routers import linhas
+from app.routers import inventarios
+from app.routers import etiquetas
+from app.routers import manutencoes
+from app.routers import termos, integracoes_revsign
+from app.services.mfa import mfa_configurado
+from app.routers import auth_senha
+from app.routers import perfil
+from app.routers import painel
+from app.routers import exportacoes
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Controle de Estoque Revalle",
@@ -56,6 +74,68 @@ _ROTULOS_DE_CAMPO = {
     "cep": "CEP",
     "cidade": "Cidade",
     "uf": "UF",
+    # Campos de Colaborador
+    "email": "E-mail",
+    "telefone": "Telefone",
+    "superior_id": "Superior",
+    "unidade_id": "Unidade",
+    "situacao": "Situação",
+    # Campos de Local e vínculos do item
+    "descricao": "Descrição",
+    "ativo": "Ativo",
+    "colaborador_id": "Colaborador",
+    "local_id": "Local",
+    # Campos de Linhas telefônicas (F5)
+    "numero": "Número",
+    "operadora": "Operadora",
+    "plano": "Plano",
+    "custo_mensal": "Custo mensal",
+    "iccid": "ICCID",
+    "observacoes": "Observações",
+    "observacao": "Observação",
+    "motivo": "Motivo",
+    # Campos do inventário físico e das etiquetas
+    "codigo": "Código lido",
+    "local_id_encontrado": "Local",
+    "colaborador_id_encontrado": "Colaborador",
+    "usuario_conferido": "Usuário conferido",
+    "item_ids": "Equipamentos",
+    # Campos do módulo de Acessos
+    "login": "Login",
+    "sistema_id": "Sistema",
+    "sistema_ids": "Sistemas",
+    "cargo_anterior": "Cargo anterior",
+    "cargo_novo": "Cargo novo",
+    "motivo_cancelamento": "Motivo do cancelamento",
+    # Compra do equipamento (F4)
+    "valor_compra": "Valor de compra",
+    "data_compra": "Data da compra",
+    "garantia_ate": "Fim da garantia",
+    # Transferência do equipamento (F4)
+    "para_unidade_id": "Unidade de destino",
+    "para_local_id": "Local de destino",
+    # Manutenção do equipamento (F4)
+    "defeito": "Defeito",
+    "assistencia": "Assistência técnica",
+    "previsao_retorno": "Previsão de retorno",
+    "item_id": "Equipamento",
+    "agendado_para": "Data agendada",
+    # Campos de login (F2)
+    "nova_senha": "Nova senha",
+    "token": "Link",
+    "senha": "Senha",
+    "mfa_token": "Etapa de verificação",
+    # Exportações (F7)
+    "formato": "Formato",
+}
+
+# "nome" vale "Nome da unidade" nas unidades; nas rotas de colaboradores e locais é só "Nome".
+_ROTULOS_POR_ROTA = {
+    "/api/colaboradores": {"nome": "Nome"},
+    "/api/locais": {"nome": "Nome"},
+    # "identificador" e "codigo" têm outro sentido no login/2FA (F2) que nos equipamentos e no inventário (F6).
+    "/api/auth": {"identificador": "Usuário ou e-mail", "codigo": "Código"},
+    "/api/perfil": {"codigo": "Código"},
 }
 
 
@@ -76,6 +156,8 @@ def erro_de_validacao(request: Request, exc: RequestValidationError) -> JSONResp
     `errors` para quem estiver depurando ou consumindo a API programaticamente.
     """
     mensagens: list[str] = []
+    # Caminho da ROTA (ex.: "/api/colaboradores/{colaborador_id}") quando conhecido; senão o da requisição.
+    caminho = getattr(request.scope.get("route"), "path", None) or request.url.path
     for erro in exc.errors():
         # `loc` costuma ser ("body", "campo"); o último elemento textual é o campo.
         campo = next(
@@ -85,7 +167,11 @@ def erro_de_validacao(request: Request, exc: RequestValidationError) -> JSONResp
         msg = erro.get("msg", "valor inválido")
         # Pydantic prefixa mensagens de ValueError com "Value error, ".
         msg = msg.removeprefix("Value error, ")
-        rotulo = _ROTULOS_DE_CAMPO.get(campo, campo)
+        rotulos = _ROTULOS_DE_CAMPO
+        for prefixo, especificos in _ROTULOS_POR_ROTA.items():
+            if caminho == prefixo or caminho.startswith(prefixo + "/"):
+                rotulos = {**_ROTULOS_DE_CAMPO, **especificos}
+        rotulo = rotulos.get(campo, campo)
         mensagens.append(f"{rotulo}: {msg}" if rotulo else msg)
 
     return JSONResponse(
@@ -107,6 +193,8 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(auth_senha.router)
+app.include_router(perfil.router)
 app.include_router(users.router)
 app.include_router(items.router)
 app.include_router(peripherals.router)
@@ -116,6 +204,74 @@ app.include_router(history.router)
 app.include_router(reports.router)
 app.include_router(constants.router)
 app.include_router(unidades.router)
+app.include_router(audit.router)
+app.include_router(colaboradores.router)
+app.include_router(locais.router)
+app.include_router(linhas.router)
+app.include_router(inventarios.router)
+app.include_router(etiquetas.router)
+app.include_router(acessos.router)
+app.include_router(acesso_eventos.router)
+app.include_router(manutencoes.router)
+app.include_router(termos.router)
+app.include_router(integracoes_revsign.router)
+app.include_router(painel.router)
+app.include_router(exportacoes.router)
+
+
+@app.on_event("startup")
+def aplicar_migracoes_no_boot() -> None:
+    """Cria as tabelas legadas e aplica as migrações pendentes. Banco fora do ar
+    não impede o boot (o erro fica no log e o /api/health/db reporta 503)."""
+    try:
+        garantir_baseline()
+        aplicar_pendentes()
+    except Exception:
+        logger.exception("Falha ao aplicar as migrações do banco no boot.")
+
+
+@app.on_event("startup")
+async def iniciar_agendador() -> None:
+    """Registra os jobs e liga o agendador (só com SCHEDULER_ENABLED). Nunca impede o boot."""
+    try:
+        jobs.registrar_jobs()
+        scheduler.iniciar()
+    except Exception:
+        logger.exception("Falha ao iniciar o agendador de tarefas.")
+
+
+@app.on_event("shutdown")
+async def parar_agendador() -> None:
+    try:
+        await scheduler.parar()
+    except Exception:
+        logger.exception("Falha ao parar o agendador de tarefas.")
+
+
+@app.on_event("startup")
+def avisar_2fa_sem_chave() -> None:
+    """Avisa no boot que a verificação em duas etapas está desligada (sem chave TOTP válida)."""
+    if not mfa_configurado():
+        logger.warning(
+            "TOTP_ENCRYPTION_KEY ausente ou inválida: verificação em duas etapas desligada; "
+            "o Gestor entra só com a senha."
+        )
+
+
+@app.on_event("startup")
+def avisar_url_publica_local() -> None:
+    """Em produção, o link do e-mail de redefinição precisa apontar para o endereço público."""
+    from urllib.parse import urlparse
+
+    if settings.ENVIRONMENT != "production":
+        return
+    host = (urlparse(settings.APP_PUBLIC_URL).hostname or "").lower()
+    if host in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
+        logger.warning(
+            "APP_PUBLIC_URL aponta para %s em produção: os links dos e-mails (redefinição de senha) "
+            "não vão funcionar para os usuários. Ajuste no .env.",
+            host,
+        )
 
 
 @app.get("/api/health")

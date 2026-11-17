@@ -128,3 +128,92 @@ describe('ItemDetailsModal — edição inline', () => {
     expect(chamouBackend).toBe(false)
   })
 })
+
+describe('ItemDetailsModal — página completa', () => {
+  it('oferece o atalho "Ver página completa" para a página de detalhe', () => {
+    renderModal(desktopItem)
+    expect(screen.getByRole('button', { name: 'Ver página completa' })).toBeInTheDocument()
+  })
+})
+
+describe("ItemDetailsModal — vínculos e visual da F1", () => {
+  const comColaborador: Item = {
+    ...desktopItem,
+    revenda: "Revalle Juazeiro",
+    colaborador_id: 3,
+    colaborador_nome: "MARIA SILVA",
+    colaborador_setor: "Comercial",
+    colaborador_cargo: "Vendedora",
+    superior_nome: "JOÃO GESTOR",
+    local_nome: "Almoxarifado",
+  }
+
+  it("mostra colaborador, setor, cargo, superior, local e unidade em CAIXA ALTA", () => {
+    renderModal(comColaborador)
+    expect(screen.getByText("Superior imediato")).toBeInTheDocument()
+    expect(screen.getByText("JOÃO GESTOR")).toBeInTheDocument()
+    expect(screen.getByText("Comercial")).toBeInTheDocument()
+    expect(screen.getByText("Vendedora")).toBeInTheDocument()
+    expect(screen.getByText("Almoxarifado")).toBeInTheDocument()
+    expect(screen.getByText("REVALLE JUAZEIRO")).toBeInTheDocument()
+  })
+
+  it('superior "Não informado" quando há colaborador sem superior', () => {
+    renderModal({ ...comColaborador, superior_nome: null })
+    expect(screen.getByText("Não informado")).toBeInTheDocument()
+  })
+
+  it("status em pílula", () => {
+    renderModal(desktopItem)
+    expect(screen.getByText("Indisponível")).toHaveClass("font-bold")
+  })
+
+  it("salvar com duplo clique envia um PUT só", async () => {
+    let liberar!: () => void
+    const pendente = new Promise<void>((r) => {
+      liberar = r
+    })
+    let chamadas = 0
+    server.use(
+      http.put("/api/items/:id", async () => {
+        chamadas += 1
+        await pendente
+        return HttpResponse.json({ detail: "ok" })
+      })
+    )
+    const user = userEvent.setup()
+    renderModal(desktopItem)
+    await user.click(screen.getByRole("button", { name: "Editar" }))
+    const salvar = screen.getByRole("button", { name: /Salvar Alterações/ })
+    await user.click(salvar)
+    await user.click(salvar)
+    await waitFor(() => expect(chamadas).toBe(1))
+    expect(salvar).toHaveAttribute("aria-busy", "true")
+    liberar()
+  })
+
+  it('baixar termo de responsabilidade com duplo clique envia uma requisição só', async () => {
+    let liberar!: () => void
+    const pendente = new Promise<void>((r) => {
+      liberar = r
+    })
+    let chamadas = 0
+    server.use(
+      http.post('/api/documents/loan-term/:id', async () => {
+        chamadas += 1
+        await pendente
+        return new HttpResponse(new Blob(['x']), { status: 200 })
+      })
+    )
+    URL.createObjectURL = vi.fn(() => 'blob:termo')
+    URL.revokeObjectURL = vi.fn()
+    const user = userEvent.setup()
+    renderModal({ ...desktopItem, status: 'Pendente' })
+    const botao = screen.getByRole('button', { name: 'Baixar Termo de Responsabilidade' })
+    await user.click(botao)
+    await user.click(botao)
+    await waitFor(() => expect(chamadas).toBe(1))
+    expect(botao).toHaveAttribute('aria-busy', 'true')
+    liberar()
+  })
+})

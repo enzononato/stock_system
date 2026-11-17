@@ -3,21 +3,30 @@
 @tailwind utilities;
 
 /*
- * Design System — Stock System / Revalle
- * Enterprise Editorial — monocromático (preto, branco, cinzas).
- * Contraste, tipografia e densidade como identidade visual.
+ * Design System — Patrimônio / Revalle
+ * Base neutra (branco, preto, cinzas) com azul #0131CD como cor de marca e
+ * verde-limão #B9FC01 como destaque. Contraste, tipografia e densidade
+ * continuam sendo a identidade visual.
  *
- * Exceção deliberada ao monocromático: os tokens --status-* abaixo.
- * Num sistema de inventário a cor do status é sinal funcional (varrer uma
- * tabela de 88 itens sem ela fica mais lento), então eles sobrevivem em
- * versão dessaturada, calibrada para não brigar com a base neutra.
+ * Regras da paleta (base: #0131CD, #FFFFFF, #B9FC01):
+ * - O azul é a cor de ação (--primary, --brand). Em texto sobre fundo escuro
+ *   usa-se --brand-text (azul mais claro), nunca o #0131CD puro.
+ * - O verde-limão NUNCA é texto sobre branco: só entra como preenchimento com
+ *   texto escuro (--lime + --lime-foreground) ou sobre o azul/preto (anel de
+ *   foco no tema escuro).
+ * - Nenhuma cor fora dos tokens abaixo. Os pares texto/fundo (primary,
+ *   brand-text, brand-soft, lime e cada status) são verificados em AA (4.5:1)
+ *   nos dois temas por lib/palette.test.ts.
+ * - Os tokens --status-* são sinal funcional: num sistema de patrimônio a cor
+ *   do status acelera a leitura de uma tabela longa. Cada tom tem texto
+ *   (--status-x) e fundo (--status-x-bg).
  */
 
 @layer base {
   :root {
     color-scheme: light;
 
-    --canvas: #F7F7F5;
+    --canvas: #F5F7FB;
     --surface: #FFFFFF;
     --surface-alt: #F0F0ED;
     --border: #D9D9D4;
@@ -33,7 +42,7 @@
     --popover: var(--surface);
     --popover-foreground: var(--text-primary);
 
-    --primary: #111111;
+    --primary: #0131CD;
     --primary-foreground: #FFFFFF;
     --secondary: var(--surface-alt);
     --secondary-foreground: var(--text-primary);
@@ -46,13 +55,21 @@
     --destructive-foreground: #FFFFFF;
 
     --input: var(--border);
-    --ring: #111111;
+    --ring: #0131CD;
 
     --sidebar: var(--surface);
     --sidebar-foreground: var(--text-primary);
     --sidebar-accent: var(--surface-alt);
     --sidebar-accent-foreground: var(--text-primary);
     --sidebar-border: var(--border);
+
+    /* Marca: azul de ação e destaque verde-limão (lime nunca é texto sobre branco) */
+    --brand: #0131CD;
+    --brand-text: #0131CD;
+    --brand-soft: #E8EEFD;
+    --brand-soft-foreground: #0131CD;
+    --lime: #B9FC01;
+    --lime-foreground: #111111;
 
     --radius-sm: 2px;
     --radius: 4px;
@@ -61,15 +78,19 @@
 
     --shadow-overlay: 0 2px 12px rgba(0, 0, 0, 0.08);
 
-    /* Status — única cor semântica do sistema, dessaturada de propósito */
+    /* Status — cor funcional por tom; texto e fundo com contraste AA */
     --status-available: #1F6F4A;
     --status-available-bg: #E9F1EC;
-    --status-loaned: #1F5474;
-    --status-loaned-bg: #E8EFF4;
+    --status-loaned: #0131CD;
+    --status-loaned-bg: #E8EEFD;
     --status-pending: #7A5E17;
     --status-pending-bg: #F4EEDD;
     --status-return: #53397E;
     --status-return-bg: #EDE9F4;
+    --status-maintenance: #9A4A00;
+    --status-maintenance-bg: #FDEBD9;
+    --status-retired: #5F5F5A;
+    --status-retired-bg: #EEEEEA;
     --status-danger: #A32B2B;
     --status-danger-bg: #F6E8E8;
     --status-neutral: var(--text-secondary);
@@ -82,20 +103,22 @@
      * "var(--x)", não no formato "rgb(var(--x) / <alpha-value>)" exigido
      * pelo Tailwind para o modificador de opacidade (ex.: bg-primary com
      * sufixo /10) — aplicado a um token deste projeto, esse modificador compila para
-     * NENHUM CSS. --primary INVERTE entre os temas (quase preto no claro,
-     * quase branco no escuro), então cada valor abaixo foi escolhido por
+     * NENHUM CSS. --primary é o mesmo azul #0131CD (rgb 1, 49, 205) nos dois
+     * temas, mas azul translúcido some sobre o fundo quase preto: no tema
+     * escuro os véus sobem de opacidade e as bordas usam o azul claro
+     * --brand-text (rgb 125, 151, 255). Cada valor abaixo foi escolhido por
      * tema, não copiado de um único valor. Não registrar em
      * tailwind.config.js: a lista de tokens do guard test (tokens.test.ts)
      * passaria a casar com eles.
      */
     /* Véu difuso de primary — glows de fundo, tile do logo, chip "Enterprise Core" */
-    --login-wash: rgba(17, 17, 17, 0.08);
+    --login-wash: rgba(1, 49, 205, 0.08);
     /* Véu ainda mais fraco — segundo glow ambiente, mais discreto */
-    --login-wash-soft: rgba(17, 17, 17, 0.04);
+    --login-wash-soft: rgba(1, 49, 205, 0.04);
     /* Borda fio-de-cabelo em primary — anéis decorativos, borda padrão de chip/tile/card */
-    --login-border: rgba(17, 17, 17, 0.14);
+    --login-border: rgba(1, 49, 205, 0.18);
     /* Borda mais forte em primary — estado hover/foco dos cards e badges */
-    --login-border-strong: rgba(17, 17, 17, 0.32);
+    --login-border-strong: rgba(1, 49, 205, 0.40);
     /* Superfície translúcida (para uso com backdrop-blur) — cards e chips de vidro */
     --login-glass: rgba(255, 255, 255, 0.72);
     /* Borda neutra translúcida — divisores de painel e contornos de card */
@@ -125,8 +148,8 @@
     --popover: var(--surface);
     --popover-foreground: var(--text-primary);
 
-    --primary: #F2F2F0;
-    --primary-foreground: #080808;
+    --primary: #0131CD;
+    --primary-foreground: #FFFFFF;
     --secondary: var(--surface-alt);
     --secondary-foreground: var(--text-primary);
     --muted: var(--surface-alt);
@@ -138,7 +161,7 @@
     --destructive-foreground: #080808;
 
     --input: var(--border);
-    --ring: #F2F2F0;
+    --ring: #B9FC01;
 
     --sidebar: var(--surface);
     --sidebar-foreground: var(--text-primary);
@@ -148,24 +171,35 @@
 
     --shadow-overlay: 0 4px 20px rgba(0, 0, 0, 0.6);
 
+    --brand: #0131CD;
+    --brand-text: #7D97FF;
+    --brand-soft: #0D1B4D;
+    --brand-soft-foreground: #C9D5FF;
+    --lime: #B9FC01;
+    --lime-foreground: #111111;
+
     --status-available: #6FBF93;
     --status-available-bg: #12261C;
-    --status-loaned: #7FB3D5;
-    --status-loaned-bg: #101F2A;
+    --status-loaned: #9DB1FF;
+    --status-loaned-bg: #0D1B4D;
     --status-pending: #D4B468;
     --status-pending-bg: #2A2212;
     --status-return: #AE96D9;
     --status-return-bg: #1E1830;
+    --status-maintenance: #F5A15C;
+    --status-maintenance-bg: #2E1A08;
+    --status-retired: #A4A4A0;
+    --status-retired-bg: #1A1A1A;
     --status-danger: #E4A0A0;
     --status-danger-bg: #2B1414;
     --status-neutral: var(--text-secondary);
     --status-neutral-bg: var(--surface-alt);
 
-    /* Ver comentário completo em :root — mesmos papéis, tonalidade invertida (primary é quase branco aqui) */
-    --login-wash: rgba(242, 242, 240, 0.14);
-    --login-wash-soft: rgba(242, 242, 240, 0.06);
-    --login-border: rgba(242, 242, 240, 0.18);
-    --login-border-strong: rgba(242, 242, 240, 0.38);
+    /* Ver comentário completo em :root — mesmos papéis; véus mais opacos e bordas em azul claro para aparecer sobre o preto */
+    --login-wash: rgba(1, 49, 205, 0.32);
+    --login-wash-soft: rgba(1, 49, 205, 0.16);
+    --login-border: rgba(125, 151, 255, 0.24);
+    --login-border-strong: rgba(125, 151, 255, 0.50);
     --login-glass: rgba(12, 12, 12, 0.72);
     --login-divider: rgba(39, 39, 39, 0.7);
     --login-danger-wash: rgba(228, 160, 160, 0.12);

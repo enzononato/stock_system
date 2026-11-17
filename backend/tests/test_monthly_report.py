@@ -119,6 +119,16 @@ class TestRelatorioMensal:
         assert "Operação" in primeira_linha
         assert "ID Histórico" in primeira_linha
 
+    def test_export_csv_revenda_em_caixa_alta(self, client_gestor, criar_item):
+        criar_item(revenda="Revalle Juazeiro")
+        agora = datetime.now()
+        params = {"year": agora.year, "month": agora.month}
+        csv_txt = client_gestor.get("/api/reports/monthly/export", params=params).text
+        assert '"REVALLE JUAZEIRO"' in csv_txt
+        assert "Revalle Juazeiro" not in csv_txt
+        linhas = client_gestor.get("/api/reports/monthly", params=params).json()
+        assert any(r["revenda"] == "Revalle Juazeiro" for r in linhas)
+
 
 class TestGraficos:
     def test_chart_loans_tem_um_valor_por_dia_do_mes(self, client_gestor, inv_manager, item_disponivel):

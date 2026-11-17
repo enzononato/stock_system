@@ -34,6 +34,8 @@ export interface ListHistoryParams {
    * falsa de ter pesquisado o histórico inteiro.
    */
   search?: string
+  /** Restringe o histórico a um único equipamento (aba Histórico da página de detalhe). */
+  item_id?: number
   limit?: number
   offset?: number
 }

@@ -439,6 +439,7 @@ class TestIndicadores:
             "Indisponível": 1,  # item1
             "Pendente": 1,  # item3
             "Pendente Devolução": 1,  # item5
+            "Em Manutenção": 0,  # MUDANÇA INTENCIONAL (F4): novo status
         }
         assert body["emprestimos_ativos"] == 1  # == Indisponível
         assert body["perifericos_vinculados"] == 1  # apenas item1
@@ -453,9 +454,24 @@ class TestIndicadores:
         assert body["itens_total"] == 0
         assert body["itens_por_status"] == {
             "Disponível": 0, "Indisponível": 0, "Pendente": 0, "Pendente Devolução": 0,
+            "Em Manutenção": 0,  # MUDANÇA INTENCIONAL (F4): novo status
         }
         assert body["emprestimos_ativos"] == 0
         assert body["perifericos_vinculados"] == 0
+
+    def test_indicadores_contam_em_manutencao(self, client_gestor, unidade, criar_item, executar_sql):
+        item = criar_item(revenda=unidade["nome"])
+        executar_sql("UPDATE items SET status='Em Manutenção' WHERE id=%s", (item["id"],))
+
+        body = client_gestor.get(f"/api/unidades/{unidade['id']}/indicadores").json()
+        assert body["itens_por_status"]["Em Manutenção"] == 1
+        assert body["itens_total"] == 1
+
+    def test_constants_traz_status_de_item(self, client_gestor):
+        body = client_gestor.get("/api/constants").json()
+        assert body["item_statuses"] == [
+            "Disponível", "Indisponível", "Pendente", "Pendente Devolução", "Em Manutenção",
+        ]
 
     def test_indicadores_unidade_inexistente_retorna_404(self, client_gestor):
         resp = client_gestor.get("/api/unidades/999999/indicadores")

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -379,5 +379,140 @@ describe('UnidadesPage — mostrar inativas e reativação', () => {
     await waitFor(() =>
       expect(screen.getByLabelText('Inativar unidade Recife')).toBeInTheDocument()
     )
+  })
+})
+
+describe('UnidadesPage — nome na base de RH (alias_rh)', () => {
+  it('envia alias_rh ao criar uma unidade', async () => {
+    mockListUnidades()
+    let corpo: Record<string, unknown> = {}
+    server.use(
+      http.post('/api/unidades', async ({ request }) => {
+        corpo = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json({ detail: 'Unidade criada com sucesso.' })
+      })
+    )
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Petrolina')
+
+    await user.type(screen.getByLabelText('Nome *'), 'Salvador')
+    await user.type(screen.getByLabelText('Razão Social *'), 'Revalle Salvador Ltda')
+    await user.type(screen.getByLabelText('CNPJ *'), '19131243000197')
+    await user.type(screen.getByLabelText('Nome na base de RH'), 'REVALLE SALVADOR')
+    await user.click(screen.getByRole('button', { name: 'Criar Unidade' }))
+
+    await waitFor(() => expect(corpo.alias_rh).toBe('REVALLE SALVADOR'))
+    expect(corpo.nome).toBe('Salvador')
+  })
+
+  it('carrega o alias_rh na edição e envia o valor alterado', async () => {
+    mockListUnidades([{ ...unidadeJuazeiro, alias_rh: 'JUAZEIRO MATRIZ' }, unidadePetrolina])
+    let corpo: Record<string, unknown> = {}
+    server.use(
+      http.put('/api/unidades/1', async ({ request }) => {
+        corpo = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json({ detail: 'Unidade atualizada com sucesso.' })
+      })
+    )
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByLabelText('Editar unidade Juazeiro'))
+    const campo = screen.getByLabelText('Nome na base de RH')
+    expect(campo).toHaveValue('JUAZEIRO MATRIZ')
+    await user.clear(campo)
+    await user.type(campo, 'JUAZEIRO CENTRO')
+    await user.click(screen.getByRole('button', { name: 'Salvar Alterações' }))
+
+    await waitFor(() => expect(corpo.alias_rh).toBe('JUAZEIRO CENTRO'))
+  })
+
+  it('não envia alias_rh quando o campo fica vazio na criação', async () => {
+    mockListUnidades()
+    let corpo: Record<string, unknown> | null = null
+    server.use(
+      http.post('/api/unidades', async ({ request }) => {
+        corpo = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json({ detail: 'ok' })
+      })
+    )
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Petrolina')
+
+    await user.type(screen.getByLabelText('Nome *'), 'Salvador')
+    await user.type(screen.getByLabelText('Razão Social *'), 'Revalle Salvador Ltda')
+    await user.type(screen.getByLabelText('CNPJ *'), '19131243000197')
+    await user.click(screen.getByRole('button', { name: 'Criar Unidade' }))
+
+    await waitFor(() => expect(corpo).not.toBeNull())
+    expect(corpo).not.toHaveProperty('alias_rh')
+  })
+})
+
+describe('UnidadesPage — locais', () => {
+  it('abre o diálogo de locais da unidade pela ação "Locais"', async () => {
+    mockListUnidades()
+    server.use(http.get('/api/locais', () => HttpResponse.json([])))
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByLabelText('Locais da unidade Juazeiro'))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(/Locais — JUAZEIRO/)).toBeInTheDocument()
+  })
+})
+
+describe("UnidadesPage — listagem (F1)", () => {
+  beforeEach(() => localStorage.clear())
+
+  it("pagina no cliente com 25 por padrão", async () => {
+    const muitas = Array.from({ length: 30 }, (_, i) => ({
+      ...unidadeJuazeiro,
+      id: 100 + i,
+      nome: `Filial ${i + 1}`,
+    }))
+    mockListUnidades(muitas)
+    renderPage()
+    expect(await screen.findByText("Mostrando 1–25 de 30")).toBeInTheDocument()
+  })
+
+  it("ativa e inativa em pílula com cor própria", async () => {
+    mockListUnidadesComFiltro([unidadeJuazeiro, unidadeRecife])
+    const user = userEvent.setup()
+    renderPage()
+    const ativa = await screen.findByText("Ativa")
+    expect(ativa).toHaveClass("font-bold")
+    expect(ativa.style.color).toBe("var(--status-available)")
+    await user.click(screen.getByLabelText("Mostrar unidades inativas"))
+    const inativa = await screen.findByText("Inativa")
+    expect(inativa.style.color).toBe("var(--status-retired)")
+  })
+
+  it("reativar com duplo clique envia uma requisição só", async () => {
+    mockListUnidadesComFiltro([unidadeJuazeiro, unidadeRecife])
+    let liberar!: () => void
+    const pendente = new Promise<void>((r) => {
+      liberar = r
+    })
+    let chamadas = 0
+    server.use(
+      http.post("/api/unidades/5/reativar", async () => {
+        chamadas += 1
+        await pendente
+        return HttpResponse.json({ detail: "Unidade reativada." })
+      })
+    )
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByLabelText("Mostrar unidades inativas"))
+    const botao = await screen.findByLabelText("Reativar unidade Recife")
+    await user.click(botao)
+    await user.click(botao)
+    await waitFor(() => expect(chamadas).toBe(1))
+    expect(botao).toHaveAttribute("aria-busy", "true")
+    liberar()
   })
 })

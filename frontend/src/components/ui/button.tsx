@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { Slot } from '@radix-ui/react-slot'
 import { cva, type VariantProps } from 'class-variance-authority'
+import { Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const buttonVariants = cva(
@@ -33,12 +34,40 @@ export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean
+  /** Mostra spinner, desabilita e ignora cliques enquanto a ação está em andamento. */
+  loading?: boolean
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
+  ({ className, variant, size, asChild = false, loading = false, disabled, onClick, children, 'aria-busy': ariaBusy, ...props }, ref) => {
     const Comp = asChild ? Slot : 'button'
-    return <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />
+    const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+      if (loading) {
+        e.preventDefault()
+        return
+      }
+      onClick?.(e)
+    }
+    return (
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        disabled={disabled || loading}
+        onClick={handleClick}
+        {...props}
+        aria-busy={loading ? true : ariaBusy}
+      >
+        {asChild ? (
+          // Slot exige um único filho: o spinner só entra no <button> real.
+          children
+        ) : (
+          <>
+            {loading && <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />}
+            {children}
+          </>
+        )}
+      </Comp>
+    )
   }
 )
 Button.displayName = 'Button'

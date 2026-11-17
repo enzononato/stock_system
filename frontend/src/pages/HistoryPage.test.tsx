@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -146,5 +146,159 @@ describe('HistoryPage — estorno', () => {
       screen.queryByText((_, el) => el instanceof HTMLHeadingElement && el.textContent === 'Confirmar Estorno — Operação #10')
     ).not.toBeInTheDocument()
     expect(chamadasReverse).toBe(0)
+  })
+})
+
+describe('HistoryPage — listagem', () => {
+  beforeEach(() => localStorage.clear())
+
+  it('pede 25 por página e mostra a paginação padrão', async () => {
+    const pedidos: URLSearchParams[] = []
+    server.use(
+      http.get('/api/history', ({ request }) => {
+        pedidos.push(new URL(request.url).searchParams)
+        return HttpResponse.json({ items: [entradaCadastro], total: 1 })
+      })
+    )
+    renderWithClient(<HistoryPage />)
+    expect(await screen.findByText('Mostrando 1–1 de 1')).toBeInTheDocument()
+    expect(pedidos[0].get('limit')).toBe('25')
+    expect(pedidos[0].get('offset')).toBe('0')
+  })
+
+  it('revenda em CAIXA ALTA nos detalhes', async () => {
+    server.use(
+      http.get('/api/history', () =>
+        HttpResponse.json({ items: [{ ...entradaCadastro, revenda: 'Revalle Juazeiro' }], total: 1 })
+      )
+    )
+    const user = userEvent.setup()
+    renderWithClient(<HistoryPage />)
+    await user.click(await screen.findByRole('button', { name: 'Expandir detalhes' }))
+    expect(screen.getByText('REVALLE JUAZEIRO')).toBeInTheDocument()
+  })
+
+  it('confirmar estorno com duplo clique envia uma requisição só', async () => {
+    mockHistoryList()
+    let liberar!: () => void
+    const pendente = new Promise<void>((r) => {
+      liberar = r
+    })
+    let chamadasReverse = 0
+    server.use(
+      http.post('/api/history/10/reverse', async () => {
+        chamadasReverse += 1
+        await pendente
+        return HttpResponse.json({ detail: 'ok' })
+      })
+    )
+    const user = userEvent.setup()
+    renderWithClient(<HistoryPage />)
+    await user.click(await screen.findByRole('button', { name: /Estornar/i }))
+    await user.type(screen.getByPlaceholderText('Sua senha de acesso'), 'SenhaForte#123')
+    const confirmar = screen.getByRole('button', { name: 'Confirmar' })
+    await user.click(confirmar)
+    await user.click(confirmar)
+    await waitFor(() => expect(chamadasReverse).toBe(1))
+    expect(confirmar).toHaveAttribute('aria-busy', 'true')
+    liberar()
+  })
+
+  it('limpar a busca não ressuscita a página antiga (pedido com offset 0 e sem termo)', async () => {
+    const pedidos: URLSearchParams[] = []
+    server.use(
+      http.get('/api/history', ({ request }) => {
+        pedidos.push(new URL(request.url).searchParams)
+        return HttpResponse.json({ items: [entradaCadastro], total: 60 })
+      })
+    )
+    const user = userEvent.setup()
+    renderWithClient(<HistoryPage />)
+    await screen.findByText('Mostrando 1–25 de 60')
+    await user.click(screen.getByRole('button', { name: 'Próxima' }))
+    await waitFor(() => expect(pedidos.some((p) => p.get('offset') === '25')).toBe(true))
+    const campo = screen.getByLabelText('Busca geral')
+    await user.type(campo, 'ana')
+    await waitFor(() => expect(pedidos.some((p) => p.get('search') === 'ana')).toBe(true))
+    const antes = pedidos.length
+    await user.clear(campo)
+    await waitFor(() => expect(pedidos.slice(antes).some((p) => p.get('search') === null)).toBe(true))
+    expect(pedidos.slice(antes).every((p) => p.get('offset') === '0')).toBe(true)
+  })
+
+  it('busca com atraso volta à página 1 sem pedir (novo termo, página antiga)', async () => {
+    const pedidos: URLSearchParams[] = []
+    server.use(
+      http.get('/api/history', ({ request }) => {
+        const params = new URL(request.url).searchParams
+        pedidos.push(params)
+        return HttpResponse.json({ items: [entradaCadastro], total: 60 })
+      })
+    )
+    const user = userEvent.setup()
+    renderWithClient(<HistoryPage />)
+    await screen.findByText('Mostrando 1–25 de 60')
+    await user.click(screen.getByRole('button', { name: 'Próxima' }))
+    await waitFor(() => expect(pedidos.some((p) => p.get('offset') === '25')).toBe(true))
+    await user.type(screen.getByLabelText('Busca geral'), 'ana')
+    await waitFor(() => expect(pedidos.some((p) => p.get('search') === 'ana')).toBe(true))
+    expect(pedidos.filter((p) => p.get('search') === 'ana').every((p) => p.get('offset') === '0')).toBe(true)
+  })
+})
+
+describe('HistoryPage — exportação (F7)', () => {
+  it('exporta Excel/PDF com a busca da tela e mantém o CSV', async () => {
+    const buscas: (string | null)[] = []
+    server.use(
+      http.get('/api/history', ({ request }) => {
+        buscas.push(new URL(request.url).searchParams.get('search'))
+        return HttpResponse.json({ items: [entradaCadastro], total: 1 })
+      })
+    )
+    const urls: URL[] = []
+    URL.createObjectURL = vi.fn(() => 'blob:teste')
+    URL.revokeObjectURL = vi.fn()
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    server.use(
+      http.get('/api/exportacoes/historico', ({ request }) => {
+        urls.push(new URL(request.url))
+        return new HttpResponse(new Blob(['x']))
+      })
+    )
+    const user = userEvent.setup()
+    renderWithClient(<HistoryPage />)
+    await screen.findByRole('button', { name: /Estornar/i })
+    expect(screen.getByRole('button', { name: /Exportar CSV/ })).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('Busca geral'), 'SN-1')
+    await waitFor(() => expect(buscas).toContain('SN-1')) // a busca já passou pelo debounce
+    await user.click(screen.getByRole('button', { name: 'Exportar em PDF' }))
+
+    await waitFor(() => expect(urls).toHaveLength(1))
+    expect(urls[0].search).toBe('?search=SN-1&formato=pdf')
+  })
+})
+
+describe('HistoryPage — estorno só no lançamento mais novo do item', () => {
+  it('esconde "Estornar" quando a página tem um lançamento mais novo que muda a situação do mesmo item', async () => {
+    const base = { operador: 'gestor.teste', data_operacao: '2026-01-10T09:00:00' }
+    server.use(
+      http.get('/api/history', () =>
+        HttpResponse.json({
+          items: [
+            { ...base, id: 25, item_id: 5, operation: 'Edição' },
+            { ...base, id: 21, item_id: 5, operation: 'Confirmação Empréstimo' },
+            { ...base, id: 20, item_id: 5, operation: 'Empréstimo' },
+            { ...base, id: 12, item_id: 9, operation: 'Cadastro' },
+          ],
+          total: 4,
+        })
+      )
+    )
+    renderWithClient(<HistoryPage />)
+    await screen.findByText(/Confirmação Empréstimo/)
+    // Confirmação #21 (item 5) e Cadastro #12 (item 9): estornáveis; Empréstimo #20 foi
+    // superado pela Confirmação #21 (a Edição #25 não muda a situação).
+    expect(screen.getAllByRole('button', { name: /Estornar/i })).toHaveLength(2)
   })
 })

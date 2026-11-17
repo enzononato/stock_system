@@ -130,7 +130,7 @@ Quando o time decidir adotar uma ferramenta, o padrão recomendado é:
       - uses: actions/checkout@v4.2.2
       - uses: actions/setup-python@v5.3.0
         with:
-          python-version: '3.11.9'
+          python-version: '3.12.16'
           cache: pip
           cache-dependency-path: requirements-dev.txt
       - run: pip install -r requirements-dev.txt
@@ -139,7 +139,7 @@ Quando o time decidir adotar uma ferramenta, o padrão recomendado é:
 
 ## Cache e versões fixas
 
-- **Node** (`20.18.1`) e **Python** (`3.11.9`) fixados em versão exata, não só a
+- **Node** (`20.18.1`) e **Python** (`3.12.16`, a mesma major.minor da imagem `python:3.12-slim` de produção) fixados em versão exata, não só a
   major — a mesma lição do `mysql:8.0.40` acima: uma tag flutuante pode mudar de
   comportamento entre execuções sem nenhuma mudança no repositório.
 - **Actions** (`actions/checkout`, `actions/setup-node`, `actions/setup-python`)

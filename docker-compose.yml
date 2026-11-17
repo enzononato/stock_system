@@ -5,6 +5,10 @@ services:
     container_name: revalle_backend
     restart: unless-stopped
     env_file: ./backend/.env
+    environment:
+      # Horário de Brasília no container: os registros gravados com o relógio do servidor
+      # (histórico, manutenções, linhas, inventário) passam a usar o mesmo fuso dos termos.
+      TZ: America/Sao_Paulo
     volumes:
       # Monta o storage local quando STORAGE_BACKEND=local
       - backend_storage:/app/storage
