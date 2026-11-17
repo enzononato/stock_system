@@ -25,5 +25,10 @@ export function mensagemErroAuth(error: unknown, fallback: string): string {
 export function mensagemEtapaEncerrada(error: unknown): string | null {
   if (!isAxiosError(error) || error.response?.status !== 400) return null
   const detail = (error.response.data as { detail?: unknown } | undefined)?.detail
-  return detail === MSG_TOKEN_ESGOTADO || detail === MSG_ETAPA_EXPIRADA ? detail : null
+  return detail === MSG_TOKEN_ESGOTADO || detail === MSG_ETAPA_EXPIRADA || detail === MSG_CODIGO_EMAIL_ESGOTADO
+    ? detail
+    : null
 }
+
+/** 5 códigos errados na confirmação do e-mail: o servidor revoga o token da etapa. */
+export const MSG_CODIGO_EMAIL_ESGOTADO = 'Muitas tentativas. Entre de novo para receber outro código.'

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { mensagemErroAuth } from '@/lib/auth-errors'
-import { User } from 'lucide-react'
+import { Mail } from 'lucide-react'
 
 const LINK_VOLTAR = 'text-xs font-medium text-brand-text underline-offset-4 hover:underline'
 
@@ -33,7 +33,7 @@ export default function EsqueciSenhaPage() {
   return (
     <AuthShell
       titulo="Esqueci minha senha"
-      descricao="Informe seu usuário ou e-mail. Se houver um e-mail cadastrado, enviaremos um link para criar uma nova senha."
+      descricao="Informe o seu e-mail. Se ele estiver cadastrado e confirmado, enviaremos um link para criar uma nova senha."
     >
       {resposta ? (
         <p
@@ -46,10 +46,10 @@ export default function EsqueciSenhaPage() {
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <div className="space-y-1.5">
             <Label htmlFor="identificador" className="text-xs font-medium text-foreground">
-              Usuário ou e-mail
+              E-mail
             </Label>
             <div className="relative rounded-md">
-              <User
+              <Mail
                 size={18}
                 className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground"
                 aria-hidden
@@ -60,6 +60,7 @@ export default function EsqueciSenhaPage() {
                 value={identificador}
                 onChange={(e) => setIdentificador(e.target.value)}
                 autoComplete="username"
+                placeholder="nome@revalle.com.br"
                 className="h-11 pl-10 bg-[var(--login-glass)] border-input text-sm"
                 autoFocus
                 required

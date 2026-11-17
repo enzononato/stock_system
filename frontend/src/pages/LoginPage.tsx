@@ -1,7 +1,14 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
-import { confirmarCadastroMfa, iniciarCadastroMfa, verificarMfa } from '@/api/auth'
+import {
+  confirmarCadastroEmail,
+  confirmarCadastroMfa,
+  iniciarCadastroEmail,
+  iniciarCadastroMfa,
+  verificarMfa,
+  type LoginResponse,
+} from '@/api/auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -10,12 +17,13 @@ import AuthShell from '@/components/auth/AuthShell'
 import { CadastroAutenticador } from '@/components/auth/CadastroAutenticador'
 import { CodigosRecuperacao } from '@/components/auth/CodigosRecuperacao'
 import { mensagemErroAuth, mensagemEtapaEncerrada } from '@/lib/auth-errors'
-import { Eye, EyeOff, Lock, User, KeyRound } from 'lucide-react'
+import { Eye, EyeOff, Lock, Mail, KeyRound } from 'lucide-react'
 
 type Etapa =
   | { tipo: 'senha' }
   | { tipo: 'mfa'; mfaToken: string }
   | { tipo: 'cadastro'; mfaToken: string }
+  | { tipo: 'email'; mfaToken: string; emailSugerido: string | null }
   | { tipo: 'codigos'; codigos: string[]; accessToken: string }
 
 const AVISO_CODIGOS_RESTANTES = 3
@@ -34,8 +42,15 @@ const CABECALHOS: Record<Etapa['tipo'], { titulo: string; descricao?: string }> 
     descricao:
       'Gestores precisam da verificação em duas etapas. Instale um aplicativo autenticador (Google Authenticator, Microsoft Authenticator ou similar), leia o QR code e digite o código gerado.',
   },
+  email: {
+    titulo: 'Confirme seu e-mail',
+    descricao:
+      'Agora o acesso é pelo e-mail corporativo. Informe o seu e-mail @revalle.com.br e digite o código que enviaremos para ele.',
+  },
   codigos: { titulo: 'Códigos de recuperação' },
 }
+
+const SEGUNDOS_PARA_REENVIO = 60
 
 function MensagemErro({ texto }: { texto: string }) {
   return (
@@ -64,6 +79,25 @@ export default function LoginPage() {
     setEtapa({ tipo: 'senha' })
   }
 
+  /** Leva à etapa pedida pelo servidor (depois da senha ou da confirmação do e-mail). */
+  function irParaEtapa(resposta: LoginResponse) {
+    const mfaToken = resposta.mfa_token
+    if (!mfaToken) return
+    setPassword('')
+    if (resposta.etapa === 'mfa') setEtapa({ tipo: 'mfa', mfaToken })
+    else if (resposta.etapa === 'cadastro_2fa') setEtapa({ tipo: 'cadastro', mfaToken })
+    else if (resposta.etapa === 'cadastro_email') {
+      setEtapa({ tipo: 'email', mfaToken, emailSugerido: resposta.email_sugerido ?? null })
+    }
+  }
+
+  /** Erro que encerra a etapa (token esgotado ou expirado): volta à senha com a explicação. */
+  function encerrarSeEtapaAcabou(err: unknown) {
+    const encerrada = mensagemEtapaEncerrada(err)
+    if (!encerrada) throw err
+    voltarParaSenha(encerrada)
+  }
+
   const cabecalho = CABECALHOS[etapa.tipo]
 
   return (
@@ -81,12 +115,40 @@ export default function LoginPage() {
             const resposta = await login(username, password)
             if (resposta.etapa === 'ok') {
               navigate('/', { replace: true })
-            } else if (resposta.mfa_token) {
-              setPassword('')
-              setEtapa({
-                tipo: resposta.etapa === 'mfa' ? 'mfa' : 'cadastro',
-                mfaToken: resposta.mfa_token,
-              })
+            } else {
+              irParaEtapa(resposta)
+            }
+          }}
+        />
+      )}
+
+      {etapa.tipo === 'email' && (
+        <EmailEtapa
+          key={etapa.mfaToken}
+          emailSugerido={etapa.emailSugerido}
+          onVoltar={() => voltarParaSenha()}
+          onEnviar={async (email) => {
+            try {
+              return (await iniciarCadastroEmail(etapa.mfaToken, email)).detail
+            } catch (err) {
+              encerrarSeEtapaAcabou(err)
+              return null
+            }
+          }}
+          onConfirmar={async (codigo) => {
+            let resposta
+            try {
+              resposta = await confirmarCadastroEmail(etapa.mfaToken, codigo)
+            } catch (err) {
+              encerrarSeEtapaAcabou(err)
+              return
+            }
+            if (resposta.etapa === 'ok') {
+              if (!resposta.access_token) throw new Error('Resposta de confirmação sem token.')
+              await concluirLogin(resposta.access_token)
+              navigate('/', { replace: true })
+            } else {
+              irParaEtapa(resposta)
             }
           }}
         />
@@ -183,27 +245,32 @@ function SenhaEtapa({ aviso, username, password, onUsername, onPassword, onEntra
         </p>
       )}
       <div className="space-y-1.5">
-        <Label htmlFor="username" className="text-xs font-medium text-foreground">
-          Usuário
+        <Label htmlFor="email" className="text-xs font-medium text-foreground">
+          E-mail
         </Label>
         <div className="relative transition-all duration-200 focus-within:ring-2 focus-within:ring-[var(--login-wash)] focus-within:border-[var(--login-border-strong)] rounded-md">
-          <User
+          <Mail
             size={18}
             className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground"
             aria-hidden
           />
+          {/* type="text": quem ainda não migrou entra uma última vez com o usuário antigo. */}
           <Input
-            id="username"
-            name="username"
+            id="email"
+            name="email"
             value={username}
             onChange={(e) => onUsername(e.target.value)}
-            placeholder="Digite seu usuário"
+            placeholder="nome@revalle.com.br"
             autoComplete="username"
+            aria-describedby="email-dica"
             className="h-11 pl-10 bg-[var(--login-glass)] border-input text-sm"
             autoFocus
             required
           />
         </div>
+        <p id="email-dica" className="text-[11px] text-muted-foreground leading-relaxed">
+          Primeiro acesso depois da mudança? Entre uma vez com o seu usuário antigo.
+        </p>
       </div>
 
       <div className="space-y-1.5">
@@ -321,6 +388,180 @@ function MfaEtapa({ onVerificar, onVoltar }: MfaEtapaProps) {
         Verificar
       </Button>
       <Button type="button" variant="ghost" className="w-full" onClick={onVoltar} disabled={loading}>
+        Voltar
+      </Button>
+    </form>
+  )
+}
+
+interface EmailEtapaProps {
+  emailSugerido: string | null
+  /** Envia o código; devolve a mensagem do servidor, ou null quando a etapa foi encerrada. */
+  onEnviar: (email: string) => Promise<string | null>
+  onConfirmar: (codigo: string) => Promise<void>
+  onVoltar: () => void
+}
+
+function EmailEtapa({ emailSugerido, onEnviar, onConfirmar, onVoltar }: EmailEtapaProps) {
+  const [email, setEmail] = useState(emailSugerido ?? '')
+  const [codigo, setCodigo] = useState('')
+  const [enviado, setEnviado] = useState(false)
+  const [aviso, setAviso] = useState('')
+  const [error, setError] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const [confirmando, setConfirmando] = useState(false)
+  const [espera, setEspera] = useState(0)
+
+  // Contagem regressiva do "Reenviar código" (o servidor só aceita outro pedido depois de 60 s).
+  useEffect(() => {
+    if (espera <= 0) return
+    const id = window.setTimeout(() => setEspera((s) => s - 1), 1000)
+    return () => window.clearTimeout(id)
+  }, [espera])
+
+  async function enviar() {
+    setError('')
+    setEnviando(true)
+    try {
+      const mensagem = await onEnviar(email.trim())
+      if (mensagem === null) return // etapa encerrada: a tela já voltou para a senha
+      setAviso(mensagem)
+      setEnviado(true)
+      setCodigo('')
+      setEspera(SEGUNDOS_PARA_REENVIO)
+    } catch (err) {
+      setError(mensagemErroAuth(err, 'Não foi possível enviar o código.'))
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  async function confirmar(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    setConfirmando(true)
+    try {
+      await onConfirmar(codigo.trim())
+    } catch (err) {
+      setError(mensagemErroAuth(err, 'Não foi possível confirmar o código.'))
+      setConfirmando(false)
+    }
+  }
+
+  return (
+    <form
+      onSubmit={(e) => {
+        if (enviado) return void confirmar(e)
+        e.preventDefault()
+        void enviar()
+      }}
+      className="space-y-4"
+      noValidate
+    >
+      <div className="space-y-1.5">
+        <Label htmlFor="email-confirmacao" className="text-xs font-medium text-foreground">
+          E-mail
+        </Label>
+        <div className="relative transition-all duration-200 focus-within:ring-2 focus-within:ring-[var(--login-wash)] focus-within:border-[var(--login-border-strong)] rounded-md">
+          <Mail
+            size={18}
+            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+            aria-hidden
+          />
+          <Input
+            id="email-confirmacao"
+            name="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="nome@revalle.com.br"
+            autoComplete="email"
+            className="h-11 pl-10 bg-[var(--login-glass)] border-input text-sm"
+            autoFocus={!enviado}
+            required
+          />
+        </div>
+      </div>
+
+      {aviso && (
+        <p
+          role="status"
+          className="rounded-lg border border-border bg-surface-alt px-3.5 py-2.5 text-xs font-medium text-foreground leading-relaxed"
+        >
+          {aviso}
+        </p>
+      )}
+
+      {enviado && (
+        <div className="space-y-1.5">
+          <Label htmlFor="codigo-email" className="text-xs font-medium text-foreground">
+            Código
+          </Label>
+          <div className="relative transition-all duration-200 focus-within:ring-2 focus-within:ring-[var(--login-wash)] focus-within:border-[var(--login-border-strong)] rounded-md">
+            <KeyRound
+              size={18}
+              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+              aria-hidden
+            />
+            <Input
+              id="codigo-email"
+              name="codigo"
+              value={codigo}
+              onChange={(e) => setCodigo(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              placeholder="000000"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              className="h-11 pl-10 bg-[var(--login-glass)] border-input text-sm tracking-[0.3em]"
+              autoFocus
+              required
+            />
+          </div>
+        </div>
+      )}
+
+      {error && <MensagemErro texto={error} />}
+
+      {enviado ? (
+        <>
+          <Button
+            type="submit"
+            size="lg"
+            className="h-11 w-full font-semibold"
+            loading={confirmando}
+            disabled={codigo.length !== 6}
+          >
+            Confirmar
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => void enviar()}
+            loading={enviando}
+            disabled={espera > 0 || confirmando || !email.trim()}
+          >
+            {espera > 0 ? `Reenviar código (${espera} s)` : 'Reenviar código'}
+          </Button>
+        </>
+      ) : (
+        <Button
+          type="submit"
+          size="lg"
+          className="h-11 w-full font-semibold"
+          loading={enviando}
+          disabled={!email.trim()}
+        >
+          Enviar código
+        </Button>
+      )}
+      <Button
+        type="button"
+        variant="ghost"
+        className="w-full"
+        onClick={onVoltar}
+        disabled={enviando || confirmando}
+      >
         Voltar
       </Button>
     </form>

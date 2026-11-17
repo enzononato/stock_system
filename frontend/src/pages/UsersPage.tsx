@@ -4,7 +4,7 @@ import {
   listUsers,
   createUser,
   removeUser,
-  updatePassword,
+  enviarLinkSenha,
   updateUserEmail,
   zerar2fa,
   type User,
@@ -44,7 +44,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { PageHeader, PanelHeader } from '@/components/layout/PageHeader'
-import { Trash2, Key, Mail, ShieldOff, X, Check, Search } from 'lucide-react'
+import { Trash2, Mail, ShieldOff, Search, Send, KeyRound } from 'lucide-react'
 
 const ROLES = ['Gestor', 'Técnico', 'Jovem Aprendiz'] as const
 const TODAS_AS_FUNCOES = 'todas'
@@ -62,16 +62,18 @@ function PilulaDe2fa({ user }: { user: User }) {
   return <StatusPill status="Inativo" tone="neutral" />
 }
 
+/** Situação da conta: convite ainda não aceito, e-mail a confirmar no próximo login, ou pronta. */
+function PilulaDaConta({ user }: { user: User }) {
+  if (!user.senha_definida) return <StatusPill status="Convite pendente" tone="pending" />
+  if (!user.email_confirmado) return <StatusPill status="Aguardando confirmação" tone="return" />
+  return <StatusPill status="Confirmado" tone="available" />
+}
+
 export default function UsersPage() {
   const queryClient = useQueryClient()
   const { user: logado } = useAuth()
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
   const [role, setRole] = useState('')
   const [email, setEmail] = useState('')
-  const [changingPasswordId, setChangingPasswordId] = useState<number | null>(null)
-  const [changingUsername, setChangingUsername] = useState<string>('')
-  const [newPassword, setNewPassword] = useState('')
 
   const [busca, setBusca] = useState('')
   const [filtroFuncao, setFiltroFuncao] = useState(TODAS_AS_FUNCOES)
@@ -85,14 +87,13 @@ export default function UsersPage() {
   const { data: users = [] } = useQuery({ queryKey: ['users'], queryFn: listUsers })
 
   const createMutation = useMutation({
-    mutationFn: () => createUser({ username, password, role, email: email.trim() || null }),
-    onSuccess: () => {
+    mutationFn: () => createUser({ email: email.trim(), role }),
+    onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ['users'] })
-      setUsername('')
-      setPassword('')
       setRole('')
       setEmail('')
-      toast('Usuário criado com sucesso!')
+      // Sem o envio do convite a conta existe, mas a pessoa não tem como entrar: aviso de erro.
+      toast(data.detail, data.convite_enviado ? undefined : 'error')
     },
     onError: (err: unknown) => toast(getErrorMessage(err, 'Erro ao criar usuário.'), 'error'),
   })
@@ -110,15 +111,11 @@ export default function UsersPage() {
     onError: (err: unknown) => toast(getErrorMessage(err, 'Erro ao remover usuário.'), 'error'),
   })
 
-  const passwordMutation = useMutation({
-    mutationFn: ({ id, pass }: { id: number; pass: string }) => updatePassword(id, pass),
-    onSuccess: () => {
-      setChangingPasswordId(null)
-      setChangingUsername('')
-      setNewPassword('')
-      toast('Senha alterada com sucesso!')
-    },
-    onError: (err: unknown) => toast(getErrorMessage(err, 'Erro ao alterar senha.'), 'error'),
+  // Ninguém define a senha de outra pessoa: o Gestor só manda o link (convite ou nova senha).
+  const linkSenhaMutation = useMutation({
+    mutationFn: (id: number) => enviarLinkSenha(id),
+    onSuccess: (data) => toast(data.detail),
+    onError: (err: unknown) => toast(getErrorMessage(err, 'Erro ao enviar o link.'), 'error'),
   })
 
   const emailMutation = useMutation({
@@ -186,32 +183,27 @@ export default function UsersPage() {
       >
         <PanelHeader
           title="Cadastro de Usuário"
-          description="Defina usuário, senha, função de acesso e, se houver, o e-mail de recuperação."
+          description="Informe o e-mail corporativo e o papel. A pessoa recebe um convite por e-mail e cria a própria senha."
         />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="novo-username">Nome de Usuário *</Label>
+            <Label htmlFor="novo-email">E-mail *</Label>
             <Input
-              id="novo-username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              id="novo-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               required
-              placeholder="ex: joao.silva"
+              placeholder="nome@revalle.com.br"
+              autoComplete="off"
+              aria-describedby="novo-email-dica"
             />
+            <p id="novo-email-dica" className="text-caption text-muted-foreground">
+              Só e-mails @revalle.com.br.
+            </p>
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="novo-password">Senha *</Label>
-            <Input
-              id="novo-password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              placeholder="••••••••"
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="novo-role">Função *</Label>
+            <Label htmlFor="novo-role">Papel *</Label>
             <Select value={role} onValueChange={setRole} required>
               <SelectTrigger id="novo-role">
                 <SelectValue placeholder="Selecione" />
@@ -225,74 +217,17 @@ export default function UsersPage() {
               </SelectContent>
             </Select>
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="novo-email">E-mail</Label>
-            <Input
-              id="novo-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="nome@revalle.com.br"
-              autoComplete="off"
-            />
-          </div>
         </div>
         <div className="flex justify-end">
           <Button
             type="submit"
             loading={createMutation.isPending}
-            disabled={!username || !password || !role}
+            disabled={!email.trim() || !role}
           >
-            Criar Usuário
+            Criar e enviar convite
           </Button>
         </div>
       </form>
-
-      {/* Alterar senha — banner inline identificando o usuário-alvo. */}
-      {changingPasswordId && (
-        <div className="surface-panel p-5 border-l-2 border-primary space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-body-sm font-semibold text-foreground">
-              Alterar senha — <span className="font-mono text-muted-foreground">{changingUsername}</span>{' '}
-              <span className="text-muted-foreground font-normal">#{changingPasswordId}</span>
-            </p>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7 text-muted-foreground"
-              aria-label="Cancelar alteração de senha"
-              onClick={() => {
-                setChangingPasswordId(null)
-                setChangingUsername('')
-                setNewPassword('')
-              }}
-            >
-              <X size={14} />
-            </Button>
-          </div>
-          <div className="flex gap-2">
-            <Input
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="Nova senha"
-              aria-label="Nova senha"
-              className="flex-1 h-9"
-              autoFocus
-            />
-            <Button
-              size="sm"
-              onClick={() => passwordMutation.mutate({ id: changingPasswordId, pass: newPassword })}
-              disabled={!newPassword}
-              loading={passwordMutation.isPending}
-              className="h-9"
-            >
-              <Check size={14} className="mr-1.5" />
-              Salvar
-            </Button>
-          </div>
-        </div>
-      )}
 
       {/* Lista de usuários */}
       <section className="surface-panel p-6 space-y-4">
@@ -341,17 +276,18 @@ export default function UsersPage() {
           <table className="w-full text-left text-body-sm">
             <thead>
               <tr className="border-b border-border text-caption uppercase tracking-wider text-muted-foreground">
-                <th className="py-2 pr-4 font-semibold">Usuário</th>
                 <th className="py-2 pr-4 font-semibold">E-mail</th>
+                <th className="py-2 pr-4 font-semibold">Situação</th>
                 <th className="py-2 pr-4 font-semibold">Função</th>
                 <th className="py-2 pr-4 font-semibold">2FA</th>
+                <th className="py-2 pr-4 font-semibold">Usuário (histórico)</th>
                 <th className="py-2 font-semibold text-right">Ações</th>
               </tr>
             </thead>
             <tbody>
               {visiveis.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-6 text-center text-muted-foreground italic">
+                  <td colSpan={6} className="py-6 text-center text-muted-foreground italic">
                     Nenhum usuário encontrado.
                   </td>
                 </tr>
@@ -359,14 +295,17 @@ export default function UsersPage() {
                 visiveis.map((u) => (
                   <tr key={u.id} className="border-b border-border last:border-0">
                     <td className="py-2.5 pr-4">
-                      <p className="font-medium text-foreground">{u.username}</p>
-                      <p className="text-[11px] font-mono text-muted-foreground">#{u.id}</p>
+                      <span className="block font-medium text-foreground">{u.email ?? '—'}</span>
+                      <span className="block text-[11px] font-mono text-muted-foreground">#{u.id}</span>
                     </td>
-                    <td className="py-2.5 pr-4 text-foreground">{u.email ?? '—'}</td>
+                    <td className="py-2.5 pr-4">
+                      <PilulaDaConta user={u} />
+                    </td>
                     <td className="py-2.5 pr-4 text-foreground">{u.role}</td>
                     <td className="py-2.5 pr-4">
                       <PilulaDe2fa user={u} />
                     </td>
+                    <td className="py-2.5 pr-4 font-mono text-[12px] text-muted-foreground">{u.username}</td>
                     <td className="py-2.5">
                       <div className="flex items-center justify-end gap-1">
                         <Button
@@ -380,20 +319,31 @@ export default function UsersPage() {
                           <Mail size={13} />
                         </Button>
 
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="size-7 text-muted-foreground hover:text-foreground"
-                          title="Alterar senha"
-                          aria-label="Alterar senha"
-                          onClick={() => {
-                            setChangingPasswordId(u.id)
-                            setChangingUsername(u.username)
-                            setNewPassword('')
-                          }}
-                        >
-                          <Key size={13} />
-                        </Button>
+                        {u.senha_definida ? (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="size-7 text-muted-foreground hover:text-foreground"
+                            title="Enviar link para criar nova senha"
+                            aria-label="Enviar link para criar nova senha"
+                            disabled={!u.email || linkSenhaMutation.isPending}
+                            onClick={() => linkSenhaMutation.mutate(u.id)}
+                          >
+                            <KeyRound size={13} />
+                          </Button>
+                        ) : (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="size-7 text-muted-foreground hover:text-foreground"
+                            title="Reenviar convite"
+                            aria-label="Reenviar convite"
+                            disabled={!u.email || linkSenhaMutation.isPending}
+                            onClick={() => linkSenhaMutation.mutate(u.id)}
+                          >
+                            <Send size={13} />
+                          </Button>
+                        )}
 
                         {u.totp_ativo && u.id !== logado?.id && (
                           <AlertDialog>
@@ -505,7 +455,8 @@ export default function UsersPage() {
                 autoFocus
               />
               <p className="text-caption text-muted-foreground">
-                É o canal de recuperação de senha. Deixe em branco para remover.
+                É o e-mail de login e de recuperação de senha. Um e-mail novo precisa ser confirmado
+                pela pessoa no próximo login.
               </p>
             </div>
             {erroEdicao && (

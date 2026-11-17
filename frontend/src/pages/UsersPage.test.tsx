@@ -28,10 +28,11 @@ beforeAll(() => {
   Element.prototype.scrollIntoView = Element.prototype.scrollIntoView ?? (() => {})
 })
 
-const gestor: User = { id: 1, username: 'gestor', role: 'Gestor', email: 'gestor@revalle.com.br', totp_ativo: true }
-const tecnico: User = { id: 2, username: 'tecnico', role: 'Técnico', email: null, totp_ativo: false }
-const outro: User = { id: 3, username: 'outro', role: 'Técnico', email: 'outro@revalle.com.br', totp_ativo: true }
-const gestorPendente: User = { id: 4, username: 'gestor.dois', role: 'Gestor', email: null, totp_ativo: false }
+const conta = { email_confirmado: true, senha_definida: true }
+const gestor: User = { id: 1, username: 'gestor', role: 'Gestor', email: 'gestor@revalle.com.br', totp_ativo: true, ...conta }
+const tecnico: User = { id: 2, username: 'tecnico', role: 'Técnico', email: null, totp_ativo: false, email_confirmado: false, senha_definida: true }
+const outro: User = { id: 3, username: 'outro', role: 'Técnico', email: 'outro@revalle.com.br', totp_ativo: true, ...conta }
+const gestorPendente: User = { id: 4, username: 'gestor.dois', role: 'Gestor', email: null, totp_ativo: false, email_confirmado: false, senha_definida: true }
 
 function servirUsuarios(usuarios: User[]) {
   server.use(http.get('/api/users', () => HttpResponse.json(usuarios)))
@@ -54,7 +55,7 @@ async function linhaDe(username: string) {
 function muitos(n: number): User[] {
   return Array.from({ length: n }, (_, i) => {
     const num = String(i + 1).padStart(2, '0')
-    return { id: 100 + i, username: `usuario${num}`, role: 'Técnico', email: `usuario${num}@revalle.com.br`, totp_ativo: false }
+    return { id: 100 + i, username: `usuario${num}`, role: 'Técnico', email: `usuario${num}@revalle.com.br`, totp_ativo: false, ...conta }
   })
 }
 
@@ -104,38 +105,97 @@ describe('UsersPage', () => {
     expect(screen.queryByText('usuario08')).not.toBeInTheDocument()
   })
 
-  it('criar usuário envia o e-mail informado, ou null quando vazio', async () => {
+  it('cria conta só com e-mail e papel', async () => {
     servirUsuarios([gestor])
     const corpos: unknown[] = []
     server.use(
       http.post('/api/users', async ({ request }) => {
         corpos.push(await request.json())
-        return HttpResponse.json({ detail: 'ok' })
+        return HttpResponse.json({
+          detail: "Usuário 'novo' cadastrado com sucesso. Enviamos o convite para n***@revalle.com.br.",
+          convite_enviado: true,
+        })
       })
     )
     const user = userEvent.setup()
     renderPagina()
     await screen.findByText('gestor@revalle.com.br')
 
-    async function criar(username: string, email: string) {
-      await user.type(screen.getByLabelText('Nome de Usuário *'), username)
-      await user.type(screen.getByLabelText('Senha *'), 'Abc#12345')
-      await user.click(screen.getByRole('combobox', { name: 'Função *' }))
-      await user.click(await screen.findByRole('option', { name: 'Técnico' }))
-      if (email) await user.type(screen.getByLabelText('E-mail'), email)
-      const esperados = corpos.length + 1
-      await user.click(screen.getByRole('button', { name: 'Criar Usuário' }))
-      await vi.waitFor(() => expect(corpos.length).toBe(esperados))
-      await vi.waitFor(() => expect(screen.getByLabelText('Nome de Usuário *')).toHaveValue(''))
+    expect(screen.queryByLabelText('Senha *')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Nome de Usuário *')).not.toBeInTheDocument()
+    expect(screen.getByText('@revalle.com.br', { exact: false, selector: 'p' })).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('E-mail *'), ' novo@revalle.com.br ')
+    await user.click(screen.getByRole('combobox', { name: 'Papel *' }))
+    await user.click(await screen.findByRole('option', { name: 'Técnico' }))
+    await user.click(screen.getByRole('button', { name: 'Criar e enviar convite' }))
+
+    await vi.waitFor(() => expect(corpos).toEqual([{ email: 'novo@revalle.com.br', role: 'Técnico' }]))
+    expect(
+      await screen.findByText("Usuário 'novo' cadastrado com sucesso. Enviamos o convite para n***@revalle.com.br.")
+    ).toBeInTheDocument()
+    await vi.waitFor(() => expect(screen.getByLabelText('E-mail *')).toHaveValue(''))
+  })
+
+  it('conta criada sem envio do convite avisa o Gestor', async () => {
+    servirUsuarios([gestor])
+    const detail = 'Conta criada, mas não foi possível enviar o e-mail. Use “Reenviar convite”.'
+    server.use(http.post('/api/users', () => HttpResponse.json({ detail, convite_enviado: false })))
+    const user = userEvent.setup()
+    renderPagina()
+    await screen.findByText('gestor@revalle.com.br')
+
+    await user.type(screen.getByLabelText('E-mail *'), 'novo@revalle.com.br')
+    await user.click(screen.getByRole('combobox', { name: 'Papel *' }))
+    await user.click(await screen.findByRole('option', { name: 'Técnico' }))
+    await user.click(screen.getByRole('button', { name: 'Criar e enviar convite' }))
+
+    expect(await screen.findByText(detail)).toBeInTheDocument()
+  })
+
+  it('mostra Convite pendente, Aguardando confirmação e Confirmado', async () => {
+    const convidado: User = {
+      id: 5, username: 'novo', role: 'Técnico', email: 'novo@revalle.com.br', totp_ativo: false,
+      email_confirmado: false, senha_definida: false,
     }
+    const naoConfirmado: User = { ...outro, id: 6, username: 'antigo', email: 'antigo@revalle.com.br', email_confirmado: false }
+    servirUsuarios([gestor, convidado, naoConfirmado])
+    renderPagina()
 
-    await criar('novo.um', 'novo@revalle.com.br')
-    await criar('novo.dois', '')
+    expect(within(await linhaDe('novo')).getByText('Convite pendente')).toBeInTheDocument()
+    expect(within(await linhaDe('antigo')).getByText('Aguardando confirmação')).toBeInTheDocument()
+    expect(within(await linhaDe('gestor')).getByText('Confirmado')).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Usuário (histórico)' })).toBeInTheDocument()
+  })
 
-    expect(corpos).toEqual([
-      { username: 'novo.um', password: 'Abc#12345', role: 'Técnico', email: 'novo@revalle.com.br' },
-      { username: 'novo.dois', password: 'Abc#12345', role: 'Técnico', email: null },
-    ])
+  it('reenviar convite e enviar link chamam enviar-link-senha; não há troca de senha pelo Gestor', async () => {
+    const convidado: User = {
+      id: 5, username: 'novo', role: 'Técnico', email: 'novo@revalle.com.br', totp_ativo: false,
+      email_confirmado: false, senha_definida: false,
+    }
+    servirUsuarios([gestor, convidado, outro])
+    const chamados: string[] = []
+    server.use(
+      http.post('/api/users/:id/enviar-link-senha', ({ params }) => {
+        chamados.push(String(params.id))
+        return HttpResponse.json({ detail: `Enviamos o link (${params.id}).` })
+      })
+    )
+    const user = userEvent.setup()
+    renderPagina()
+
+    const linhaConvidado = await linhaDe('novo')
+    expect(within(linhaConvidado).queryByRole('button', { name: 'Enviar link para criar nova senha' })).not.toBeInTheDocument()
+    await user.click(within(linhaConvidado).getByRole('button', { name: 'Reenviar convite' }))
+    expect(await screen.findByText('Enviamos o link (5).')).toBeInTheDocument()
+
+    const linhaOutro = await linhaDe('outro')
+    expect(within(linhaOutro).queryByRole('button', { name: 'Reenviar convite' })).not.toBeInTheDocument()
+    await user.click(within(linhaOutro).getByRole('button', { name: 'Enviar link para criar nova senha' }))
+    expect(await screen.findByText('Enviamos o link (3).')).toBeInTheDocument()
+
+    expect(chamados).toEqual(['5', '3'])
+    expect(screen.queryByRole('button', { name: 'Alterar senha' })).not.toBeInTheDocument()
   })
 
   it('editar e-mail envia o PUT; vazio envia null; duplicado mostra a mensagem do servidor', async () => {
