@@ -51,6 +51,14 @@ const CABECALHOS: Record<Etapa['tipo'], { titulo: string; descricao?: string }> 
 }
 
 const SEGUNDOS_PARA_REENVIO = 60
+const MSG_NAO_FOI_POSSIVEL_CONTINUAR = 'Não foi possível continuar. Entre novamente.'
+
+/** Código de confirmação já enviado nesta tela (para não pedir outro ao voltar). */
+interface EnvioDeCodigo {
+  email: string
+  mensagem: string
+  enviadoEm: number
+}
 
 function MensagemErro({ texto }: { texto: string }) {
   return (
@@ -79,15 +87,22 @@ export default function LoginPage() {
     setEtapa({ tipo: 'senha' })
   }
 
-  /** Leva à etapa pedida pelo servidor (depois da senha ou da confirmação do e-mail). */
+  // Código de e-mail já enviado nesta tela, por conta (o que foi digitado no login): quem
+  // volta e entra de novo dentro de 60 s digita o código que já recebeu.
+  const codigosEnviados = useRef(new Map<string, EnvioDeCodigo>())
+  const chaveDoLogin = username.trim().toLowerCase()
+
+  /** Leva à etapa pedida pelo servidor (depois da senha ou da confirmação do e-mail).
+   * Resposta sem o token da etapa: volta à senha com o aviso (nada fica girando). */
   function irParaEtapa(resposta: LoginResponse) {
     const mfaToken = resposta.mfa_token
-    if (!mfaToken) return
     setPassword('')
-    if (resposta.etapa === 'mfa') setEtapa({ tipo: 'mfa', mfaToken })
-    else if (resposta.etapa === 'cadastro_2fa') setEtapa({ tipo: 'cadastro', mfaToken })
-    else if (resposta.etapa === 'cadastro_email') {
+    if (mfaToken && resposta.etapa === 'mfa') setEtapa({ tipo: 'mfa', mfaToken })
+    else if (mfaToken && resposta.etapa === 'cadastro_2fa') setEtapa({ tipo: 'cadastro', mfaToken })
+    else if (mfaToken && resposta.etapa === 'cadastro_email') {
       setEtapa({ tipo: 'email', mfaToken, emailSugerido: resposta.email_sugerido ?? null })
+    } else {
+      voltarParaSenha(MSG_NAO_FOI_POSSIVEL_CONTINUAR)
     }
   }
 
@@ -126,10 +141,13 @@ export default function LoginPage() {
         <EmailEtapa
           key={etapa.mfaToken}
           emailSugerido={etapa.emailSugerido}
+          envioAnterior={codigosEnviados.current.get(chaveDoLogin) ?? null}
           onVoltar={() => voltarParaSenha()}
           onEnviar={async (email) => {
             try {
-              return (await iniciarCadastroEmail(etapa.mfaToken, email)).detail
+              const { detail } = await iniciarCadastroEmail(etapa.mfaToken, email)
+              codigosEnviados.current.set(chaveDoLogin, { email, mensagem: detail, enviadoEm: Date.now() })
+              return detail
             } catch (err) {
               encerrarSeEtapaAcabou(err)
               return null
@@ -396,21 +414,35 @@ function MfaEtapa({ onVerificar, onVoltar }: MfaEtapaProps) {
 
 interface EmailEtapaProps {
   emailSugerido: string | null
+  /** Código já enviado nesta tela para esta conta (a pessoa voltou e entrou de novo). */
+  envioAnterior: EnvioDeCodigo | null
   /** Envia o código; devolve a mensagem do servidor, ou null quando a etapa foi encerrada. */
   onEnviar: (email: string) => Promise<string | null>
   onConfirmar: (codigo: string) => Promise<void>
   onVoltar: () => void
 }
 
-function EmailEtapa({ emailSugerido, onEnviar, onConfirmar, onVoltar }: EmailEtapaProps) {
-  const [email, setEmail] = useState(emailSugerido ?? '')
+/** O código vale 15 minutos no servidor; depois disso não adianta oferecer o campo direto. */
+const VALIDADE_DO_CODIGO_MS = 15 * 60 * 1000
+
+function EmailEtapa({ emailSugerido, envioAnterior, onEnviar, onConfirmar, onVoltar }: EmailEtapaProps) {
+  // Código enviado há pouco nesta tela: já mostra o campo do código, e o reenvio continua
+  // preso à contagem dos 60 s contada desde aquele envio.
+  const [anterior] = useState(() => {
+    if (!envioAnterior) return null
+    const decorrido = Date.now() - envioAnterior.enviadoEm
+    return decorrido < VALIDADE_DO_CODIGO_MS ? { ...envioAnterior, decorrido } : null
+  })
+  const [email, setEmail] = useState(anterior?.email ?? emailSugerido ?? '')
   const [codigo, setCodigo] = useState('')
-  const [enviado, setEnviado] = useState(false)
-  const [aviso, setAviso] = useState('')
+  const [enviado, setEnviado] = useState(anterior !== null)
+  const [aviso, setAviso] = useState(anterior?.mensagem ?? '')
   const [error, setError] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [confirmando, setConfirmando] = useState(false)
-  const [espera, setEspera] = useState(0)
+  const [espera, setEspera] = useState(() =>
+    anterior ? Math.max(0, SEGUNDOS_PARA_REENVIO - Math.floor(anterior.decorrido / 1000)) : 0
+  )
 
   // Contagem regressiva do "Reenviar código" (o servidor só aceita outro pedido depois de 60 s).
   useEffect(() => {

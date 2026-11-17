@@ -475,5 +475,71 @@ describe('LoginPage', () => {
       expect(await screen.findByText(detail)).toBeInTheDocument()
       expect(screen.getByLabelText('Código')).toBeInTheDocument()
     })
+
+    it('resposta sem token da próxima etapa volta à senha com o aviso', async () => {
+      server.use(
+        semSessao,
+        loginDeContaAntiga('joao@revalle.com.br'),
+        iniciarOk,
+        http.post('/api/auth/email/confirmar', () => HttpResponse.json({ etapa: 'mfa' }))
+      )
+
+      const user = userEvent.setup()
+      renderLoginPage()
+      await preencherSenhaEEntrar(user)
+      await user.click(await screen.findByRole('button', { name: 'Enviar código' }))
+      await user.type(await screen.findByLabelText('Código'), '123456')
+      await user.click(screen.getByRole('button', { name: 'Confirmar' }))
+
+      expect(await screen.findByRole('button', { name: 'Entrar' })).toBeInTheDocument()
+      expect(screen.getByText('Não foi possível continuar. Entre novamente.')).toBeInTheDocument()
+    })
+
+    it('depois de Voltar e entrar de novo, o código já enviado pode ser digitado', async () => {
+      let envios = 0
+      let corpoConfirmar: unknown = null
+      let logins = 0
+      server.use(
+        semSessao,
+        http.post('/api/auth/login', () => {
+          logins += 1
+          return HttpResponse.json({
+            etapa: 'cadastro_email',
+            mfa_token: `em-${logins}`,
+            email_sugerido: null,
+          })
+        }),
+        http.post('/api/auth/email/iniciar', () => {
+          envios += 1
+          return HttpResponse.json({ detail: DETAIL_ENVIADO })
+        }),
+        http.post('/api/auth/email/confirmar', async ({ request }) => {
+          corpoConfirmar = await request.json()
+          return HttpResponse.json({ etapa: 'ok', access_token: 'tok-1', token_type: 'bearer' })
+        }),
+        http.get('/api/auth/me', () => HttpResponse.json(ME))
+      )
+
+      const user = userEvent.setup()
+      renderLoginPage()
+      await preencherSenhaEEntrar(user)
+      await user.type(await screen.findByLabelText('E-mail'), 'joao@revalle.com.br')
+      await user.click(screen.getByRole('button', { name: 'Enviar código' }))
+      await screen.findByLabelText('Código')
+      await user.click(screen.getByRole('button', { name: 'Voltar' }))
+
+      await user.type(await screen.findByLabelText('Senha'), 'senha-certa')
+      await user.click(screen.getByRole('button', { name: /Entrar/i }))
+
+      expect(await screen.findByLabelText('Código')).toBeInTheDocument()
+      expect(screen.getByLabelText('E-mail')).toHaveValue('joao@revalle.com.br')
+      expect(screen.getByRole('button', { name: /Reenviar código/ })).toBeDisabled()
+      await user.type(screen.getByLabelText('Código'), '654321')
+      await user.click(screen.getByRole('button', { name: 'Confirmar' }))
+
+      expect(await screen.findByText('Início')).toBeInTheDocument()
+      expect(envios).toBe(1)
+      expect(corpoConfirmar).toEqual({ mfa_token: 'em-2', codigo: '654321' })
+    })
   })
 })
