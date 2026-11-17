@@ -113,9 +113,9 @@ class TestRbacUsuarios:
     ):
         casos_negados = [
             ("GET", "/api/users", None),
-            ("POST", "/api/users", {"username": "x", "password": "y", "role": "Técnico"}),
+            ("POST", "/api/users", {"email": "x@revalle.com.br", "role": "Técnico"}),
             ("DELETE", "/api/users/999999", None),
-            ("PUT", "/api/users/999999/password", {"new_password": "outra"}),
+            ("POST", "/api/users/999999/enviar-link-senha", None),
         ]
         for metodo, url, body in casos_negados:
             resp_anon = client.request(metodo, url, json=body)

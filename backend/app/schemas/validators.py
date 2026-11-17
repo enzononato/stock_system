@@ -170,3 +170,37 @@ def data_br_para_date(data: Optional[str]) -> Optional[date]:
     if data is None:
         return None
     return datetime.strptime(data, "%d/%m/%Y").date()
+
+
+def mensagem_email_corporativo() -> str:
+    """Mensagem de e-mail fora do domínio (padrão: "Use o seu e-mail @revalle.com.br.")."""
+    from app.core import config
+
+    dominio = (config.settings.LOGIN_EMAIL_DOMINIO or "").strip().lower()
+    return f"Use o seu e-mail @{dominio}."
+
+
+_PARTE_LOCAL_RE = re.compile(r"^[a-z0-9_%+\-]+(\.[a-z0-9_%+\-]+)*$")
+
+
+def validar_email_corporativo(email: str) -> str:
+    """E-mail de login: sem espaços nas pontas e em minúsculas, com o domínio
+    exatamente igual a `LOGIN_EMAIL_DOMINIO` (subdomínios e domínios parecidos
+    são recusados). Lança `ValueError` com a mensagem fixa."""
+    # Lido na chamada: os testes trocam/recarregam `app.core.config.settings`.
+    from app.core import config
+
+    dominio_aceito = (config.settings.LOGIN_EMAIL_DOMINIO or "").strip().lower()
+    valor = (email or "").strip().lower()
+    parte_local, arroba, dominio = valor.rpartition("@")
+    if (
+        not arroba
+        or not dominio_aceito
+        or dominio != dominio_aceito
+        or not parte_local
+        or len(parte_local) > 64
+        or len(valor) > 200
+        or not _PARTE_LOCAL_RE.match(parte_local)
+    ):
+        raise ValueError(mensagem_email_corporativo())
+    return valor

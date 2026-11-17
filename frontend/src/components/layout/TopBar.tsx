@@ -50,7 +50,7 @@ export default function TopBar({ onOpenMobileNav, onOpenCommandPalette }: TopBar
       {user && (
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex min-w-0 items-center gap-2">
-            <span className="truncate max-w-[40vw] text-body-sm text-foreground">{user.username}</span>
+            <span className="truncate max-w-[40vw] text-body-sm text-foreground">{user.email ?? user.username}</span>
             <span className="hidden sm:inline text-[11px] text-muted-foreground font-mono uppercase">
               {user.role}
             </span>

@@ -33,12 +33,12 @@ describe('EsqueciSenhaPage', () => {
     renderPagina()
 
     expect(screen.getByRole('heading', { name: 'Esqueci minha senha' })).toBeInTheDocument()
-    await user.type(screen.getByLabelText('Usuário ou e-mail'), 'joao.silva')
+    await user.type(screen.getByLabelText('E-mail'), 'joao.silva')
     await user.click(screen.getByRole('button', { name: 'Enviar link' }))
 
     expect(await screen.findByRole('status')).toHaveTextContent(MSG_FORGOT)
     expect(corpo).toEqual({ identificador: 'joao.silva' })
-    expect(screen.queryByLabelText('Usuário ou e-mail')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('E-mail')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Voltar para o login' })).toHaveAttribute('href', '/login')
   })
 
@@ -51,13 +51,13 @@ describe('EsqueciSenhaPage', () => {
     const user = userEvent.setup()
     renderPagina()
 
-    await user.type(screen.getByLabelText('Usuário ou e-mail'), 'joao.silva')
+    await user.type(screen.getByLabelText('E-mail'), 'joao.silva')
     await user.click(screen.getByRole('button', { name: 'Enviar link' }))
 
     expect(
       await screen.findByText('Muitas tentativas. Aguarde um minuto e tente de novo.')
     ).toBeInTheDocument()
-    expect(screen.getByLabelText('Usuário ou e-mail')).toBeInTheDocument()
+    expect(screen.getByLabelText('E-mail')).toBeInTheDocument()
   })
 
   it('rota pública: abre sem sessão, sem redirecionar para o login', async () => {

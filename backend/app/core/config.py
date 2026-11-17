@@ -84,6 +84,9 @@ class Settings(BaseSettings):
     # Chave para cifrar o segredo TOTP (2FA) no banco
     TOTP_ENCRYPTION_KEY: str = ""
 
+    # Domínio aceito no login por e-mail (parte depois do @, sem maiúsculas)
+    LOGIN_EMAIL_DOMINIO: str = "revalle.com.br"
+
     # Integração de assinatura eletrônica (RevSign)
     REVSIGN_ENABLED: bool = False
     REVSIGN_BASE_URL: str = ""

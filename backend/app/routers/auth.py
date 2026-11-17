@@ -6,8 +6,10 @@ from fastapi import APIRouter, HTTPException, Response, Cookie, status, Depends,
 
 from app.schemas.auth import (
     CadastroTotpResponse,
+    EmailIniciarRequest,
     LoginRequest,
     LoginResponse,
+    MensagemResponse,
     MfaConfirmarRequest,
     MfaTokenRequest,
     MfaVerificarRequest,
@@ -24,6 +26,7 @@ from app.core.security import (
     decode_token,
     verify_password,
 )
+from app.core import config as _config
 from app.core.config import settings
 from app.db.user_manager_db import UserDBManager
 from app.db.token_db import TokenDBManager
@@ -38,6 +41,7 @@ from app.dependencies import (
     get_user_db,
     limiter,
 )
+from app.services import confirmacao_email
 from app.services.mfa import CodigoInvalido, MfaErro, TokenEsgotado
 from app.services.segundo_fator import (
     confirmar_cadastro,
@@ -122,14 +126,41 @@ def login(
     response: Response,
     user_db: UserDBManager = Depends(get_user_db),
 ):
-    user = user_db.get_user_by_username(body.username)
+    identificador = body.username.strip()
+    user = user_db.get_user_para_login(identificador)
     # Usuário inexistente também paga o custo do bcrypt: o tempo de resposta não
     # revela se o usuário existe.
     hash_a_conferir = user["password"] if user else DUMMY_PASSWORD_HASH
     senha_ok = verify_password(body.password, hash_a_conferir)
-    if not user or not senha_ok:
+    # Conta criada por convite e ainda sem senha (`senha_definida = 0`): a senha gravada é
+    # inutilizável e o login sempre falha com a mesma mensagem genérica.
+    if not user or not senha_ok or not int(user.get("senha_definida", 1)):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuário ou senha inválidos.")
 
+    # Daqui em diante a senha já foi conferida: as mensagens não revelam mais nada.
+    if "@" not in identificador and user.get("email_confirmado"):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_msg_use_o_email())
+    if not user.get("email_confirmado"):
+        # Conta antiga (ou e-mail trocado pelo Gestor): confirma o e-mail antes de
+        # qualquer outra etapa. Nenhum cookie nem access token ainda.
+        return LoginResponse(
+            etapa="cadastro_email",
+            mfa_token=create_mfa_token(dados_do_token(user), "email"),
+            expira_em_segundos=MFA_CADASTRO_MINUTOS * 60,
+            email_sugerido=user.get("email"),
+        )
+    return _proxima_etapa(response, user)
+
+
+def _msg_use_o_email() -> str:
+    # Lido na chamada: os testes recarregam `app.core.config`.
+    dominio = (_config.settings.LOGIN_EMAIL_DOMINIO or "").strip().lower()
+    return f"Esta conta agora entra com o e-mail. Use o seu e-mail @{dominio}."
+
+
+def _proxima_etapa(response: Response, user: dict) -> LoginResponse:
+    """Depois da senha e do e-mail confirmado: verificação do 2FA, cadastro do 2FA
+    (Gestor sem autenticador) ou a sessão aberta."""
     if user.get("totp_ativo"):
         # Senha certa, mas falta o código: nenhum cookie nem access token ainda.
         # (Vale mesmo sem a chave TOTP no servidor: não há bypass para quem já tem 2FA.)
@@ -146,6 +177,64 @@ def login(
             expira_em_segundos=MFA_CADASTRO_MINUTOS * 60,
         )
     return _emitir_sessao(response, user)
+
+
+def _decodificar_etapa_email(
+    mfa_token: str, token_db: TokenDBManager, user_db: UserDBManager
+) -> tuple[dict, dict]:
+    """Token de propósito `email` de uma conta que ainda não confirmou o e-mail. Uma
+    conta já confirmada não usa a etapa de novo (não é um jeito de trocar o e-mail)."""
+    payload, usuario = _decodificar_mfa(mfa_token, "email", token_db, user_db)
+    if usuario.get("email_confirmado"):
+        raise HTTPException(status_code=400, detail=MSG_ETAPA_EXPIRADA)
+    return payload, usuario
+
+
+def _erro_confirmacao(exc: confirmacao_email.ConfirmacaoErro) -> HTTPException:
+    return HTTPException(status_code=exc.status_code, detail=str(exc))
+
+
+@router.post("/email/iniciar", response_model=MensagemResponse)
+@limiter.limit(settings.LOGIN_RATE_LIMIT)
+def iniciar_cadastro_email(
+    request: Request,
+    body: EmailIniciarRequest,
+    user_db: UserDBManager = Depends(get_user_db),
+    token_db: TokenDBManager = Depends(get_token_db),
+):
+    """Etapa `cadastro_email`: envia o código para o e-mail informado. Não gasta o token."""
+    _, usuario = _decodificar_etapa_email(body.mfa_token, token_db, user_db)
+    try:
+        email = confirmacao_email.iniciar(usuario, body.email, contexto_auditoria_de(usuario, request))
+    except confirmacao_email.ConfirmacaoErro as exc:
+        raise _erro_confirmacao(exc)
+    return MensagemResponse(detail=f"Enviamos um código para {email}.")
+
+
+@router.post("/email/confirmar", response_model=LoginResponse)
+@limiter.limit(settings.LOGIN_RATE_LIMIT)
+def confirmar_cadastro_email(
+    request: Request,
+    body: MfaConfirmarRequest,
+    response: Response,
+    user_db: UserDBManager = Depends(get_user_db),
+    token_db: TokenDBManager = Depends(get_token_db),
+):
+    """Confere o código, grava o e-mail confirmado e segue para a próxima etapa
+    (2FA do Gestor) ou abre a sessão."""
+    payload, usuario = _decodificar_etapa_email(body.mfa_token, token_db, user_db)
+    try:
+        confirmacao_email.confirmar(usuario, body.codigo, contexto_auditoria_de(usuario, request))
+    except confirmacao_email.CodigoEsgotado as exc:
+        _revogar_mfa(payload, token_db)  # 5 erros: o token da etapa também deixa de valer
+        raise _erro_confirmacao(exc)
+    except confirmacao_email.ConfirmacaoErro as exc:
+        raise _erro_confirmacao(exc)
+    _revogar_mfa(payload, token_db)
+    atualizado = user_db.get_user_by_id(usuario["id"])
+    if atualizado is None:
+        raise HTTPException(status_code=400, detail=MSG_ETAPA_EXPIRADA)
+    return _proxima_etapa(response, atualizado)
 
 
 @router.post("/mfa/verificar", response_model=LoginResponse)
@@ -302,5 +391,14 @@ def logout(
 
 
 @router.get("/me", response_model=UserMe)
-def me(current_user: CurrentUser = Depends(get_current_user)):
-    return UserMe(id=current_user.id, username=current_user.username, role=current_user.role)
+def me(
+    current_user: CurrentUser = Depends(get_current_user),
+    user_db: UserDBManager = Depends(get_user_db),
+):
+    usuario = user_db.get_user_by_id(current_user.id) or {}
+    return UserMe(
+        id=current_user.id,
+        username=current_user.username,
+        role=current_user.role,
+        email=usuario.get("email"),
+    )

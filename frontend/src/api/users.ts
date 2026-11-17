@@ -5,6 +5,10 @@ export interface User {
   username: string
   role: string
   email: string | null
+  /** O e-mail já foi confirmado (código no login ou link de senha). */
+  email_confirmado: boolean
+  /** false = convite pendente: a pessoa ainda não criou a própria senha. */
+  senha_definida: boolean
   totp_ativo: boolean
 }
 
@@ -13,14 +17,10 @@ export async function listUsers() {
   return res.data as User[]
 }
 
-export async function createUser(data: {
-  username: string
-  password: string
-  role: string
-  email?: string | null
-}) {
+/** Cria a conta sem senha: o servidor envia o convite para o e-mail. */
+export async function createUser(data: { email: string; role: string }) {
   const res = await api.post('/users', data)
-  return res.data
+  return res.data as { detail: string; convite_enviado: boolean }
 }
 
 export async function updateUserEmail(id: number, email: string | null) {
@@ -38,7 +38,8 @@ export async function removeUser(id: number) {
   return res.data
 }
 
-export async function updatePassword(id: number, newPassword: string) {
-  const res = await api.put(`/users/${id}/password`, { new_password: newPassword })
-  return res.data
+/** Reenvia o convite (conta sem senha) ou manda um link para criar nova senha. */
+export async function enviarLinkSenha(id: number) {
+  const res = await api.post(`/users/${id}/enviar-link-senha`)
+  return res.data as { detail: string }
 }

@@ -34,6 +34,7 @@ managers em `app/db/`; as migrações partem delas.
 | 0600-0699 | Fase 6 (inventário físico) |
 | 0700-0799 | Fase 7 (painel, alertas e exportações; sem migração até agora) |
 | 0800-0899 | Fase 8 (acessos) |
+| 0900-0999 | Login por e-mail (confirmação do e-mail corporativo) |
 
 ## Como roda
 

@@ -29,6 +29,9 @@ export default function RedefinirSenhaPage() {
   // O token vem na URL, mas fica só em memória: logo depois de lido, é tirado do
   // endereço e do histórico (não vaza por histórico, Referer nem captura de tela).
   const [token] = useState(() => params.get('token') ?? '')
+  // `?convite=1` (link do convite de conta nova) só muda o texto da tela: o servidor trata
+  // o convite e a redefinição do mesmo jeito.
+  const [convite] = useState(() => params.get('convite') === '1')
   useEffect(() => {
     if (params.has('token')) navigate(pathname, { replace: true })
   }, [params, pathname, navigate])
@@ -64,8 +67,14 @@ export default function RedefinirSenhaPage() {
 
   return (
     <AuthShell
-      titulo="Redefinir senha"
-      descricao={concluido || semLink ? undefined : 'Escolha uma nova senha para entrar no sistema.'}
+      titulo={convite ? 'Criar sua senha' : 'Redefinir senha'}
+      descricao={
+        concluido || semLink
+          ? undefined
+          : convite
+            ? 'Escolha a sua senha para entrar no sistema.'
+            : 'Escolha uma nova senha para entrar no sistema.'
+      }
     >
       {concluido ? (
         <div className="space-y-4">

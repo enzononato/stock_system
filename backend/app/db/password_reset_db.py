@@ -82,3 +82,24 @@ class PasswordResetDBManager:
                 "UPDATE password_reset_tokens SET usado_em = %s WHERE usuario_id = %s AND usado_em IS NULL",
                 (agora, usuario_id),
             )
+
+    def substituir(
+        self, usuario_id: int, token_hash: str, criado_em: datetime, expira_em: datetime
+    ) -> bool:
+        """Invalida os links abertos do usuário e grava o novo numa transação só, com a
+        linha do usuário travada (`FOR UPDATE`): dois envios simultâneos não deixam dois
+        links valendo. Devolve False, sem gravar, se o usuário não existe."""
+        with get_cursor() as cur:
+            cur.execute("SELECT id FROM usuarios WHERE id = %s FOR UPDATE", (usuario_id,))
+            if cur.fetchone() is None:
+                return False
+            cur.execute(
+                "UPDATE password_reset_tokens SET usado_em = %s WHERE usuario_id = %s AND usado_em IS NULL",
+                (criado_em, usuario_id),
+            )
+            cur.execute(
+                "INSERT INTO password_reset_tokens (usuario_id, token_hash, criado_em, expira_em, criado_ip) "
+                "VALUES (%s, %s, %s, %s, NULL)",
+                (usuario_id, token_hash, criado_em, expira_em),
+            )
+            return True

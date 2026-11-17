@@ -91,7 +91,10 @@ def test_forgot_usuario_inexistente_resposta_igual(client, usuario_com_email):
     assert _linhas_tokens() == []
 
 
-def test_forgot_usuario_sem_email_nao_envia(client, usuario_tecnico):
+def test_forgot_usuario_sem_email_nao_envia(client, usuario_tecnico, executar_sql):
+    executar_sql(
+        "UPDATE usuarios SET email = NULL, email_confirmado = 0 WHERE id = %s", (usuario_tecnico["id"],)
+    )
     resp = _forgot(client, "tecnico.teste")
     assert resp.status_code == 200
     assert resp.json() == {"detail": MSG_FORGOT}
@@ -132,9 +135,9 @@ def test_reset_troca_a_senha(client, usuario_com_email, senha_padrao_teste):
     assert resp.status_code == 200
     assert resp.json() == {"detail": MSG_SENHA_REDEFINIDA}
 
-    antiga = client.post("/api/auth/login", json={"username": "tecnico.email", "password": senha_padrao_teste})
+    antiga = client.post("/api/auth/login", json={"username": "tecnico@revalle.com.br", "password": senha_padrao_teste})
     assert antiga.status_code == 401
-    nova = client.post("/api/auth/login", json={"username": "tecnico.email", "password": "NovaSenha#9"})
+    nova = client.post("/api/auth/login", json={"username": "tecnico@revalle.com.br", "password": "NovaSenha#9"})
     assert nova.status_code == 200
 
 
@@ -181,7 +184,7 @@ def test_reset_invalida_outros_links_abertos(client, usuario_com_email):
 
 
 def test_reset_revoga_sessoes(client, usuario_com_email, senha_padrao_teste):
-    login = client.post("/api/auth/login", json={"username": "tecnico.email", "password": senha_padrao_teste})
+    login = client.post("/api/auth/login", json={"username": "tecnico@revalle.com.br", "password": senha_padrao_teste})
     access = login.json()["access_token"]
     cookie = login.cookies["refresh_token"]
 

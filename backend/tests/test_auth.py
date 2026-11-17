@@ -24,7 +24,7 @@ class TestLogin:
     def test_login_com_credenciais_validas_retorna_access_token(self, client, usuario_gestor, senha_padrao_teste):
         resp = client.post(
             "/api/auth/login",
-            json={"username": usuario_gestor["username"], "password": senha_padrao_teste},
+            json={"username": usuario_gestor["email"], "password": senha_padrao_teste},
         )
         assert resp.status_code == 200
         body = resp.json()
@@ -36,7 +36,7 @@ class TestLogin:
     def test_login_com_senha_errada(self, client, usuario_gestor):
         resp = client.post(
             "/api/auth/login",
-            json={"username": usuario_gestor["username"], "password": "senha-errada"},
+            json={"username": usuario_gestor["email"], "password": "senha-errada"},
         )
         assert resp.status_code == 401
         assert resp.json()["detail"] == "Usuário ou senha inválidos."
@@ -68,7 +68,7 @@ class TestLogin:
         """
         resp = client.post(
             "/api/auth/login",
-            json={"username": usuario_gestor["username"], "password": senha_padrao_teste},
+            json={"username": usuario_gestor["email"], "password": senha_padrao_teste},
         )
         assert resp.status_code == 200
         access_token = resp.json()["access_token"]
@@ -106,7 +106,7 @@ class TestMe:
         """
         login_resp = client.post(
             "/api/auth/login",
-            json={"username": usuario_gestor["username"], "password": senha_padrao_teste},
+            json={"username": usuario_gestor["email"], "password": senha_padrao_teste},
         )
         assert login_resp.status_code == 200
         access_token = login_resp.json()["access_token"]
@@ -138,7 +138,7 @@ class TestRefresh:
         """
         login_resp = client.post(
             "/api/auth/login",
-            json={"username": usuario_gestor["username"], "password": senha_padrao_teste},
+            json={"username": usuario_gestor["email"], "password": senha_padrao_teste},
         )
         assert login_resp.status_code == 200
         assert "refresh_token" in client.cookies  # o TestClient guarda o cookie automaticamente
@@ -169,7 +169,7 @@ class TestRevogacaoDeRefreshToken:
 
     def test_logout_revoga_o_jti_do_refresh_token(self, client, usuario_gestor, senha_padrao_teste, token_db):
         login_resp = client.post(
-            "/api/auth/login", json={"username": usuario_gestor["username"], "password": senha_padrao_teste},
+            "/api/auth/login", json={"username": usuario_gestor["email"], "password": senha_padrao_teste},
         )
         assert login_resp.status_code == 200
         refresh_cookie = client.cookies["refresh_token"]
@@ -182,7 +182,7 @@ class TestRevogacaoDeRefreshToken:
 
     def test_refresh_com_token_revogado_por_logout_retorna_401(self, client, usuario_gestor, senha_padrao_teste):
         login_resp = client.post(
-            "/api/auth/login", json={"username": usuario_gestor["username"], "password": senha_padrao_teste},
+            "/api/auth/login", json={"username": usuario_gestor["email"], "password": senha_padrao_teste},
         )
         assert login_resp.status_code == 200
         refresh_cookie_antigo = client.cookies["refresh_token"]
@@ -198,7 +198,7 @@ class TestRevogacaoDeRefreshToken:
 
     def test_rotacao_invalida_o_refresh_token_anterior(self, client, usuario_gestor, senha_padrao_teste):
         login_resp = client.post(
-            "/api/auth/login", json={"username": usuario_gestor["username"], "password": senha_padrao_teste},
+            "/api/auth/login", json={"username": usuario_gestor["email"], "password": senha_padrao_teste},
         )
         assert login_resp.status_code == 200
         refresh_token_1 = client.cookies["refresh_token"]
@@ -275,12 +275,12 @@ class TestRateLimitDoLogin:
             for tentativa in range(5):
                 resp = client.post(
                     "/api/auth/login",
-                    json={"username": usuario_gestor["username"], "password": "senha-errada"},
+                    json={"username": usuario_gestor["email"], "password": "senha-errada"},
                 )
                 assert resp.status_code == 401, f"tentativa {tentativa + 1} deveria passar do rate limit"
 
             sexta = client.post(
                 "/api/auth/login",
-                json={"username": usuario_gestor["username"], "password": "senha-errada"},
+                json={"username": usuario_gestor["email"], "password": "senha-errada"},
             )
             assert sexta.status_code == 429

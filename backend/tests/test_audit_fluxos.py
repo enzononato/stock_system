@@ -246,12 +246,13 @@ def test_substituir_periferico_grava(client_gestor, item_disponivel, criar_perif
 
 def test_criar_e_excluir_usuario_grava_sem_senha(client_gestor):
     resp = client_gestor.post(
-        "/api/users", json={"username": "novo.aud", "password": "Senha#123Abc", "role": "Técnico"}
+        "/api/users", json={"email": "novo.aud@revalle.com.br", "role": "Técnico"}
     )
     assert resp.status_code == 200
     criar = _unica("usuario", "criar")
     assert criar["depois"] == {
-        "id": int(criar["entidade_id"]), "username": "novo.aud", "role": "Técnico", "email": None,
+        "id": int(criar["entidade_id"]), "username": "novo.aud", "role": "Técnico",
+        "email": "novo.aud@revalle.com.br",
     }
 
     resp = client_gestor.delete(f"/api/users/{criar['entidade_id']}")
@@ -266,18 +267,22 @@ def test_criar_e_excluir_usuario_grava_sem_senha(client_gestor):
         assert "$2" not in texto
 
 
-def test_trocar_senha_nao_grava_hash(client_gestor, usuario_tecnico):
-    resp = client_gestor.put(
-        f"/api/users/{usuario_tecnico['id']}/password", json={"new_password": "SenhaNova#456"}
-    )
+def test_enviar_link_senha_nao_grava_token(client_gestor, usuario_tecnico):
+    import re
+
+    from app.services.mail import limpar_outbox, outbox
+
+    limpar_outbox()
+    resp = client_gestor.post(f"/api/users/{usuario_tecnico['id']}/enviar-link-senha")
     assert resp.status_code == 200
-    linha = _unica("usuario", "editar")
+    linha = _unica("usuario", "enviar_link_senha")
     assert linha["entidade_id"] == str(usuario_tecnico["id"])
-    assert linha["depois"] == {"senha": "alterada"}
-    assert linha["antes"] is None
+    assert linha["depois"] == {"email": "t***@revalle.com.br"}
+    token = re.search(r"token=([A-Za-z0-9_\-]+)", outbox[-1].text).group(1)
     texto = json.dumps(linha, default=str)
-    assert "SenhaNova#456" not in texto
+    assert token not in texto
     assert "$2b$" not in texto and "$2a$" not in texto
+    limpar_outbox()
 
 
 # ── Unidades ────────────────────────────────────────────────────────────────

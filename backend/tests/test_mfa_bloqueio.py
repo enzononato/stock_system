@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from tests.fixtures_auth import (  # noqa: F401
+    email_de_teste,
     ativar_2fa_direto,
     chave_totp,
     codigo_totp,
@@ -23,7 +24,7 @@ MSG_BLOQUEADO = (
 
 
 def _login(client, username="tecnico.teste", senha="SenhaForte#123"):
-    return client.post("/api/auth/login", json={"username": username, "password": senha})
+    return client.post("/api/auth/login", json={"username": email_de_teste(username), "password": senha})
 
 
 def _novo_token(client, username="tecnico.teste"):

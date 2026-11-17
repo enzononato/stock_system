@@ -1,6 +1,6 @@
 import api from './client'
 
-export type EtapaLogin = 'ok' | 'mfa' | 'cadastro_2fa'
+export type EtapaLogin = 'ok' | 'mfa' | 'cadastro_2fa' | 'cadastro_email'
 
 export interface LoginResponse {
   etapa: EtapaLogin
@@ -10,6 +10,8 @@ export interface LoginResponse {
   expira_em_segundos?: number | null
   codigos_recuperacao_restantes?: number | null
   codigos_recuperacao?: string[] | null
+  /** Na etapa `cadastro_email`: o e-mail já cadastrado na conta (pelo Gestor), para preencher o campo. */
+  email_sugerido?: string | null
 }
 
 export interface CadastroTotp {
@@ -53,5 +55,17 @@ export async function logout() {
 
 export async function getMe() {
   const res = await api.get('/auth/me')
-  return res.data as { id: number; username: string; role: string }
+  return res.data as { id: number; username: string; role: string; email?: string | null }
+}
+
+/** Etapa `cadastro_email`: envia o código de 6 dígitos para o e-mail informado. */
+export async function iniciarCadastroEmail(mfaToken: string, email: string) {
+  const res = await api.post('/auth/email/iniciar', { mfa_token: mfaToken, email })
+  return res.data as { detail: string }
+}
+
+/** Etapa `cadastro_email`: confere o código; a resposta segue o mesmo tratamento do login. */
+export async function confirmarCadastroEmail(mfaToken: string, codigo: string) {
+  const res = await api.post('/auth/email/confirmar', { mfa_token: mfaToken, codigo })
+  return res.data as LoginResponse
 }

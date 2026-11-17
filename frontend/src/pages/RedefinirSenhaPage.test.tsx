@@ -110,3 +110,27 @@ describe('RedefinirSenhaPage — token fora da URL', () => {
     expect(corpo).toEqual({ token: 'segredo-do-link', nova_senha: 'Nova#123' })
   })
 })
+
+describe('RedefinirSenhaPage — convite', () => {
+  it('convite mostra Criar sua senha', async () => {
+    server.use(
+      http.post('/api/auth/reset', () =>
+        HttpResponse.json({ detail: 'Senha redefinida. Entre com a nova senha.' })
+      )
+    )
+    const user = userEvent.setup()
+    renderPagina('/redefinir-senha?token=abc&convite=1')
+
+    expect(screen.getByText('Criar sua senha')).toBeInTheDocument()
+    expect(screen.queryByText('Redefinir senha')).not.toBeInTheDocument()
+    await preencher(user, 'Nova#123', 'Nova#123')
+
+    expect(await screen.findByText('Senha redefinida. Entre com a nova senha.')).toBeInTheDocument()
+    expect(screen.getByText('Criar sua senha')).toBeInTheDocument()
+  })
+
+  it('link normal continua com o título Redefinir senha', () => {
+    renderPagina('/redefinir-senha?token=abc')
+    expect(screen.getByText('Redefinir senha')).toBeInTheDocument()
+  })
+})
