@@ -92,7 +92,7 @@ jobs:
       - name: Configurar Python
         uses: actions/setup-python@v5.3.0
         with:
-          python-version: '3.11.9'
+          python-version: '3.12.16'
           cache: pip
           cache-dependency-path: backend/requirements-dev.txt
 
