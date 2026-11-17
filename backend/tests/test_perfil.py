@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tests.fixtures_auth import (  # noqa: F401
+    email_de_teste,
     ativar_2fa_direto,
     chave_totp,
     codigo_totp,
@@ -21,7 +22,7 @@ SENHA = "SenhaForte#123"  # senha_padrao_teste
 
 
 def _cliente_logado(app, client, username, senha) -> TestClient:
-    resp = client.post("/api/auth/login", json={"username": username, "password": senha})
+    resp = client.post("/api/auth/login", json={"username": email_de_teste(username), "password": senha})
     assert resp.status_code == 200 and resp.json()["etapa"] == "ok", resp.text
     c = TestClient(app)
     c.headers.update({"Authorization": f"Bearer {resp.json()['access_token']}"})
@@ -48,7 +49,7 @@ def test_perfil_exige_login(client):
 
 
 def test_get_perfil(_fastapi_app, client, chave_totp, usuario_com_email, senha_padrao_teste):
-    c = _cliente_logado(_fastapi_app, client, "tecnico.email", senha_padrao_teste)
+    c = _cliente_logado(_fastapi_app, client, "tecnico@revalle.com.br", senha_padrao_teste)
     resp = c.get("/api/perfil")
     assert resp.status_code == 200
     assert resp.json() == {
@@ -90,7 +91,7 @@ def test_tecnico_ativa_2fa_no_perfil(_fastapi_app, client, chave_totp, usuario_t
     assert perfil["codigos_recuperacao_restantes"] == 10
 
     assert client.post(
-        "/api/auth/login", json={"username": "tecnico.teste", "password": senha_padrao_teste}
+        "/api/auth/login", json={"username": "tecnico.teste@revalle.com.br", "password": senha_padrao_teste}
     ).json()["etapa"] == "mfa"
 
     auditoria = linhas_auditoria("usuario", "ativar_2fa")
@@ -143,7 +144,7 @@ def test_desativar_exige_senha(_fastapi_app, client, chave_totp, usuario_tecnico
     assert _linhas("SELECT 1 FROM mfa_recovery_codes WHERE usuario_id = %s", (usuario_tecnico["id"],)) == []
     assert len(linhas_auditoria("usuario", "desativar_2fa")) == 1
     assert client.post(
-        "/api/auth/login", json={"username": "tecnico.teste", "password": senha_padrao_teste}
+        "/api/auth/login", json={"username": "tecnico.teste@revalle.com.br", "password": senha_padrao_teste}
     ).json()["etapa"] == "ok"
 
 
@@ -166,7 +167,7 @@ def test_regenerar_codigos(_fastapi_app, client, chave_totp, usuario_tecnico, se
 
     def _entrar(codigo):
         mfa_token = client.post(
-            "/api/auth/login", json={"username": "tecnico.teste", "password": senha_padrao_teste}
+            "/api/auth/login", json={"username": "tecnico.teste@revalle.com.br", "password": senha_padrao_teste}
         ).json()["mfa_token"]
         return client.post("/api/auth/mfa/verificar", json={"mfa_token": mfa_token, "codigo": codigo})
 

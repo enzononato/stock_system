@@ -128,12 +128,12 @@ class TestAtualizarSenha:
         assert resp.json()["detail"] == "Senha alterada com sucesso."
 
         login_com_senha_antiga = client.post(
-            "/api/auth/login", json={"username": usuario_tecnico["username"], "password": "SenhaForte#123"}
+            "/api/auth/login", json={"username": usuario_tecnico["email"], "password": "SenhaForte#123"}
         )
         assert login_com_senha_antiga.status_code == 401
 
         login_com_senha_nova = client.post(
-            "/api/auth/login", json={"username": usuario_tecnico["username"], "password": "SenhaNova#456"}
+            "/api/auth/login", json={"username": usuario_tecnico["email"], "password": "SenhaNova#456"}
         )
         assert login_com_senha_nova.status_code == 200
 
@@ -141,7 +141,7 @@ class TestAtualizarSenha:
         self, client, client_gestor, usuario_tecnico, senha_padrao_teste
     ):
         login = client.post(
-            "/api/auth/login", json={"username": usuario_tecnico["username"], "password": senha_padrao_teste}
+            "/api/auth/login", json={"username": usuario_tecnico["email"], "password": senha_padrao_teste}
         )
         assert login.status_code == 200
         access = login.json()["access_token"]

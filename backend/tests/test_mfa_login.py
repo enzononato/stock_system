@@ -7,6 +7,7 @@ import pytest
 from jose import jwt as jose_jwt
 
 from tests.fixtures_auth import (  # noqa: F401
+    email_de_teste,
     ativar_2fa_direto,
     chave_totp,
     cliente_com_rate_limit,
@@ -21,7 +22,7 @@ MSG_ETAPA_EXPIRADA = "Etapa de verificação expirada. Entre novamente."
 
 
 def _login(client, username, senha):
-    return client.post("/api/auth/login", json={"username": username, "password": senha})
+    return client.post("/api/auth/login", json={"username": email_de_teste(username), "password": senha})
 
 
 def _verificar(client, mfa_token, codigo):

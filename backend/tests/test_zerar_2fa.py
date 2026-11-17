@@ -4,6 +4,7 @@ import json
 import pytest
 
 from tests.fixtures_auth import (  # noqa: F401
+    email_de_teste,
     ativar_2fa_direto,
     chave_totp,
     codigo_totp,
@@ -27,7 +28,7 @@ def _linhas(sql, params=()):
 
 
 def _login(client, username, senha):
-    return client.post("/api/auth/login", json={"username": username, "password": senha})
+    return client.post("/api/auth/login", json={"username": email_de_teste(username), "password": senha})
 
 
 def test_gestor_zera_2fa_de_outro(gestor_2fa, client, usuario_tecnico, ativar_2fa_direto, senha_padrao_teste):
@@ -57,7 +58,7 @@ def test_zerar_2fa_encerra_sessoes_do_alvo(
     gestor_2fa, client, usuario_tecnico, ativar_2fa_direto, senha_padrao_teste
 ):
     dados = ativar_2fa_direto(usuario_tecnico["id"])
-    access = login_com_2fa(client, "tecnico.teste", senha_padrao_teste, codigo_totp(dados.segredo))
+    access = login_com_2fa(client, "tecnico.teste@revalle.com.br", senha_padrao_teste, codigo_totp(dados.segredo))
     assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {access}"}).status_code == 200
 
     assert gestor_2fa["client"].delete(f"/api/users/{usuario_tecnico['id']}/2fa").status_code == 200

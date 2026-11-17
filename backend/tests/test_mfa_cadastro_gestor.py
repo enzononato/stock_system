@@ -8,6 +8,7 @@ from cryptography.fernet import Fernet
 from jose import jwt as jose_jwt
 
 from tests.fixtures_auth import (  # noqa: F401
+    email_de_teste,
     ativar_2fa_direto,
     chave_totp,
     codigo_totp,
@@ -21,7 +22,7 @@ MSG_CADASTRO_OBRIGATORIO = "Cadastre a verificação em duas etapas para continu
 
 
 def _login(client, username="gestor.teste", senha="SenhaForte#123"):
-    return client.post("/api/auth/login", json={"username": username, "password": senha})
+    return client.post("/api/auth/login", json={"username": email_de_teste(username), "password": senha})
 
 
 def _iniciar(client, mfa_token):

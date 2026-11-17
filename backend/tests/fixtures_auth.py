@@ -163,9 +163,9 @@ def codigo_totp(segredo: str, passos: int = 0) -> str:
     return pyotp.TOTP(segredo).at(datetime.now(timezone.utc) + timedelta(seconds=30 * passos))
 
 
-def login_com_2fa(client, username: str, senha: str, codigo: str) -> str:
+def login_com_2fa(client, identificador: str, senha: str, codigo: str) -> str:
     """Login completo em duas etapas; devolve o access token."""
-    resp = client.post("/api/auth/login", json={"username": username, "password": senha})
+    resp = client.post("/api/auth/login", json={"username": identificador, "password": senha})
     assert resp.status_code == 200, resp.text
     assert resp.json()["etapa"] == "mfa", resp.text
     ver = client.post(
@@ -182,7 +182,13 @@ def gestor_2fa(_fastapi_app, client, usuario_gestor, senha_padrao_teste, ativar_
     from fastapi.testclient import TestClient
 
     dados = ativar_2fa_direto(usuario_gestor["id"])
-    access = login_com_2fa(client, usuario_gestor["username"], senha_padrao_teste, codigo_totp(dados.segredo))
+    access = login_com_2fa(client, usuario_gestor["email"], senha_padrao_teste, codigo_totp(dados.segredo))
     c = TestClient(_fastapi_app)
     c.headers.update({"Authorization": f"Bearer {access}"})
     return {"usuario": usuario_gestor, "segredo": dados.segredo, "codigos": dados.codigos, "client": c}
+
+
+# ── Login por e-mail ────────────────────────────────────────────────────────
+def email_de_teste(identificador: str) -> str:
+    """Contas de teste entram com `<username>@revalle.com.br` (ver `criar_usuario`)."""
+    return identificador if "@" in identificador else f"{identificador}@revalle.com.br"

@@ -632,8 +632,11 @@ def termo_emprestimo_disponivel():
 @pytest.fixture
 def criar_usuario(user_manager):
     def _criar(username: str, password: str, role: str):
-        ok, msg = user_manager.add_user(username, password, role)
+        # Contas de teste já entram pelo e-mail: `<username>@revalle.com.br`, confirmado.
+        email = f"{username}@revalle.com.br"
+        ok, msg = user_manager.add_user(username, password, role, email)
         assert ok, f"Falha ao criar usuário de teste '{username}': {msg}"
+        user_manager.confirmar_email(user_manager.get_user_by_username(username)["id"], email)
         return user_manager.get_user_by_username(username)
 
     return _criar
@@ -684,17 +687,17 @@ def _login_e_obter_access_token(client, username: str, password: str) -> str:
 
 @pytest.fixture
 def token_gestor(client, usuario_gestor, senha_padrao_teste):
-    return _login_e_obter_access_token(client, usuario_gestor["username"], senha_padrao_teste)
+    return _login_e_obter_access_token(client, usuario_gestor["email"], senha_padrao_teste)
 
 
 @pytest.fixture
 def token_tecnico(client, usuario_tecnico, senha_padrao_teste):
-    return _login_e_obter_access_token(client, usuario_tecnico["username"], senha_padrao_teste)
+    return _login_e_obter_access_token(client, usuario_tecnico["email"], senha_padrao_teste)
 
 
 @pytest.fixture
 def token_aprendiz(client, usuario_aprendiz, senha_padrao_teste):
-    return _login_e_obter_access_token(client, usuario_aprendiz["username"], senha_padrao_teste)
+    return _login_e_obter_access_token(client, usuario_aprendiz["email"], senha_padrao_teste)
 
 
 def _client_autenticado(app, token: str):

@@ -96,7 +96,9 @@ def _processar_pedido(
                 usuario = user_db.get_user_by_email(identificador)
             else:
                 usuario = user_db.get_user_by_username(identificador)
-        if not usuario or not usuario.get("email"):
+        # Só para e-mail confirmado: um e-mail digitado errado (pelo Gestor ou na
+        # conta antiga) nunca recebe o link.
+        if not usuario or not usuario.get("email") or not usuario.get("email_confirmado"):
             return
 
         agora = _agora_utc()

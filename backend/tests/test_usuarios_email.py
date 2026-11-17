@@ -80,9 +80,12 @@ def test_usuarios_legados_sem_email_e_sem_2fa(client, client_gestor, executar_sq
     assert legado["email"] is None
     assert legado["totp_ativo"] is False
 
+    # Conta legada (sem e-mail) entra pelo usuário, mas ainda sem sessão: primeiro
+    # confirma o e-mail (etapa `cadastro_email`).
     resp = client.post("/api/auth/login", json={"username": "legado", "password": "Senha#1"})
     assert resp.status_code == 200
-    assert resp.json()["access_token"]
+    assert resp.json()["etapa"] == "cadastro_email"
+    assert resp.json()["access_token"] is None
 
 
 def test_criar_usuario_com_email_normaliza(client_gestor):
@@ -132,7 +135,7 @@ def test_editar_email(client_gestor, usuario_tecnico):
 
     linha = linhas_auditoria("usuario", "editar")[-1]
     assert linha["entidade_id"] == str(usuario_tecnico["id"])
-    assert linha["antes"] == {"email": None}
+    assert linha["antes"] == {"email": "tecnico.teste@revalle.com.br"}
     assert linha["depois"] == {"email": "tec@revalle.com.br"}
 
 

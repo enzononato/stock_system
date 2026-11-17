@@ -2,13 +2,15 @@
 import pytest
 from jose import jwt as jose_jwt
 
+from tests.fixtures_auth import email_de_teste
+
 pytestmark = pytest.mark.integration
 
 MSG = "Sessão encerrada. Faça login novamente."
 
 
 def _login(client, username, senha):
-    resp = client.post("/api/auth/login", json={"username": username, "password": senha})
+    resp = client.post("/api/auth/login", json={"username": email_de_teste(username), "password": senha})
     assert resp.status_code == 200, resp.text
     return resp
 
