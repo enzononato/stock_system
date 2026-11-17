@@ -6,6 +6,13 @@ SET @sql := IF(@faltando, 'ALTER TABLE usuarios ADD COLUMN email_confirmado TINY
 PREPARE passo FROM @sql;
 EXECUTE passo;
 DEALLOCATE PREPARE passo;
+-- Mesma guarda (@faltando): só na primeira aplicação. Encerra as sessões abertas antes
+-- do deploy das contas sem e-mail confirmado (todas, nesse momento), para ninguém
+-- continuar renovando o refresh token sem passar pela etapa do e-mail.
+SET @sql := IF(@faltando, 'UPDATE usuarios SET sessao_versao = sessao_versao + 1 WHERE email_confirmado = 0', 'DO 0');
+PREPARE passo FROM @sql;
+EXECUTE passo;
+DEALLOCATE PREPARE passo;
 CREATE TABLE IF NOT EXISTS email_confirmacoes (
     id INT AUTO_INCREMENT PRIMARY KEY,
     usuario_id INT NOT NULL,

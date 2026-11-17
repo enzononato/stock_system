@@ -75,8 +75,8 @@ def emitir_link(usuario_id: int, convite: bool, reset_db: PasswordResetDBManager
     agora = _agora_utc()
     validade = timedelta(hours=CONVITE_VALIDADE_HORAS) if convite else timedelta(minutes=RESET_VALIDADE_MINUTOS)
     token = secrets.token_urlsafe(32)
-    reset_db.invalidar_abertos(usuario_id, agora)
-    reset_db.criar(usuario_id, sha256_hex(token), agora, agora + validade, None)
+    # Invalida os anteriores e grava o novo numa transação só (linha do usuário travada).
+    reset_db.substituir(usuario_id, sha256_hex(token), agora, agora + validade)
     return token
 
 

@@ -259,3 +259,63 @@ def test_forgot_ignora_email_nao_confirmado(client, criar_conta_antiga):
             "detail": "Se o usuário existir e tiver e-mail cadastrado, enviaremos um link para redefinir a senha."
         }
     assert outbox == []
+
+
+def _rodar_0900(arquivo: str) -> None:
+    from app.db import migrations
+    from app.db.database_mysql import get_cursor
+
+    caminho = migrations.MIGRATIONS_DIR / arquivo
+    with get_cursor() as cur:
+        migrations.executar_sql(cur, caminho.read_text(encoding="utf-8"))
+
+
+def _sessao_versao(usuario_id: int) -> int:
+    from app.db.user_manager_db import UserDBManager
+
+    return int(UserDBManager().get_user_by_id(usuario_id)["sessao_versao"])
+
+
+def test_sessao_anterior_a_0900_deixa_de_valer(client, usuario_tecnico):
+    """Sessões abertas antes do deploy não pulam a etapa do e-mail: a 0900 encerra as
+    sessões das contas sem e-mail confirmado, uma vez só."""
+    login = _login(client, usuario_tecnico["email"])
+    cookie = login.cookies["refresh_token"]
+    try:
+        _rodar_0900("0900_usuarios_email_login.down.sql")  # banco "antes do deploy"
+    finally:
+        _rodar_0900("0900_usuarios_email_login.sql")
+    versao = _sessao_versao(usuario_tecnico["id"])
+    assert versao == int(usuario_tecnico["sessao_versao"]) + 1
+
+    client.cookies.clear()
+    client.cookies.set("refresh_token", cookie)
+    resp = client.post("/api/auth/refresh")
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "Sessão encerrada. Faça login novamente."
+    client.cookies.clear()
+
+    # Rodar a 0900 de novo (já aplicada) não encerra as sessões outra vez.
+    _rodar_0900("0900_usuarios_email_login.sql")
+    assert _sessao_versao(usuario_tecnico["id"]) == versao
+    # E a conta segue para a etapa do e-mail no próximo login.
+    assert _login(client, usuario_tecnico["email"]).json()["etapa"] == "cadastro_email"
+
+
+def test_usuario_inexistente_sem_arroba_tambem_paga_o_bcrypt(client, monkeypatch):
+    from app.core.security import DUMMY_PASSWORD_HASH
+    from app.routers import auth as rota_auth
+
+    hashes: list[str] = []
+    original = rota_auth.verify_password
+
+    def _espiao(senha, hash_salvo):
+        hashes.append(hash_salvo)
+        return original(senha, hash_salvo)
+
+    monkeypatch.setattr(rota_auth, "verify_password", _espiao)
+    for identificador in ("ninguem.assim", "ninguem@revalle.com.br"):
+        resp = _login(client, identificador, "qualquer-senha")
+        assert resp.status_code == 401
+        assert resp.json()["detail"] == MSG_GENERICA
+    assert hashes == [DUMMY_PASSWORD_HASH, DUMMY_PASSWORD_HASH]
