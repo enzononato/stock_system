@@ -161,6 +161,7 @@ segredo vai para o repositório: senhas, tokens e chaves só existem no `.env` d
 | `COLABORADORES_SYNC_HORA` | Horário (`HH:MM`) da sincronização diária de colaboradores. |
 | `SCHEDULER_ENABLED` | `False` desliga o agendador de tarefas (sincronização, envio agendado de termos, consulta ao RevSign). |
 | `TOTP_ENCRYPTION_KEY` | Chave Fernet que cifra o segredo do 2FA no banco. Gere com `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. **Vazia = 2FA desligado.** Trocar a chave invalida os autenticadores já cadastrados. Com a chave definida, todo Gestor é levado a cadastrar o 2FA no primeiro login. |
+| `LOGIN_EMAIL_DOMINIO` | Domínio dos e-mails aceitos no login (padrão `revalle.com.br`). Só entra quem tem e-mail `@` desse domínio; contas antigas confirmam o e-mail no próximo login. |
 | `REVSIGN_ENABLED` | Padrão `False`: a integração com o RevSign fica desligada até o contrato chegar, e os termos seguem o fluxo manual (baixar, assinar, anexar o PDF). |
 | `REVSIGN_BASE_URL`, `REVSIGN_API_TOKEN` | Endereço e token da API do RevSign (token é segredo). |
 | `REVSIGN_WEBHOOK_SECRET` | Segredo que valida os webhooks recebidos. URL do webhook a cadastrar no RevSign: `<APP_PUBLIC_URL>/api/integrations/revsign/webhook`. |
