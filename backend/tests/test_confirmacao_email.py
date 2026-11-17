@@ -41,7 +41,9 @@ def conta_antiga(user_manager, senha_padrao_teste) -> dict:
     return user_manager.get_user_by_username("joao")
 
 
-def _envelhecer(usuario_id: int, executar_sql, segundos: int = 61) -> None:
+def _envelhecer(usuario_id: int, executar_sql, segundos: int = 120) -> None:
+    """Passa o intervalo de reenvio (60 s) com folga: o relógio do contêiner de teste
+    às vezes se ajusta no meio da suíte."""
     executar_sql(
         "UPDATE email_confirmacoes SET criado_em = criado_em - INTERVAL %s SECOND WHERE usuario_id = %s",
         (segundos, usuario_id),
@@ -266,9 +268,9 @@ def test_migracao_0900_ida_e_volta(_test_schema):
     ida_e_volta_migracao(900)
     colunas = _consultar(
         "SELECT column_name AS nome FROM information_schema.columns "
-        "WHERE table_schema = DATABASE() AND table_name = 'usuarios' AND column_name = 'email_confirmado'"
+        "WHERE table_schema = DATABASE() AND table_name = 'usuarios' AND column_name IN ('email_confirmado', 'senha_definida')"
     )
-    assert len(colunas) == 1
+    assert len(colunas) == 2
     assert _consultar(
         "SELECT table_name FROM information_schema.tables "
         "WHERE table_schema = DATABASE() AND table_name = 'email_confirmacoes'"

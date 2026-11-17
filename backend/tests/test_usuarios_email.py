@@ -89,41 +89,31 @@ def test_usuarios_legados_sem_email_e_sem_2fa(client, client_gestor, executar_sq
 
 
 def test_criar_usuario_com_email_normaliza(client_gestor):
-    resp = client_gestor.post(
-        "/api/users",
-        json={"username": "joao", "password": "Abc#1234", "role": "Técnico", "email": "Joao.Silva@Revalle.com.br"},
-    )
+    resp = client_gestor.post("/api/users", json={"role": "Técnico", "email": "Joao.Silva@Revalle.com.br"})
     assert resp.status_code == 200, resp.text
 
     lista = client_gestor.get("/api/users").json()
-    assert next(u for u in lista if u["username"] == "joao")["email"] == "joao.silva@revalle.com.br"
+    assert next(u for u in lista if u["username"] == "joao.silva")["email"] == "joao.silva@revalle.com.br"
 
     linha = linhas_auditoria("usuario", "criar")[-1]
     assert linha["depois"]["email"] == "joao.silva@revalle.com.br"
     assert "$2b$" not in json.dumps(linha, default=str)
 
 
-def test_criar_usuario_email_vazio_vira_null(client_gestor):
-    resp = client_gestor.post(
-        "/api/users", json={"username": "maria", "password": "Abc#1234", "role": "Técnico", "email": "   "}
-    )
-    assert resp.status_code == 200
-    lista = client_gestor.get("/api/users").json()
-    assert next(u for u in lista if u["username"] == "maria")["email"] is None
+def test_criar_usuario_email_vazio_422(client_gestor):
+    resp = client_gestor.post("/api/users", json={"role": "Técnico", "email": "   "})
+    assert resp.status_code == 422
 
 
 def test_criar_usuario_email_invalido_422(client_gestor):
-    resp = client_gestor.post(
-        "/api/users", json={"username": "maria", "password": "Abc#1234", "role": "Técnico", "email": "joao@"}
-    )
+    resp = client_gestor.post("/api/users", json={"role": "Técnico", "email": "joao@"})
     assert resp.status_code == 422
-    assert "E-mail inválido." in resp.json()["detail"]
+    assert "Use o seu e-mail @revalle.com.br." in resp.json()["detail"]
 
 
 def test_criar_usuario_email_duplicado_400(client_gestor):
-    base = {"password": "Abc#1234", "role": "Técnico", "email": "dup@revalle.com.br"}
-    assert client_gestor.post("/api/users", json={**base, "username": "u1"}).status_code == 200
-    resp = client_gestor.post("/api/users", json={**base, "username": "u2", "email": "DUP@revalle.com.br"})
+    assert client_gestor.post("/api/users", json={"role": "Técnico", "email": "dup@revalle.com.br"}).status_code == 200
+    resp = client_gestor.post("/api/users", json={"role": "Técnico", "email": "DUP@revalle.com.br"})
     assert resp.status_code == 400
     assert resp.json()["detail"] == "Este e-mail já está em uso por outro usuário."
 

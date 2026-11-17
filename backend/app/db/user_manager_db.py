@@ -8,8 +8,10 @@ logger = logging.getLogger(__name__)
 
 MSG_EMAIL_DUPLICADO = "Este e-mail já está em uso por outro usuário."
 
-_CAMPOS_PUBLICOS = "id, username, role, email, email_confirmado, totp_ativo, sessao_versao"
-_CAMPOS_LOGIN = "id, username, password, role, email, email_confirmado, totp_ativo, sessao_versao"
+_CAMPOS_PUBLICOS = "id, username, role, email, email_confirmado, senha_definida, totp_ativo, sessao_versao"
+_CAMPOS_LOGIN = (
+    "id, username, password, role, email, email_confirmado, senha_definida, totp_ativo, sessao_versao"
+)
 
 
 def _erro_de_email_duplicado(exc: pymysql.MySQLError) -> bool:
@@ -27,7 +29,9 @@ class EmailEmUso(Exception):
 class UserDBManager:
     def get_all_users(self):
         with get_cursor(commit=False) as cur:
-            cur.execute("SELECT id, username, role, email, email_confirmado, totp_ativo FROM usuarios")
+            cur.execute(
+                "SELECT id, username, role, email, email_confirmado, senha_definida, totp_ativo FROM usuarios"
+            )
             return cur.fetchall()
 
     def get_user_by_username(self, username: str):
@@ -125,15 +129,25 @@ class UserDBManager:
             cur.execute("SELECT COUNT(*) as total FROM usuarios WHERE role = 'Gestor'")
             return cur.fetchone()["total"]
 
-    def add_user(self, username: str, password: str, role: str, email: str | None = None):
+    def add_user(
+        self,
+        username: str,
+        password: str,
+        role: str,
+        email: str | None = None,
+        senha_definida: bool = True,
+    ):
+        """`senha_definida=False`: conta criada por convite, com uma senha inutilizável
+        (o login recusa até a pessoa criar a própria senha pelo link)."""
         if not username or not password or not role:
             return False, "Todos os campos são obrigatórios."
         try:
             hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
             with get_cursor(dict_cursor=False) as cur:
                 cur.execute(
-                    "INSERT INTO usuarios (username, password, role, email) VALUES (%s, %s, %s, %s)",
-                    (username, hashed, role, email),
+                    "INSERT INTO usuarios (username, password, role, email, senha_definida) "
+                    "VALUES (%s, %s, %s, %s, %s)",
+                    (username, hashed, role, email, 1 if senha_definida else 0),
                 )
             return True, f"Usuário '{username}' cadastrado com sucesso."
         except pymysql.MySQLError as e:
@@ -146,19 +160,28 @@ class UserDBManager:
 
     def update_email(self, user_id: int, email: str | None):
         """Troca o e-mail. Um e-mail diferente do atual volta a `email_confirmado = 0`
-        (a pessoa confirma no próximo login); salvar o mesmo e-mail não mexe na
-        confirmação. Não usa `rowcount` para saber se o usuário existe: o MySQL
-        devolve 0 quando o valor não muda."""
+        (a pessoa confirma no próximo login) e invalida os links de senha ainda
+        abertos (foram para o e-mail antigo); salvar o mesmo e-mail não mexe em nada
+        disso. Não usa `rowcount` para saber se o usuário existe: o MySQL devolve 0
+        quando o valor não muda."""
         try:
-            with get_cursor(dict_cursor=False) as cur:
-                # O MySQL avalia o SET da esquerda para a direita: a confirmação é
-                # decidida comparando com o e-mail ANTES da troca.
-                cur.execute(
-                    "UPDATE usuarios SET "
-                    "email_confirmado = IF(LOWER(email) <=> LOWER(%s), email_confirmado, 0), "
-                    "email = %s WHERE id = %s",
-                    (email, email, user_id),
-                )
+            with get_cursor() as cur:
+                cur.execute("SELECT email FROM usuarios WHERE id = %s FOR UPDATE", (user_id,))
+                atual = cur.fetchone()
+                mudou = atual is not None and (atual["email"] or "").lower() != (email or "").lower()
+                if mudou:
+                    cur.execute(
+                        "UPDATE usuarios SET email = %s, email_confirmado = 0 WHERE id = %s",
+                        (email, user_id),
+                    )
+                    cur.execute(
+                        "UPDATE password_reset_tokens SET usado_em = UTC_TIMESTAMP() "
+                        "WHERE usuario_id = %s AND usado_em IS NULL",
+                        (user_id,),
+                    )
+                else:
+                    # Mesmo e-mail (talvez com outra caixa): só a grafia é gravada.
+                    cur.execute("UPDATE usuarios SET email = %s WHERE id = %s", (email, user_id))
             return True, "E-mail atualizado com sucesso."
         except pymysql.MySQLError as e:
             if _erro_de_email_duplicado(e):
@@ -194,4 +217,25 @@ class UserDBManager:
             return True, "Senha alterada com sucesso."
         except pymysql.MySQLError:
             logger.exception("Erro ao alterar a senha")
+            return False, "Erro ao alterar a senha."
+
+    def definir_senha_pelo_link(self, user_id: int, nova_senha: str):
+        """Senha criada pelo link enviado por e-mail (convite ou redefinição): grava a
+        senha, `senha_definida = 1` e `email_confirmado = 1` — o link só chega à caixa
+        daquele e-mail (trocar o e-mail invalida os links abertos)."""
+        if not nova_senha:
+            return False, "A nova senha não pode estar em branco."
+        try:
+            hashed = bcrypt.hashpw(nova_senha.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+            with get_cursor(dict_cursor=False) as cur:
+                cur.execute(
+                    "UPDATE usuarios SET password = %s, senha_definida = 1, "
+                    "email_confirmado = IF(email IS NULL, 0, 1) WHERE id = %s",
+                    (hashed, user_id),
+                )
+                if cur.rowcount == 0:
+                    return False, "Usuário não encontrado."
+            return True, "Senha alterada com sucesso."
+        except pymysql.MySQLError:
+            logger.exception("Erro ao definir a senha pelo link")
             return False, "Erro ao alterar a senha."

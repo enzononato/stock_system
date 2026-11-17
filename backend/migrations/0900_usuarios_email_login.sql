@@ -18,3 +18,10 @@ CREATE TABLE IF NOT EXISTS email_confirmacoes (
     INDEX idx_email_confirmacoes_usuario (usuario_id),
     CONSTRAINT fk_email_confirmacoes_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 );
+-- Contas criadas por convite nascem com senha_definida = 0 (senha inutilizável) até a
+-- pessoa criar a própria senha pelo link. As contas atuais já têm senha: ficam com 1.
+SET @faltando := (SELECT COUNT(*) = 0 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'usuarios' AND column_name = 'senha_definida');
+SET @sql := IF(@faltando, 'ALTER TABLE usuarios ADD COLUMN senha_definida TINYINT(1) NOT NULL DEFAULT 1', 'DO 0');
+PREPARE passo FROM @sql;
+EXECUTE passo;
+DEALLOCATE PREPARE passo;

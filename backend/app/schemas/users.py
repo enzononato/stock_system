@@ -2,20 +2,20 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, field_validator
 
-from app.schemas.validators import validar_email
+from app.schemas.validators import blank_to_none, validar_email_corporativo
 
 
 class UserCreate(BaseModel):
-    username: str
-    password: str
+    """Conta nova: só o e-mail corporativo e o papel. Não há senha — a pessoa recebe
+    um convite e cria a própria; o `username` (só para o histórico) é gerado do e-mail."""
+
+    email: str
     role: Literal["Gestor", "Técnico", "Jovem Aprendiz"]
-    email: Optional[str] = None
 
     @field_validator("email")
     @classmethod
-    def _email(cls, v: Optional[str]) -> Optional[str]:
-        # vazio/só espaços vira None; senão minúsculas e formato validado
-        return validar_email(v)
+    def _email(cls, v: str) -> str:
+        return validar_email_corporativo(v)
 
 
 class UserUpdate(BaseModel):
@@ -25,7 +25,8 @@ class UserUpdate(BaseModel):
     @field_validator("email")
     @classmethod
     def _email(cls, v: Optional[str]) -> Optional[str]:
-        return validar_email(v)
+        v = blank_to_none(v)
+        return None if v is None else validar_email_corporativo(v)
 
 
 class UserResponse(BaseModel):
@@ -33,8 +34,6 @@ class UserResponse(BaseModel):
     username: str
     role: str
     email: Optional[str] = None
+    email_confirmado: bool = False
+    senha_definida: bool = True
     totp_ativo: bool = False
-
-
-class PasswordUpdate(BaseModel):
-    new_password: str

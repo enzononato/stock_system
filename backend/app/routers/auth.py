@@ -132,7 +132,9 @@ def login(
     # revela se o usuário existe.
     hash_a_conferir = user["password"] if user else DUMMY_PASSWORD_HASH
     senha_ok = verify_password(body.password, hash_a_conferir)
-    if not user or not senha_ok:
+    # Conta criada por convite e ainda sem senha (`senha_definida = 0`): a senha gravada é
+    # inutilizável e o login sempre falha com a mesma mensagem genérica.
+    if not user or not senha_ok or not int(user.get("senha_definida", 1)):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuário ou senha inválidos.")
 
     # Daqui em diante a senha já foi conferida: as mensagens não revelam mais nada.

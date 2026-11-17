@@ -27,6 +27,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 RESET_VALIDADE_MINUTOS = 30
 RESET_MAX_POR_HORA = 3
+CONVITE_VALIDADE_HORAS = 72
 MSG_FORGOT = "Se o usuário existir e tiver e-mail cadastrado, enviaremos um link para redefinir a senha."
 MSG_LINK_INVALIDO = "Link inválido ou expirado. Peça um novo."
 MSG_SENHA_REDEFINIDA = "Senha redefinida. Entre com a nova senha."
@@ -36,21 +37,54 @@ def _agora_utc() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
-def enviar_email_redefinicao(email: str, username: str, token: str) -> None:
-    """Envia o link de redefinição. Roda numa BackgroundTask: o tempo da resposta
-    não depende do SMTP. Falhas só viram log com mensagem fixa (sem e-mail nem token)."""
+def enviar_link_senha(email: str, username: str, token: str) -> None:
+    """Envia o link normal de redefinição (30 min). Levanta `MailError` se falhar."""
     link = f"{settings.APP_PUBLIC_URL.rstrip('/')}/redefinir-senha?token={token}"
     corpo = (
         f"<p>Recebemos um pedido para redefinir a senha do usuário <strong>{html.escape(username)}</strong>.</p>"
         "<p>O link vale por 30 minutos e só pode ser usado uma vez. Se não foi você, "
         "ignore este e-mail: sua senha continua a mesma.</p>"
     )
+    send_mail(
+        email,
+        "Redefinição de senha — Patrimônio Revalle",
+        render_email("Redefinir senha", corpo, acao_url=link, acao_rotulo="Redefinir senha"),
+    )
+
+
+def enviar_convite(email: str, token: str) -> None:
+    """Envia o convite de uma conta nova (link de 72 h para criar a senha). Levanta
+    `MailError` se falhar. O `convite=1` no link só muda o título da tela."""
+    link = f"{settings.APP_PUBLIC_URL.rstrip('/')}/redefinir-senha?token={token}&convite=1"
+    corpo = (
+        "<p>Você recebeu acesso ao sistema de Patrimônio da Revalle. Crie sua senha pelo botão abaixo. "
+        "O link vale por 72 horas.</p>"
+        "<p>Depois, entre com este e-mail e a senha que você criar.</p>"
+    )
+    send_mail(
+        email,
+        "Seu acesso ao Patrimônio Revalle",
+        render_email("Crie sua senha", corpo, acao_url=link, acao_rotulo="Criar minha senha"),
+    )
+
+
+def emitir_link(usuario_id: int, convite: bool, reset_db: PasswordResetDBManager) -> str:
+    """Novo link de senha emitido pelo sistema (convite ou envio do Gestor): os links
+    abertos da conta deixam de valer. Convite vale 72 h; o link normal, 30 min. Não
+    entra no limite de pedidos por hora do "Esqueci minha senha". Devolve o token."""
+    agora = _agora_utc()
+    validade = timedelta(hours=CONVITE_VALIDADE_HORAS) if convite else timedelta(minutes=RESET_VALIDADE_MINUTOS)
+    token = secrets.token_urlsafe(32)
+    reset_db.invalidar_abertos(usuario_id, agora)
+    reset_db.criar(usuario_id, sha256_hex(token), agora, agora + validade, None)
+    return token
+
+
+def enviar_email_redefinicao(email: str, username: str, token: str) -> None:
+    """Envia o link de redefinição. Roda numa BackgroundTask: o tempo da resposta
+    não depende do SMTP. Falhas só viram log com mensagem fixa (sem e-mail nem token)."""
     try:
-        send_mail(
-            email,
-            "Redefinição de senha — Patrimônio Revalle",
-            render_email("Redefinir senha", corpo, acao_url=link, acao_rotulo="Redefinir senha"),
-        )
+        enviar_link_senha(email, username, token)
     except MailError:
         logger.error("Falha ao enviar o e-mail de redefinição de senha.")
     except Exception as exc:
@@ -145,7 +179,7 @@ def reset(
     if usuario is None:
         raise HTTPException(status_code=400, detail=MSG_LINK_INVALIDO)
 
-    ok, msg = user_db.update_password(usuario_id, body.nova_senha)
+    ok, msg = user_db.definir_senha_pelo_link(usuario_id, body.nova_senha)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
     reset_db.invalidar_abertos(usuario_id, agora)
@@ -153,6 +187,10 @@ def reset(
     audit.record(
         contexto_auditoria_de(usuario, request),
         "usuario", usuario_id, "redefinir_senha",
-        depois={"senha": "redefinida", "sessoes": "encerradas"},
+        depois={
+            "senha": "redefinida" if usuario.get("senha_definida", 1) else "criada pelo convite",
+            "sessoes": "encerradas",
+            "email_confirmado": True,
+        },
     )
     return MensagemResponse(detail=MSG_SENHA_REDEFINIDA)
