@@ -14,7 +14,13 @@ Produção tem 7 contas, nenhuma com e-mail. Os Gestores ainda não cadastraram 
 - **Migração no próximo login.** Uma conta sem e-mail confirmado entra com usuário e senha e é levada a informar o e-mail. Um código de 6 dígitos é enviado para esse e-mail, e a pessoa só entra no sistema depois de digitar o código. O 2FA do Gestor vem logo depois, no mesmo acesso.
 - **A conta continua a mesma.** Mesmo `id` e mesmo `username`, que fica guardado por dentro e não aparece mais na tela de login. O histórico e a auditoria continuam mostrando quem fez o quê.
 - **Só `@revalle.com.br`.** O domínio fica numa configuração (`LOGIN_EMAIL_DOMINIO`, padrão `revalle.com.br`), sem maiúsculas e com espaços removidos.
-- **Contas novas** são criadas pelo Gestor com e-mail obrigatório. O `username` é gerado a partir da parte antes do `@`; se já existir, ganha um número no fim (`joao.silva2`).
+- **Ninguém sabe a senha de outra pessoa.** Nem o Gestor.
+- **Contas novas** são criadas pelo Gestor só com **e-mail e papel**, sem senha. O `username` é gerado a partir da parte antes do `@`; se já existir, ganha um número no fim (`joao.silva2`).
+  - A conta nasce com uma senha inutilizável (bcrypt de `secrets.token_urlsafe(32)`), `email_confirmado = 0` e `senha_definida = 0`. Enquanto `senha_definida = 0`, o login sempre falha com a mensagem genérica.
+  - O sistema envia um **convite** por e-mail: assunto "Seu acesso ao Patrimônio Revalle", texto "Você recebeu acesso ao sistema de Patrimônio da Revalle. Crie sua senha pelo botão abaixo. O link vale por 72 horas." e botão "Criar minha senha". O link usa a mesma estrutura da redefinição de senha (`password_reset_tokens`), com validade de 72 horas, e aponta para `APP_PUBLIC_URL/redefinir-senha?token=…&convite=1`.
+  - Se o envio falhar, a conta continua criada e a resposta diz "Conta criada, mas não foi possível enviar o e-mail. Use “Reenviar convite”."
+  - Concluir o convite (ou qualquer redefinição pelo link) grava a senha, `senha_definida = 1` e `email_confirmado = 1` (o link chegou àquela caixa de e-mail) e encerra as sessões, como a redefinição já faz. Depois a pessoa entra com e-mail e senha; o Gestor segue para o cadastro do 2FA, sem a etapa do e-mail.
+- **O Gestor envia um link em vez de definir senhas.** A troca de senha pelo Gestor (`PUT /api/users/{id}/password`) deixa de existir. No lugar, `POST /api/users/{id}/enviar-link-senha` manda um novo convite (conta com `senha_definida = 0`) ou um link normal de redefinição (as demais) para o e-mail atual da conta. Os links anteriores daquela conta deixam de valer. Conta sem e-mail: 400 "Cadastre o e-mail desta conta primeiro." Auditoria: `enviar_convite` / `enviar_link_senha`.
 
 ## O que fica de fora
 - Entrar sem senha (link mágico) e login com Google ou Microsoft.
@@ -70,13 +76,16 @@ A resposta traz um `mfa_token` de propósito `"email"` e o e-mail atual, se houv
 
 Migração aditiva nova, com `.down.sql`, na faixa livre seguinte:
 - `usuarios.email_confirmado TINYINT(1) NOT NULL DEFAULT 0`. Todas as contas atuais começam em 0.
+- `usuarios.senha_definida TINYINT(1) NOT NULL DEFAULT 1`. As contas atuais já têm senha (1); as criadas pelo Gestor nascem com 0 até concluírem o convite.
 - Tabela `email_confirmacoes`: `id`, `usuario_id` (FK), `email`, `codigo_hash`, `expira_em`, `tentativas`, `criado_em`.
 - Sem charset ou collation fixos (herda o padrão do banco, Ruling 39).
 
 **Gestor (tela Usuários)**
-- Ao criar uma conta, informa e-mail, senha e papel. O `username` é gerado sozinho.
+- Ao criar uma conta, informa só o e-mail e o papel. O `username` é gerado sozinho e o convite sai por e-mail.
 - Ao editar o e-mail de alguém, o `email_confirmado` volta para 0 e a pessoa confirma no próximo login. A lista mostra o e-mail e se está confirmado.
 - O `username` continua aparecendo na lista, como informação secundária.
+- Cada linha mostra a situação: "Convite pendente" (`senha_definida = 0`), "Aguardando confirmação" (`email_confirmado = 0`) ou "Confirmado". A ação da linha é "Reenviar convite" (convite pendente) ou "Enviar link para criar nova senha" (as demais). `GET /api/users` traz `senha_definida`.
+- Trocar o e-mail de alguém invalida os links de senha ainda abertos daquela conta (o link foi para o e-mail antigo).
 
 **Outras telas**
 - "Esqueci minha senha" só manda o link para e-mail **confirmado**.
@@ -94,3 +103,6 @@ Migração aditiva nova, com `.down.sql`, na faixa livre seguinte:
 - Código de 6 dígitos, válido por 15 minutos, com reenvio após 60 segundos e 5 tentativas.
 - O `username` é gerado da parte antes do `@`.
 - Trocar o próprio e-mail pelo Perfil fica fora desta entrega.
+- O título "Criar sua senha" da tela de redefinição vem do parâmetro `?convite=1` no link do convite, e não de um endpoint que consulta o token: é só o texto da tela (o servidor trata os dois links igual) e não abre um jeito de testar tokens.
+- Qualquer redefinição concluída pelo link marca `email_confirmado = 1`, porque o link só chega à caixa daquele e-mail.
+- Convite e link enviados pelo Gestor não entram no limite de 3 pedidos por hora do "Esqueci minha senha"; os links anteriores da conta são invalidados a cada envio.

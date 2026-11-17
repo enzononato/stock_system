@@ -132,32 +132,51 @@
 - [ ] **Passo 4:** rodar `tests/test_login_email.py` e depois a suíte completa (`-q -m "not mudanca_esperada"`, em segundo plano). Tudo verde.
 - [ ] **Passo 5: commit** `feat(login): entrar com e-mail; contas antigas confirmam o e-mail no próximo acesso`.
 
-### Task 3: Gestor cria e edita contas pelo e-mail
+### Task 3: Gestor cria contas por convite e envia links de senha
+
+> Revisado em 2026-11-17 (mudança do responsável): ninguém sabe a senha de outra pessoa. A conta nasce sem senha utilizável e recebe um convite por e-mail; o Gestor não define mais senhas, só envia links.
 
 **Arquivos:**
+- Modificar `backend/migrations/0900_usuarios_email_login.sql` e `.down.sql`: coluna `usuarios.senha_definida TINYINT(1) NOT NULL DEFAULT 1` (as contas atuais ficam com 1), no mesmo padrão idempotente.
+- Modificar `backend/app/db/user_manager_db.py`:
+  - `add_user(..., senha_definida: bool = True)`; `_CAMPOS_PUBLICOS`, `_CAMPOS_LOGIN` e `get_all_users` incluem `senha_definida`;
+  - `definir_senha_pelo_link(user_id, nova_senha)`: grava a senha com `senha_definida=1` e `email_confirmado=1`;
+  - `update_email` com e-mail diferente invalida os links de senha abertos da conta.
+- Modificar `backend/app/routers/auth.py`, `login`: conta com `senha_definida=0` → 401 genérico (depois do bcrypt).
+- Modificar `backend/app/routers/auth_senha.py`:
+  - `CONVITE_VALIDADE_HORAS = 72`; `emitir_link(usuario, convite: bool) -> str` invalida os links abertos da conta, grava o novo (72 h no convite, 30 min no link normal) e devolve o token;
+  - `enviar_convite(email, token)` e `enviar_link_senha(email, username, token)`, síncronos, que levantam `MailError`;
+  - convite: assunto "Seu acesso ao Patrimônio Revalle", corpo "Você recebeu acesso ao sistema de Patrimônio da Revalle. Crie sua senha pelo botão abaixo. O link vale por 72 horas.", botão "Criar minha senha", link `APP_PUBLIC_URL/redefinir-senha?token=…&convite=1`;
+  - `/reset` passa a usar `definir_senha_pelo_link`.
 - Modificar `backend/app/schemas/users.py`:
-  - `UserCreate`: `email: str` obrigatório, validado com `validar_email_corporativo`, e `username: Optional[str] = None`;
-  - `UserUpdate.email`, quando vem preenchido, também é validado com `validar_email_corporativo`;
-  - `UserResponse` ganha `email_confirmado: bool`.
-- Modificar `backend/app/routers/users.py`, `create_user`:
-  - `username = body.username or user_db.gerar_username(body.email)`;
-  - grava com `email_confirmado=0`; quem entra pela primeira vez confirma o e-mail no login.
-  - `update_user` mantém a auditoria de hoje e passa a zerar `email_confirmado` (via `update_email`).
-- Testes em `backend/tests/test_users.py`:
-  - `test_criar_so_com_email_gera_username`;
-  - `test_criar_com_email_de_fora_422`;
-  - `test_editar_email_zera_confirmacao`;
-  - `test_lista_traz_email_confirmado`.
+  - `UserCreate`: só `email` (obrigatório, `validar_email_corporativo`) e `role`;
+  - `UserUpdate.email`, quando preenchido, também passa por `validar_email_corporativo`;
+  - `UserResponse` ganha `email_confirmado: bool` e `senha_definida: bool`.
+- Modificar `backend/app/routers/users.py`:
+  - `create_user`: `username = gerar_username(email)`, senha = bcrypt de `secrets.token_urlsafe(32)`, `senha_definida=0`, `email_confirmado=0`; envia o convite; auditoria `criar` e `enviar_convite`. Falha no envio → 200 com `"Conta criada, mas não foi possível enviar o e-mail. Use “Reenviar convite”."` e `convite_enviado: false`;
+  - remover `PUT /api/users/{id}/password`;
+  - novo `POST /api/users/{id}/enviar-link-senha` (Gestor): convite se `senha_definida=0`, senão link normal, para o e-mail atual. Sem e-mail → 400 `"Cadastre o e-mail desta conta primeiro."`. Auditoria `enviar_convite` / `enviar_link_senha`. Falha no envio → 503.
+- Testes em `backend/tests/test_users.py` (e ajustes em `test_usuarios_email.py`, `test_audit_fluxos.py`, `test_rbac.py`):
+  - criar sem senha → 1 convite enviado, conta com `senha_definida=0` e `email_confirmado=0`, `username` gerado;
+  - criar com e-mail de fora → 422;
+  - login antes de concluir o convite → 401 genérico;
+  - concluir o convite → `email_confirmado=1`; login pelo e-mail → `ok` (Técnico) ou `cadastro_2fa` (Gestor);
+  - convite com mais de 72 h → recusado;
+  - reenviar invalida o link anterior;
+  - endpoint removido → 404/405;
+  - `enviar-link-senha` por quem não é Gestor → 403; conta sem e-mail → 400;
+  - editar o e-mail zera a confirmação; a lista traz `email_confirmado` e `senha_definida`;
+  - falha no envio do convite mantém a conta criada.
 
 **Interfaces:**
 - Consome `gerar_username` e `validar_email_corporativo` da Task 1.
-- Produz para a Task 4: `GET /api/users` → itens com `{id, username, role, email, email_confirmado, totp_ativo}`, e `POST /api/users {email, password, role}`.
+- Produz para a Task 4: `GET /api/users` → itens com `{id, username, role, email, email_confirmado, senha_definida, totp_ativo}`; `POST /api/users {email, role}` → `{detail, convite_enviado}`; `POST /api/users/{id}/enviar-link-senha` → `{detail}`.
 
-- [ ] **Passo 1:** escrever os 4 testes acima.
+- [ ] **Passo 1:** escrever os testes acima.
 - [ ] **Passo 2:** rodá-los e confirmar que FALHAM.
 - [ ] **Passo 3:** implementar.
-- [ ] **Passo 4:** rodar `tests/test_users.py` e confirmar que passa.
-- [ ] **Passo 5: commit** `feat(usuarios): contas criadas pelo e-mail corporativo; username gerado`.
+- [ ] **Passo 4:** rodar `tests/test_users.py` e a suíte completa.
+- [ ] **Passo 5: commit** `feat(usuarios): contas criadas por convite; Gestor envia link em vez de definir senha`.
 
 ### Task 4: frontend
 
@@ -177,10 +196,12 @@
   - Com 400 de etapa expirada ou "Muitas tentativas", volta para a senha com o aviso.
   - O título da etapa no `CABECALHOS`: "Confirme seu e-mail".
 - Modificar `frontend/src/pages/EsqueciSenhaPage.tsx`: o rótulo do campo passa a ser "E-mail".
-- Modificar `frontend/src/pages/UsersPage.tsx`:
-  - o formulário de criação tem E-mail (obrigatório, com a dica "@revalle.com.br"), Senha e Papel; o campo de usuário sai;
-  - a lista mostra o e-mail como coluna principal e um `StatusPill` "Confirmado" ou "Aguardando confirmação";
-  - o `username` aparece numa coluna secundária "Usuário (histórico)".
+- Modificar `frontend/src/pages/RedefinirSenhaPage.tsx`: com `?convite=1` no link, o título é "Criar sua senha".
+- Modificar `frontend/src/api/users.ts` e `frontend/src/pages/UsersPage.tsx`:
+  - o formulário de criação tem só E-mail (obrigatório, com a dica "@revalle.com.br") e Papel;
+  - a lista mostra o e-mail como coluna principal e um `StatusPill` "Convite pendente", "Aguardando confirmação" ou "Confirmado";
+  - o `username` aparece numa coluna secundária "Usuário (histórico)";
+  - a troca de senha pelo Gestor sai; a ação da linha é "Reenviar convite" (convite pendente) ou "Enviar link para criar nova senha".
 - Modificar `frontend/src/components/layout/TopBar.tsx`: mostra `user.email ?? user.username`. O tipo do usuário em `AuthContext` ganha `email?: string | null`.
 - Testes, com handlers do MSW em `frontend/src/test/handlers.ts`:
   - `LoginPage.test.tsx`:
@@ -189,14 +210,16 @@
     - "reenviar fica desabilitado logo após o envio";
     - "erro 409 de e-mail em uso aparece na etapa".
   - `UsersPage.test.tsx`:
-    - "cria conta só com e-mail, senha e papel";
-    - "mostra Aguardando confirmação".
-  - Ajustar as asserções antigas que procuravam o rótulo "Usuário".
+    - "cria conta só com e-mail e papel";
+    - "mostra Convite pendente, Aguardando confirmação e Confirmado";
+    - "reenviar convite chama enviar-link-senha".
+  - `RedefinirSenhaPage.test.tsx`: "convite mostra Criar sua senha".
+  - Ajustar as asserções antigas que procuravam o rótulo "Usuário" ou a troca de senha pelo Gestor.
 
 **Interfaces:** consome o contrato HTTP das Tasks 2 e 3.
 
 - [ ] **Passo 1:** escrever os testes acima.
-- [ ] **Passo 2:** rodar `npx vitest run src/pages/LoginPage.test.tsx src/pages/UsersPage.test.tsx` e confirmar que FALHAM.
+- [ ] **Passo 2:** rodar `npx vitest run src/pages/LoginPage.test.tsx src/pages/UsersPage.test.tsx src/pages/RedefinirSenhaPage.test.tsx` e confirmar que FALHAM.
 - [ ] **Passo 3:** implementar.
 - [ ] **Passo 4:** rodar `npx vitest run`, `npx tsc --noEmit` e `npm run build`. Tudo verde.
 - [ ] **Passo 5: commit** `feat(login): tela de login por e-mail e etapa de confirmação do e-mail`.
