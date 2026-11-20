@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { http, HttpResponse } from 'msw'
+import { delay, http, HttpResponse } from 'msw'
 import { screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
@@ -492,7 +492,8 @@ describe('RegisterItemPage — dados do coletor', () => {
     renderPage({ pathname: '/register', state: estadoColetor({ brand: 'Dell' }, 'Servidor') })
 
     expect(await screen.findByLabelText(/Marca/)).toHaveValue('Dell')
-    await screen.findByRole('option', { hidden: true, name: 'Notebook' }).catch(() => undefined)
+    // Espera a lista de tipos chegar (o select sai de "carregando"): só então a sugestão poderia valer.
+    await waitFor(() => expect(screen.getByRole('combobox', { name: /Tipo/ })).toBeEnabled())
     expect(screen.getByRole('combobox', { name: /Tipo/ })).not.toHaveTextContent('Servidor')
     expect(screen.queryByText(/Informações Específicas/)).not.toBeInTheDocument()
   })
@@ -603,15 +604,82 @@ describe('RegisterItemPage — dados do coletor', () => {
     expect(logouts).toBe(0)
   })
 
-  it('NF que falhou no fluxo do coletor segue o fluxo atual, sem sair da conta', async () => {
+  it('NF que falhou no fluxo do coletor vai para a edição com os dados e o próximo salvamento sai da conta', async () => {
     mockBase()
     let logouts = 0
     server.use(
       http.post('/api/items', () => HttpResponse.json({ detail: 'ok', id: 44 })),
       http.post('/api/items/44/nota-fiscal', () => HttpResponse.json({ detail: 'falhou' }, { status: 500 })),
-      http.get('/api/items/44', () => HttpResponse.json({ ...itemExistente, id: 44 })),
+      http.get('/api/items/44', () =>
+        HttpResponse.json({ ...itemExistente, id: 44, brand: 'Dell', model: 'Latitude 3420', host: 'NB-001' })
+      ),
+      http.put('/api/items/44', () => HttpResponse.json({ detail: 'ok' })),
       http.post('/api/auth/logout', () => {
         logouts += 1
+        return HttpResponse.json({ detail: 'ok' })
+      })
+    )
+    const user = userEvent.setup()
+    renderPage({
+      pathname: '/register',
+      state: estadoColetor({ brand: 'Dell', model: 'Latitude 3420', host: 'NB-001' }),
+    })
+
+    await screen.findByLabelText('Host')
+    await escolherRevenda(user)
+    await enviarNf(user, arquivoPdf())
+    await user.click(screen.getByRole('button', { name: /Cadastrar Equipamento/ }))
+
+    // Sem sair da conta: vai para a edição do item gravado, que continua no fluxo do coletor.
+    await waitFor(() => expect(screen.getByTestId('rota')).toHaveTextContent('/edit/44'))
+    expect(logouts).toBe(0)
+    expect(await screen.findByText('Dados preenchidos pelo coletor. Confira antes de salvar.')).toBeInTheDocument()
+    // Valores iguais aos já gravados: marcados, mas sem "antes".
+    expect(await screen.findByLabelText('Host')).toHaveValue('NB-001')
+    expect(screen.queryByText(/antes:/)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Salvar Alterações/ }))
+
+    expect(await screen.findByText('Você saiu da sua conta neste computador.')).toBeInTheDocument()
+    expect(logouts).toBe(1)
+    expect(screen.getByTestId('rota')).toHaveTextContent('/coletor/concluido?id=44&saiu=1')
+  })
+
+  it('salvar a edição pelo coletor também sai da conta e mostra a tela final', async () => {
+    mockBase()
+    let corpo: Record<string, unknown> = {}
+    let logouts = 0
+    server.use(
+      http.get('/api/items/9', () => HttpResponse.json(itemExistente)),
+      http.put('/api/items/9', async ({ request }) => {
+        corpo = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json({ detail: 'ok' })
+      }),
+      http.post('/api/auth/logout', () => {
+        logouts += 1
+        return HttpResponse.json({ detail: 'ok' })
+      })
+    )
+    const user = userEvent.setup()
+    renderPage({ pathname: '/edit/9', state: estadoColetor({ host: 'NB-NEW' }) })
+
+    expect(await screen.findByLabelText('Host')).toHaveValue('NB-NEW')
+    await user.click(screen.getByRole('button', { name: /Salvar Alterações/ }))
+
+    expect(await screen.findByText('Máquina cadastrada (#9).')).toBeInTheDocument()
+    expect(await screen.findByText('Você saiu da sua conta neste computador.')).toBeInTheDocument()
+    expect(logouts).toBe(1)
+    expect(corpo).toMatchObject({ host: 'NB-NEW' })
+    expect(screen.getByTestId('rota')).toHaveTextContent('/coletor/concluido?id=9&saiu=1')
+    expect(rotasVisitadas).not.toContain('/login')
+  })
+
+  it('vai para a tela final antes de terminar o logout, sem passar pelo login', async () => {
+    mockBase()
+    server.use(
+      http.post('/api/items', () => HttpResponse.json({ detail: 'ok', id: 42 })),
+      http.post('/api/auth/logout', async () => {
+        await delay(150)
         return HttpResponse.json({ detail: 'ok' })
       })
     )
@@ -620,10 +688,53 @@ describe('RegisterItemPage — dados do coletor', () => {
 
     await screen.findByLabelText('Host')
     await escolherRevenda(user)
-    await enviarNf(user, arquivoPdf())
     await user.click(screen.getByRole('button', { name: /Cadastrar Equipamento/ }))
 
-    await waitFor(() => expect(screen.getByTestId('rota')).toHaveTextContent('/edit/44'))
-    expect(logouts).toBe(0)
+    // Enquanto o logout está em andamento, a tela final já aparece, com aviso neutro.
+    expect(await screen.findByText('Saindo da sua conta…')).toBeInTheDocument()
+    expect(screen.getByText('Máquina cadastrada (#42).')).toBeInTheDocument()
+    expect(screen.getByTestId('rota')).toHaveTextContent('/coletor/concluido?id=42')
+    expect(await screen.findByText('Você saiu da sua conta neste computador.')).toBeInTheDocument()
+    expect(rotasVisitadas).not.toContain('/login')
+  })
+
+  it('não grava campo do coletor que o tipo escolhido não mostra', async () => {
+    mockBase()
+    server.use(
+      http.get('/api/constants', () =>
+        HttpResponse.json({
+          center_costs: [],
+          revendas: ['Revalle Juazeiro', 'Revalle Petrolina'],
+          setores: [],
+          equipment_types: ['Notebook', 'Tablet'],
+          peripheral_types: [],
+          removal_reasons: [],
+          removal_reasons_attachment: {},
+        })
+      )
+    )
+    let corpo: Record<string, unknown> = {}
+    server.use(
+      http.post('/api/items', async ({ request }) => {
+        corpo = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json({ detail: 'ok', id: 45 })
+      }),
+      http.post('/api/auth/logout', () => HttpResponse.json({ detail: 'ok' }))
+    )
+    const user = userEvent.setup()
+    // Tablet não tem "Host": o valor existe no estado, mas ninguém o vê.
+    renderPage({
+      pathname: '/register',
+      state: estadoColetor({ brand: 'Samsung', model: 'Tab A', host: 'NB-1', identificador: 'S1' }, 'Tablet'),
+    })
+
+    await waitFor(() => expect(screen.getByLabelText('Nº de Série')).toHaveValue('S1'))
+    expect(screen.queryByLabelText('Host')).not.toBeInTheDocument()
+    await escolherRevenda(user)
+    await user.click(screen.getByRole('button', { name: /Cadastrar Equipamento/ }))
+
+    expect(await screen.findByText('Máquina cadastrada (#45).')).toBeInTheDocument()
+    expect(corpo).toMatchObject({ tipo: 'Tablet', identificador: 'S1' })
+    expect(corpo).not.toHaveProperty('host')
   })
 })

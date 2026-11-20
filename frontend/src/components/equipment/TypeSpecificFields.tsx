@@ -101,6 +101,11 @@ export function validateTypeSpecificFields(tipo: string, values: Record<string, 
   return null
 }
 
+/** Chaves dos campos específicos que o tipo mostra no formulário. */
+export function chavesDoTipo(tipo: string): string[] {
+  return (TYPE_FIELDS[tipo] ?? []).map((f) => f.key)
+}
+
 interface TypeSpecificFieldsProps {
   tipo: string
   values: Record<string, string>

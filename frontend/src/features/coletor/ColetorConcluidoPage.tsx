@@ -9,6 +9,8 @@ export default function ColetorConcluidoPage() {
   const [params] = useSearchParams()
   const idTexto = params.get('id') ?? ''
   const id = /^\d+$/.test(idTexto) ? idTexto : null
+  // Sem `saiu` o logout ainda está em andamento.
+  const saindo = !params.has('saiu')
   const saiu = params.get('saiu') === '1'
 
   return (
@@ -21,7 +23,11 @@ export default function ColetorConcluidoPage() {
           </h1>
         </div>
 
-        {saiu ? (
+        {saindo ? (
+          <p role="status" className="text-body-sm text-muted-foreground">
+            Saindo da sua conta…
+          </p>
+        ) : saiu ? (
           <p role="status" className="text-body-sm text-foreground">
             Você saiu da sua conta neste computador.
           </p>

@@ -5,7 +5,7 @@ import { createItem, updateItem, getItem, uploadNotaFiscal, baixarNotaFiscal } f
 import { listUnidades } from '@/api/unidades'
 import { LocalSelect } from '@/components/locais/LocalSelect'
 import { MarcaColetor, type CamposMarcados } from '@/components/equipment/MarcaColetor'
-import { TypeSpecificFields, validateTypeSpecificFields } from '@/components/equipment/TypeSpecificFields'
+import { TypeSpecificFields, chavesDoTipo, validateTypeSpecificFields } from '@/components/equipment/TypeSpecificFields'
 import { Button } from '@/components/ui/button'
 import { FileUpload } from '@/components/ui/FileUpload'
 import { Input } from '@/components/ui/input'
@@ -247,19 +247,26 @@ export default function RegisterItemPage({ mode }: Props) {
       if (resultado.erroNf) {
         toast(`Equipamento salvo, mas a nota fiscal não foi anexada: ${resultado.erroNf}`, 'error')
         // Na criação, vai para a edição do item já gravado (anexar a NF de novo lá); na edição, fica na tela.
-        if (mode === 'create') void navigate(`/edit/${resultado.id}`)
+        // Vindo do coletor, leva o mesmo estado: os dados são reaplicados na edição e o próximo
+        // salvamento com sucesso também sai da conta.
+        if (mode === 'create') void navigate(`/edit/${resultado.id}`, estadoColetor ? { state: estadoColetor } : undefined)
         return
       }
       if (saindo) {
         // Fluxo do coletor: o técnico sai da conta neste computador e vê a tela final (pública).
-        // Se o logout falhar, a tela final aparece mesmo assim, com o aviso para sair pelo menu.
+        // Vai para a tela final ANTES do logout: ela está fora da área logada, então ao zerar o
+        // usuário o guard não tem o que redirecionar para o /login. Depois do logout, a mesma tela
+        // é atualizada com o resultado (`navigate` do roteador continua válido com a página já
+        // desmontada). Se o logout falhar, a tela final mostra o aviso para sair pelo menu.
+        const destino = `/coletor/concluido?id=${resultado.id}`
+        void navigate(destino, { replace: true })
         let saiu = true
         try {
           await logout()
         } catch {
           saiu = false
         }
-        void navigate(`/coletor/concluido?id=${resultado.id}&saiu=${saiu ? 1 : 0}`, { replace: true })
+        void navigate(`${destino}&saiu=${saiu ? 1 : 0}`, { replace: true })
         return
       }
       toast(mode === 'create' ? 'Item cadastrado com sucesso!' : 'Item atualizado com sucesso!')
@@ -315,13 +322,17 @@ export default function RegisterItemPage({ mode }: Props) {
       return
     }
 
+    // Só vão os campos específicos que o tipo escolhido mostra na tela: valor de outro tipo (ou
+    // trazido pelo coletor) que ficou escondido não pode ser gravado sem ninguém ter visto.
+    const visiveis = chavesDoTipo(tipo)
+    const camposVisiveis = Object.fromEntries(Object.entries(specificFields).filter(([k]) => visiveis.includes(k)))
     const data: Record<string, unknown> = {
       tipo,
       brand,
       model,
       nota_fiscal: notaFiscal,
       fornecedor,
-      ...specificFields,
+      ...camposVisiveis,
     }
     if (mode === 'create') {
       // Na edição a unidade está travada (só muda pela transferência): não é enviada.

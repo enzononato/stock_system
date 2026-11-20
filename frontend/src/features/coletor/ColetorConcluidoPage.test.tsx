@@ -33,6 +33,15 @@ describe('ColetorConcluidoPage', () => {
     expect(screen.getByText(LEMBRETE)).toBeInTheDocument()
   })
 
+  it('sem saiu o logout ainda está em andamento: mostra o aviso neutro', () => {
+    renderPage('?id=42')
+
+    expect(screen.getByText('Máquina cadastrada (#42).')).toBeInTheDocument()
+    expect(screen.getByText('Saindo da sua conta…')).toBeInTheDocument()
+    expect(screen.queryByText('Você saiu da sua conta neste computador.')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Não foi possível sair/)).not.toBeInTheDocument()
+  })
+
   it('sem id válido não inventa o número', () => {
     renderPage('?saiu=1')
 
