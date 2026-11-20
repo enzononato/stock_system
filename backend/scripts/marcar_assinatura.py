@@ -8,9 +8,9 @@ o marcador:
   texto do termo (a linha de assinatura em branco pode ser coberta);
 - fica à direita do rótulo, ou centralizado sobre a linha, conforme o modelo.
 
-O texto visível dos modelos não muda. O script é idempotente: modelo que já tem o marcador não é
-mexido. Para refazer depois de trocar um modelo: `python scripts/marcar_assinatura.py` (a partir de
-backend/); depois confira o PDF convertido (seção 3 de docs/integracoes/revsign-contrato-patrimonio.md).
+O texto visível dos modelos não muda. O script é idempotente: modelo já marcado só recebe o que faltar
+(keep-with-next). Para refazer depois de trocar um modelo: `python scripts/marcar_assinatura.py` (a partir
+de backend/); depois confira o PDF convertido (seção 3 de docs/integracoes/revsign-contrato-patrimonio.md).
 
 Uso: python scripts/marcar_assinatura.py [arquivo.docx ...]   (sem argumentos: os 15 modelos)
 """
@@ -23,6 +23,7 @@ from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.shared import Pt, RGBColor
+from docx.text.paragraph import Paragraph
 
 MARCADOR = "{{assinatura}}"
 _RE_MARCADOR = re.compile(r"\{\{\s*assinatura\s*\}\}", re.IGNORECASE)
@@ -33,6 +34,10 @@ BRANCO = RGBColor(0xFF, 0xFF, 0xFF)
 # antes de "Assinatura do empregado"; antes dele, para não encostar na linha da data.
 ESPACO_ANTES_TERMO = Pt(6)
 ESPACO_DEPOIS_TERMO = Pt(36)
+
+_W14 = "http://schemas.microsoft.com/office/word/2010/wordml"
+_W14_PARA_ID = f"{{{_W14}}}paraId"
+_W14_TEXT_ID = f"{{{_W14}}}textId"
 
 MODELOS = Path(__file__).resolve().parent.parent / "modelos"
 
@@ -97,9 +102,9 @@ def _marcar_devolucao(doc):
     for filho in list(novo):
         if filho.tag != qn("w:pPr"):
             novo.remove(filho)
-    # o clone herdou o estilo/formatação do rótulo; só interessa a fonte pequena do parágrafo
-    from docx.text.paragraph import Paragraph
-
+    # IDs do Word são únicos por parágrafo: o clone não pode repetir os do rótulo
+    for atributo in (_W14_PARA_ID, _W14_TEXT_ID):
+        novo.attrib.pop(atributo, None)
     marcador = Paragraph(novo, rotulo._parent)
     formato = marcador.paragraph_format
     formato.left_indent = Pt(190)  # depois do rótulo "Assinatura do Colaborador:" (~170 pt)
@@ -108,7 +113,6 @@ def _marcar_devolucao(doc):
     formato.space_after = 0
     formato.line_spacing = 1
     _adicionar_marcador(marcador)
-    marcador._p.get_or_add_pPr()  # garante pPr
     mark = marcador._p.pPr.find(qn("w:rPr"))
     if mark is not None:
         marcador._p.pPr.remove(mark)
@@ -163,6 +167,24 @@ def _marcar_unidade(doc):
     return alvo
 
 
+def ligar_ao_rotulo(doc) -> bool:
+    """Do parágrafo do marcador até o parágrafo anterior ao rótulo "Assinatura…", liga cada um ao seguinte
+    (keep with next): se o termo preenchido passar de página, o campo de assinatura não fica numa página e o
+    rótulo/linha em outra. Idempotente; devolve True se mudou algo."""
+    paragrafos = doc.paragraphs
+    inicio = next((i for i, p in enumerate(paragrafos) if _RE_MARCADOR.search(p.text)), None)
+    if inicio is None:
+        return False
+    mudou = False
+    for p in paragrafos[inicio:]:
+        if p is not paragrafos[inicio] and p.text.strip().startswith("Assinatura"):
+            break
+        if not p.paragraph_format.keep_with_next:
+            p.paragraph_format.keep_with_next = True
+            mudou = True
+    return mudou
+
+
 def tipo_do_modelo(caminho: Path) -> str:
     if caminho.parent.name == "devolucao":
         return "devolucao"
@@ -173,13 +195,16 @@ _MARCADORES = {"devolucao": _marcar_devolucao, "termo": _marcar_termo, "unidade"
 
 
 def marcar(caminho: Path) -> bool:
-    """Marca o modelo. Devolve True se alterou o arquivo, False se já tinha o marcador."""
+    """Marca o modelo. Devolve True se alterou o arquivo, False se já estava como deveria."""
     doc = Document(str(caminho))
-    if tem_marcador(doc):
-        return False
-    _MARCADORES[tipo_do_modelo(caminho)](doc)
-    doc.save(str(caminho))
-    return True
+    mudou = False
+    if not tem_marcador(doc):
+        _MARCADORES[tipo_do_modelo(caminho)](doc)
+        mudou = True
+    mudou = ligar_ao_rotulo(doc) or mudou
+    if mudou:
+        doc.save(str(caminho))
+    return mudou
 
 
 def modelos():
@@ -194,7 +219,7 @@ def main(argv) -> int:
         except ModeloInesperado as exc:
             print(f"ERRO {caminho.name}: {exc}", file=sys.stderr)
             return 1
-        print(f"{'marcado' if alterado else 'já tinha'}: {caminho.name}")
+        print(f"{'alterado' if alterado else 'sem mudança'}: {caminho.name}")
     return 0
 
 

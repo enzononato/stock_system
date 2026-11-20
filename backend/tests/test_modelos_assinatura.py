@@ -97,3 +97,107 @@ def test_pdf_tem_o_marcador(arquivo):
         ["pdftotext", "-", "-"], input=pdf, capture_output=True, check=True, timeout=60,
     ).stdout.decode("utf-8", "replace")
     assert len(re.findall(r"\{\{assinatura\}\}", texto, flags=re.I)) == 1
+
+
+def _rotulo_idx(paragrafos, inicio):
+    return next(
+        i for i, p in enumerate(paragrafos) if i > inicio and p.text.strip().startswith("Assinatura")
+    )
+
+
+@pytest.mark.parametrize("arquivo", ARQUIVOS, ids=lambda p: p.stem)
+def test_marcador_fica_ligado_ao_rotulo(arquivo):
+    """Do marcador até o parágrafo antes de "Assinatura…" tudo é keep-with-next: se o termo preenchido
+    passar de página, o campo de assinatura não pode ficar numa página e o rótulo em outra."""
+    paragrafos = Document(str(arquivo)).paragraphs
+    inicio = next(i for i, p in enumerate(paragrafos) if MARCADOR in p.text.lower())
+    fim = _rotulo_idx(paragrafos, inicio)
+    assert fim > inicio
+    for p in paragrafos[inicio:fim]:
+        assert p.paragraph_format.keep_with_next is True, repr(p.text)
+
+
+@pytest.mark.parametrize("arquivo", sorted((MODELOS / "devolucao").glob("*.docx")), ids=lambda p: p.stem)
+def test_paragrafo_novo_da_devolucao_nao_repete_id_do_word(arquivo):
+    # (o termo.docx original já traz um paraId repetido, anterior a este marcador; aqui só vale o parágrafo novo)
+    ids = Document(str(arquivo)).element.body.xpath("//w:p/@w14:paraId")
+    assert len(ids) == len(set(ids))
+
+
+def test_script_e_idempotente_e_completa_o_que_falta(tmp_path):
+    from scripts.marcar_assinatura import marcar
+
+    for origem in (
+        MODELOS / "termo.docx", MODELOS / "termo_juazeiro.docx",
+        MODELOS / "devolucao" / "termo_devolucao_juazeiro.docx",
+    ):
+        copia = tmp_path / origem.name
+        copia.write_bytes(origem.read_bytes())
+        assert marcar(copia) is False  # já está pronto: não regrava
+        assert copia.read_bytes() == origem.read_bytes()
+
+        doc = Document(str(copia))
+        for p in doc.paragraphs:
+            p.paragraph_format.keep_with_next = None
+        doc.save(str(copia))
+        assert marcar(copia) is True  # refaz só o keep-with-next
+        assert marcar(copia) is False
+        doc = Document(str(copia))
+        assert len(_runs_com_marcador(doc)) == 1
+
+
+def _pagina_do_marcador_e_do_rotulo(docx_bytes: bytes, rotulo: str):
+    from app.services.termo_pdf import docx_para_pdf
+
+    pdf = docx_para_pdf(docx_bytes)
+    paginas = {"marcador": None, "rotulo": None}
+    for pagina in range(1, 9):
+        texto = subprocess.run(
+            ["pdftotext", "-f", str(pagina), "-l", str(pagina), "-", "-"],
+            input=pdf, capture_output=True, timeout=60,  # página inexistente: falha e sai vazio
+        ).stdout.decode("utf-8", "replace")
+        if MARCADOR in texto.lower():
+            paginas["marcador"] = pagina
+        if rotulo in texto:
+            paginas["rotulo"] = pagina
+    return paginas["marcador"], paginas["rotulo"]
+
+
+def _com_espaco_antes_do_marcador(arquivo: Path, pontos: int) -> bytes:
+    """Simula termo preenchido mais longo: espaço extra no parágrafo logo acima do marcador, o que faz o
+    marcador cair em qualquer posição perto do fim da página."""
+    doc = Document(str(arquivo))
+    paragrafos = doc.paragraphs
+    inicio = next(i for i, p in enumerate(paragrafos) if MARCADOR in p.text.lower())
+    paragrafos[inicio - 1].paragraph_format.space_after = Pt(pontos)
+    saida = io.BytesIO()
+    doc.save(saida)
+    return saida.getvalue()
+
+
+requer_pdf = pytest.mark.skipif(
+    shutil.which("soffice") is None or shutil.which("pdftotext") is None,
+    reason="LibreOffice/poppler não instalados",
+)
+
+
+@requer_pdf
+@pytest.mark.parametrize("pontos", [0, 60, 92, 96, 110])
+def test_devolucao_longa_mantem_marcador_e_rotulo_na_mesma_pagina(pontos):
+    arquivo = MODELOS / "devolucao" / "termo_devolucao_juazeiro.docx"
+    marcador, rotulo = _pagina_do_marcador_e_do_rotulo(
+        _com_espaco_antes_do_marcador(arquivo, pontos), "Assinatura do Colaborador"
+    )
+    assert marcador is not None and marcador == rotulo
+    if pontos >= 92:
+        assert marcador == 2  # o caso passou da página: os dois foram juntos para a seguinte
+
+
+@requer_pdf
+@pytest.mark.parametrize("pontos", [416, 448])
+def test_termo_longo_mantem_marcador_e_rotulo_na_mesma_pagina(pontos):
+    marcador, rotulo = _pagina_do_marcador_e_do_rotulo(
+        _com_espaco_antes_do_marcador(MODELOS / "termo.docx", pontos), "Assinatura do empregado"
+    )
+    assert marcador is not None and marcador == rotulo
+    assert marcador == 5  # o termo tem 4 páginas sem o espaço extra
