@@ -37,7 +37,8 @@ from docx import Document as DocxDocument
 
 from app.db import inventory_manager_db as inv_mod
 
-PLACEHOLDER_RE = re.compile(r"\{\{\s*[a-zA-Z_]+\s*\}\}")
+# `{{assinatura}}` fica de propósito no termo final: é onde o RevSign põe o campo de assinatura.
+PLACEHOLDER_RE = re.compile(r"\{\{\s*(?!assinatura\s*\}\})[a-zA-Z_]+\s*\}\}")
 
 
 # ────────────────────────────────────────────────────────────────────────────
