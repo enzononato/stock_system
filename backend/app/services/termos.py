@@ -281,8 +281,14 @@ def enviar(termo_id: int, ctx: AuditContext, *, documento: Optional[DocumentoGer
         raise
     if not gravou:
         # Cancelada (ou enviada por outra rotina) enquanto o termo era preparado.
-        _cancelar_remoto(revsign_id)
-        return termos.obter(termo_id)
+        atual = termos.obter(termo_id)
+        if revsign_id and atual is not None and atual.get("revsign_documento_id") == revsign_id:
+            # Outra rotina enviou a mesma solicitação e o RevSign devolveu o mesmo termo (criar é
+            # idempotente pelo externalId): é o documento guardado, não pode ser cancelado.
+            logger.info("Solicitação %s já enviada por outra rotina com o documento %s.", termo_id, revsign_id)
+        else:
+            _cancelar_remoto(revsign_id)
+        return atual
 
     audit.record(
         ctx, "termo", termo_id, "enviar",
@@ -404,7 +410,11 @@ def reenviar(termo_id: int, ctx: AuditContext) -> dict:
     elif status == "manual":
         if not revsign_ligado():
             raise TermoErro("Integração com o RevSign desligada: use a assinatura manual.")
-        enviar(termo_id, ctx)
+        # Sob a trava da solicitação: dois cliques em "Reenviar" não enviam em paralelo.
+        with trava(termo_id) as pegou:
+            if not pegou:
+                raise TermoErro(MSG_PROCESSANDO)
+            enviar(termo_id, ctx)
     else:
         raise TermoErro("Só é possível reenviar uma solicitação enviada ou em assinatura manual.")
     atual = termos.obter(termo_id)

@@ -443,3 +443,107 @@ def test_reenviar_cedo_demais_mensagem(emprestimo, revsign_fake, monkeypatch):
     with pytest.raises(termos.TermoErro) as exc:
         termos.reenviar(termo["id"], CTX)
     assert str(exc.value) == "Não foi possível reenviar: Aguarde 10 minutos entre reenvios."
+
+
+# ── Envio concorrente (revisão da branch) ────────────────────────────────────
+
+
+def _termo_manual_sem_email(termos, emprestimo, executar_sql, colaborador):
+    """Solicitação `manual` (colaborador sem e-mail) que passa a poder ser enviada."""
+    executar_sql("UPDATE colaboradores SET email=NULL WHERE id=%s", (colaborador["id"],))
+    novo = termos.solicitar(emprestimo, "entrega", CTX)
+    assert novo["status"] == "manual"
+    executar_sql("UPDATE colaboradores SET email='maria.souza@gmail.com' WHERE id=%s", (colaborador["id"],))
+    return novo
+
+
+def _criar_idempotente(revsign_fake, monkeypatch):
+    """Como o RevSign real: criar de novo com o mesmo externalId devolve o mesmo termoId."""
+    from app.services.revsign_client import DocumentoCriado
+
+    por_ref: dict[str, str] = {}
+    original = revsign_fake.criar_documento
+
+    def criar(doc):
+        if doc.referencia_externa in por_ref:
+            return DocumentoCriado(por_ref[doc.referencia_externa])
+        criado = original(doc)
+        por_ref[doc.referencia_externa] = criado.documento_id
+        return criado
+
+    monkeypatch.setattr(revsign_fake, "criar_documento", criar)
+
+
+@pytest.mark.integration
+def test_reenviar_manual_concorrente_recusa_o_segundo_clique(
+    emprestimo, revsign_fake, executar_sql, colaborador, monkeypatch
+):
+    """Repro da revisão: um 2º "Reenviar" durante a conversão do 1º não envia em paralelo."""
+    from app.services import termos
+    from app.services.termos_trava import MSG_PROCESSANDO
+
+    novo = _termo_manual_sem_email(termos, emprestimo, executar_sql, colaborador)
+    _criar_idempotente(revsign_fake, monkeypatch)
+    erros_aninhados = []
+
+    def converter(conteudo, **kw):
+        if not erros_aninhados:
+            with pytest.raises(termos.TermoErro) as exc:
+                termos.reenviar(novo["id"], CTX)
+            erros_aninhados.append(str(exc.value))
+        return b"%PDF-1.4\n"
+
+    monkeypatch.setattr(termos, "docx_para_pdf", converter)
+    termos.reenviar(novo["id"], CTX)
+
+    assert erros_aninhados == [MSG_PROCESSANDO]
+    atual = termos.get_termo_db().obter(novo["id"])
+    assert atual["status"] == "enviado"
+    assert len(revsign_fake.criados) == 1
+    assert revsign_fake.cancelados == []
+
+
+@pytest.mark.integration
+def test_enviar_concorrente_nao_cancela_o_documento_guardado(
+    emprestimo, revsign_fake, executar_sql, colaborador, monkeypatch
+):
+    """Dois `enviar` da mesma solicitação: o RevSign devolve o mesmo termoId aos dois, e o que
+    perde a gravação não pode cancelar o documento que o outro guardou."""
+    from app.services import termos
+
+    novo = _termo_manual_sem_email(termos, emprestimo, executar_sql, colaborador)
+    _criar_idempotente(revsign_fake, monkeypatch)
+    estado = {"aninhado": False}
+
+    def converter(conteudo, **kw):
+        if not estado["aninhado"]:
+            estado["aninhado"] = True
+            assert termos.enviar(novo["id"], CTX)["status"] == "enviado"  # o outro termina antes
+        return b"%PDF-1.4\n"
+
+    monkeypatch.setattr(termos, "docx_para_pdf", converter)
+    termos.enviar(novo["id"], CTX)
+
+    atual = termos.get_termo_db().obter(novo["id"])
+    assert atual["status"] == "enviado"
+    assert atual["revsign_documento_id"] == "1001"
+    assert revsign_fake.cancelados == []
+
+
+@pytest.mark.integration
+def test_enviar_cancelado_durante_o_preparo_cancela_o_documento_novo(
+    emprestimo, revsign_fake, executar_sql, colaborador, monkeypatch
+):
+    """Cancelada enquanto o termo era preparado: o documento recém-criado não fica órfão."""
+    from app.services import termos
+
+    novo = _termo_manual_sem_email(termos, emprestimo, executar_sql, colaborador)
+
+    def converter(conteudo, **kw):
+        termos.cancelar(novo["id"], CTX, "Desistiu")
+        return b"%PDF-1.4\n"
+
+    monkeypatch.setattr(termos, "docx_para_pdf", converter)
+    atual = termos.enviar(novo["id"], CTX)
+    assert atual["status"] == "cancelado"
+    assert revsign_fake.cancelados == ["1001"]
