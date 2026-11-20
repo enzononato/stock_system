@@ -45,7 +45,11 @@ MOTIVO_SITUACAO_MUDOU = "O equipamento mudou de situação antes do envio."
 MOTIVO_ESTORNO = "Operação estornada no histórico."
 MOTIVO_SEM_CANCELAR_REMOTO = " (não foi possível cancelar no RevSign)"
 
+MSG_CONVERSAO_FALHOU = "Não foi possível converter o termo para PDF."
+MSG_JA_ENCERRADO_NO_REVSIGN = "O termo já foi assinado ou encerrado no RevSign; a situação foi atualizada."
+
 _TAMANHO_MAX_MOTIVO = 500
+_TAMANHO_MAX_TITULO = 200  # limite do `title` no RevSign
 
 
 class TermoErro(Exception):
@@ -113,6 +117,25 @@ def _nome_pdf(nome_arquivo: str) -> str:
 
 def _descricao_do_item(item: dict) -> str:
     return " ".join(p for p in (item.get("tipo"), item.get("brand"), item.get("model")) if p)
+
+
+def _titulo(tipo: TipoTermo, item: dict) -> str:
+    """Título do termo no RevSign (até `_TAMANHO_MAX_TITULO`). Corta a descrição do item e
+    mantém inteiro o sufixo com o número do patrimônio."""
+    sufixo = f" (patrimônio #{item['id']})"
+    inicio = f"Termo de {ROTULO_TIPO[tipo]} — {_descricao_do_item(item)}"
+    return inicio[: _TAMANHO_MAX_TITULO - len(sufixo)].rstrip() + sufixo
+
+
+def _converter_para_pdf(conteudo: bytes, termo_id: int) -> bytes:
+    """`docx_para_pdf`, com qualquer erro inesperado tratado como falha de conversão."""
+    try:
+        return docx_para_pdf(conteudo)
+    except ConversaoPdfFalhou:
+        raise
+    except Exception:
+        logger.exception("Erro inesperado ao converter o termo da solicitação %s para PDF.", termo_id)
+        raise ConversaoPdfFalhou(MSG_CONVERSAO_FALHOU) from None
 
 
 def _em_processamento(pendentes: list[dict]) -> list[int]:
@@ -248,13 +271,10 @@ def enviar(termo_id: int, ctx: AuditContext, *, documento: Optional[DocumentoGer
     else:
         try:
             # O RevSign só aceita PDF; o .docx fica guardado em `documento_key` para o download manual.
-            pdf = docx_para_pdf(documento.conteudo)
+            pdf = _converter_para_pdf(documento.conteudo, termo_id)
             criado = get_revsign_client().criar_documento(
                 NovoDocumento(
-                    titulo=(
-                        f"Termo de {ROTULO_TIPO[tipo]} — {_descricao_do_item(item)} "
-                        f"(patrimônio #{item['id']})"
-                    ),
+                    titulo=_titulo(tipo, item),
                     arquivo=pdf,
                     nome_arquivo=_nome_pdf(documento.nome_arquivo),
                     signatario_nome=colaborador["nome"],
@@ -300,14 +320,35 @@ def enviar(termo_id: int, ctx: AuditContext, *, documento: Optional[DocumentoGer
 
 def _cancelar_remoto(revsign_id: Optional[str]) -> bool:
     """Cancela o documento no RevSign em melhor esforço. True se deu certo (ou nada a fazer)."""
+    return _tentar_cancelar_remoto(revsign_id)[0]
+
+
+def _tentar_cancelar_remoto(revsign_id: Optional[str]) -> tuple[bool, Optional[str]]:
+    """Como `_cancelar_remoto`, devolvendo também o código do erro do RevSign (se houver)."""
     if not revsign_id:
-        return True
+        return True, None
     try:
         get_revsign_client().cancelar(revsign_id)
-        return True
-    except Exception:
+        return True, None
+    except Exception as e:
         logger.warning("Não foi possível cancelar o documento %s no RevSign.", revsign_id)
-        return False
+        return False, e.codigo if isinstance(e, RevSignError) else None
+
+
+def _encerrado_no_revsign(termo_id: int) -> dict:
+    """O RevSign recusou o cancelamento com `NOT_PENDING` (contrato §7): o termo já foi assinado,
+    recusado, expirado ou cancelado lá, ou foi assinado e ainda está sendo selado. Sincroniza
+    antes de decidir, para não cancelar aqui uma assinatura que vai chegar. Exige a trava."""
+    from app.services.termos_retorno import _sincronizar_com_trava  # import tardio: evita ciclo
+
+    resultado = _sincronizar_com_trava(termo_id)
+    if resultado == "cancelado":  # cancelado no RevSign: a sincronização já cancelou aqui
+        return get_termo_db().obter(termo_id)
+    if resultado in ("assinado", "recusado", "expirado", "erro"):
+        raise TermoErro(MSG_JA_ENCERRADO_NO_REVSIGN)
+    # Ainda `PENDING` (selando a assinatura) ou falha ao consultar/baixar: decide na próxima vez.
+    logger.warning("Solicitação %s não cancelada: o RevSign já não aceita cancelar (%s).", termo_id, resultado)
+    raise TermoErro(MSG_PROCESSANDO)
 
 
 def _cancelar(termo_id: int, ctx: AuditContext, motivo: str) -> dict:
@@ -317,13 +358,12 @@ def _cancelar(termo_id: int, ctx: AuditContext, motivo: str) -> dict:
         raise TermoErro("Solicitação de termo não encontrada.")
     if termo["status"] not in PENDENTES:
         raise TermoErro("Esta solicitação não está pendente.")
-    if (
-        termo["status"] == "enviado"
-        and termo["revsign_documento_id"]
-        and revsign_ligado()
-        and not _cancelar_remoto(termo["revsign_documento_id"])
-    ):
-        motivo = f"{motivo}{MOTIVO_SEM_CANCELAR_REMOTO}"
+    if termo["status"] == "enviado" and termo["revsign_documento_id"] and revsign_ligado():
+        cancelou, codigo = _tentar_cancelar_remoto(termo["revsign_documento_id"])
+        if codigo == "NOT_PENDING":
+            return _encerrado_no_revsign(termo_id)
+        if not cancelou:
+            motivo = f"{motivo}{MOTIVO_SEM_CANCELAR_REMOTO}"
     motivo = _cortar(motivo)
     if not termos.atualizar(
         termo_id, somente_se_status=PENDENTES,
@@ -342,6 +382,8 @@ def cancelar(termo_id: int, ctx: AuditContext, motivo: str, *, travado: bool = F
 
     Roda sob a mesma trava por solicitação do retorno do RevSign, para não cancelar uma
     solicitação que está sendo confirmada naquele instante. `travado=True`: o chamador já a segura.
+    Se o RevSign recusar o cancelamento porque o termo já não está pendente lá, a solicitação é
+    sincronizada e não é cancelada aqui (ver `_encerrado_no_revsign`).
     """
     if travado:
         return _cancelar(termo_id, ctx, motivo)

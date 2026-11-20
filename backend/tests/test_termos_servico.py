@@ -547,3 +547,125 @@ def test_enviar_cancelado_durante_o_preparo_cancela_o_documento_novo(
     atual = termos.enviar(novo["id"], CTX)
     assert atual["status"] == "cancelado"
     assert revsign_fake.cancelados == ["1001"]
+
+
+# ── Título, conversão e cancelamento recusado pelo RevSign (revisão da branch) ──
+
+
+@pytest.mark.unit
+def test_titulo_corta_a_descricao_e_mantem_o_patrimonio():
+    from app.services.termos import _titulo
+
+    curto = {"id": 7, "tipo": "Notebook", "brand": "Dell", "model": "Latitude"}
+    assert _titulo("entrega", curto) == "Termo de entrega — Notebook Dell Latitude (patrimônio #7)"
+
+    longo = {"id": 123456, "tipo": "T" * 50, "brand": "B" * 100, "model": "M" * 100}
+    titulo = _titulo("devolucao", longo)
+    assert len(titulo) == 200
+    assert titulo.startswith("Termo de devolução — " + "T" * 50)
+    assert titulo.endswith("M (patrimônio #123456)")
+
+
+@pytest.mark.integration
+def test_envio_com_descricao_longa_manda_titulo_de_ate_200(emprestimo, revsign_fake, executar_sql):
+    from app.services import termos
+
+    executar_sql(
+        "UPDATE items SET tipo=%s, brand=%s, model=%s WHERE id=%s", ("T" * 50, "B" * 100, "M" * 100, emprestimo)
+    )
+    termo = termos.solicitar(emprestimo, "entrega", CTX)
+    assert termo["status"] == "enviado"
+    titulo = revsign_fake.criados[0].titulo
+    assert len(titulo) <= 200
+    assert titulo.endswith(f"(patrimônio #{emprestimo})")
+
+
+@pytest.mark.integration
+def test_erro_inesperado_na_conversao_fica_manual(emprestimo, revsign_fake, monkeypatch, caplog):
+    import logging
+
+    from app.services import termos
+
+    def quebrar(conteudo, **kw):
+        raise OSError("soffice sumiu")
+
+    monkeypatch.setattr(termos, "docx_para_pdf", quebrar)
+    with caplog.at_level(logging.ERROR, logger="app.services.termos"):
+        termo = termos.solicitar(emprestimo, "entrega", CTX)
+    assert termo["status"] == "manual"
+    assert termo["motivo"] == "Não foi possível converter o termo para PDF. Assinatura manual."
+    assert "soffice" not in termo["motivo"]
+    assert revsign_fake.criados == []
+    assert any(r.exc_info and "converter o termo" in r.getMessage() for r in caplog.records)
+
+
+def _recusar_cancelamento(revsign_fake, monkeypatch):
+    from app.services.revsign_client import RevSignError
+
+    def cancelar(documento_id, motivo=None):
+        raise RevSignError("O termo já não está pendente no RevSign.", "NOT_PENDING")
+
+    monkeypatch.setattr(revsign_fake, "cancelar", cancelar)
+
+
+@pytest.mark.integration
+def test_cancelar_termo_ja_assinado_no_revsign_conclui_e_nao_cancela(
+    emprestimo, revsign_fake, monkeypatch, inv_manager
+):
+    from app.services import termos
+
+    termo = termos.solicitar(emprestimo, "entrega", CTX)
+    revsign_fake.marcar_assinado(termo["revsign_documento_id"])
+    _recusar_cancelamento(revsign_fake, monkeypatch)
+
+    with pytest.raises(termos.TermoErro) as exc:
+        termos.cancelar(termo["id"], CTX, "Pedido duplicado")
+    assert str(exc.value) == "O termo já foi assinado ou encerrado no RevSign; a situação foi atualizada."
+    atual = termos.get_termo_db().obter(termo["id"])
+    assert atual["status"] == "assinado"
+    assert atual["arquivo_assinado_key"]
+    assert inv_manager.find(emprestimo)["status"] != "Pendente"  # a confirmação foi aplicada
+    assert linhas_audit("termo", "cancelar") == []
+
+
+@pytest.mark.integration
+def test_cancelar_termo_recusado_no_revsign_atualiza_e_avisa(emprestimo, revsign_fake, monkeypatch):
+    from app.services import termos
+
+    termo = termos.solicitar(emprestimo, "entrega", CTX)
+    revsign_fake.marcar(termo["revsign_documento_id"], "recusado", "Não é meu")
+    _recusar_cancelamento(revsign_fake, monkeypatch)
+
+    with pytest.raises(termos.TermoErro, match="já foi assinado ou encerrado no RevSign"):
+        termos.cancelar(termo["id"], CTX, "Pedido duplicado")
+    atual = termos.get_termo_db().obter(termo["id"])
+    assert atual["status"] == "recusado" and atual["motivo"] == "Não é meu"
+
+
+@pytest.mark.integration
+def test_cancelar_termo_ja_cancelado_no_revsign_devolve_cancelado(emprestimo, revsign_fake, monkeypatch):
+    from app.services import termos
+
+    termo = termos.solicitar(emprestimo, "entrega", CTX)
+    revsign_fake.marcar(termo["revsign_documento_id"], "cancelado")
+    _recusar_cancelamento(revsign_fake, monkeypatch)
+
+    atual = termos.cancelar(termo["id"], CTX, "Pedido duplicado")
+    assert atual["status"] == "cancelado"
+    assert atual["motivo"] == "Cancelado no RevSign."
+
+
+@pytest.mark.integration
+def test_cancelar_termo_sendo_selado_no_revsign_nao_cancela(emprestimo, revsign_fake, monkeypatch):
+    """Assinado e ainda selando: o RevSign segue `PENDING` mas já recusa cancelar. Não cancela
+    aqui (a assinatura vai chegar); o usuário recebe "em processamento"."""
+    from app.services import termos
+    from app.services.termos_trava import MSG_PROCESSANDO
+
+    termo = termos.solicitar(emprestimo, "entrega", CTX)
+    _recusar_cancelamento(revsign_fake, monkeypatch)
+
+    with pytest.raises(termos.TermoErro) as exc:
+        termos.cancelar(termo["id"], CTX, "Pedido duplicado")
+    assert str(exc.value) == MSG_PROCESSANDO
+    assert termos.get_termo_db().obter(termo["id"])["status"] == "enviado"

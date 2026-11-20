@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 PDF_FAKE = b"%PDF-1.4\n% termo assinado (falso)\n"
 CABECALHO_TIMESTAMP = "X-RevSign-Timestamp"
 CABECALHO_ASSINATURA = "X-RevSign-Signature"
+CABECALHO_SHA256_PDF = "X-RevSign-SHA256"
 JANELA_WEBHOOK_SEGUNDOS = 300
 MAX_DIGITOS_TIMESTAMP = 12
 MENSAGEM_CONVITE = "Revalle · Patrimônio: assine o termo do equipamento sob sua responsabilidade."
@@ -62,6 +63,7 @@ _MENSAGEM_POR_CODIGO = {
     "RESEND_TOO_SOON": "Aguarde 10 minutos entre reenvios.",
     "NOT_PENDING": "O termo já não está pendente no RevSign.",
     "RATE_LIMITED": "RevSign ocupado; tente de novo em instantes.",
+    "INVALID_REQUEST": "O RevSign recusou os dados do termo.",
 }
 
 
@@ -430,6 +432,14 @@ class HttpRevSignClient(_ValidadorWebhook):
             raise RevSignError("PDF assinado maior que o limite permitido.")
         if not conteudo.startswith(b"%PDF"):
             raise RevSignError("O RevSign não devolveu um PDF.")
+        # Contrato §6: o hash do PDF selado vem no cabeçalho; sem ele, só os testes acima valem.
+        esperado = resp.headers.get(CABECALHO_SHA256_PDF)
+        if esperado:
+            obtido = hashlib.sha256(conteudo).hexdigest()
+            if obtido.lower() != esperado.strip().lower():
+                logger.warning("PDF assinado do documento %s com SHA-256 diferente do anunciado.", documento_id)
+                raise RevSignError("O PDF assinado chegou corrompido do RevSign.")
+            logger.info("PDF assinado do documento %s baixado (SHA-256 %s).", documento_id, obtido)
         return conteudo
 
 

@@ -184,6 +184,7 @@ def test_criar_duplicado_sem_termo_id_levanta():
         (429, "RESEND_TOO_SOON", "Aguarde 10 minutos entre reenvios."),
         (409, "NOT_PENDING", "O termo já não está pendente no RevSign."),
         (429, "RATE_LIMITED", "RevSign ocupado; tente de novo em instantes."),
+        (400, "INVALID_REQUEST", "O RevSign recusou os dados do termo."),
     ],
 )
 def test_criar_erro_vira_mensagem(status, codigo, mensagem):
@@ -318,6 +319,32 @@ def test_baixar_pdf():
     cliente = _cliente(lambda r: httpx.Response(200, content=b"<html>"))
     with pytest.raises(RevSignError):
         cliente.baixar_assinado("envelope_x")
+
+
+@pytest.mark.parametrize("transforma", [str.lower, str.upper])
+def test_baixar_confere_o_sha256_anunciado(transforma, caplog):
+    import logging
+
+    conteudo = b"%PDF-1.7 conteudo selado"
+    hash_ok = transforma(hashlib.sha256(conteudo).hexdigest())
+    cliente = _cliente(lambda r: httpx.Response(200, content=conteudo, headers={"X-RevSign-SHA256": hash_ok}))
+    with caplog.at_level(logging.INFO, logger="app.services.revsign_client"):
+        assert cliente.baixar_assinado("envelope_x") == conteudo
+    assert any("envelope_x" in r.getMessage() and hash_ok.lower() in r.getMessage() for r in caplog.records)
+
+
+def test_baixar_com_sha256_diferente_levanta():
+    conteudo = b"%PDF-1.7 conteudo selado"
+    outro = hashlib.sha256(b"outro").hexdigest()
+    cliente = _cliente(lambda r: httpx.Response(200, content=conteudo, headers={"X-RevSign-SHA256": outro}))
+    with pytest.raises(RevSignError) as exc:
+        cliente.baixar_assinado("envelope_x")
+    assert str(exc.value) == "O PDF assinado chegou corrompido do RevSign."
+
+
+def test_baixar_sem_cabecalho_sha256_aceita():
+    cliente = _cliente(lambda r: httpx.Response(200, content=b"%PDF-1.7 x"))
+    assert cliente.baixar_assinado("envelope_x") == b"%PDF-1.7 x"
 
 
 def test_baixar_nao_assinado_levanta_com_codigo():
