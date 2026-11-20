@@ -247,6 +247,33 @@ describe('RegisterItemPage — cadastro', () => {
     expect(await screen.findByRole('heading', { name: 'Editar Equipamento' })).toBeInTheDocument()
     expect(postsItem).toBe(1)
   })
+
+  it('Notebook e Desktop exibem o campo Nº de Série logo após o Host', async () => {
+    mockBase()
+    server.use(
+      http.get('/api/constants', () =>
+        HttpResponse.json({
+          center_costs: [],
+          revendas: ['Revalle Juazeiro', 'Revalle Petrolina'],
+          setores: [],
+          equipment_types: ['Notebook', 'Desktop'],
+          peripheral_types: [],
+          removal_reasons: [],
+          removal_reasons_attachment: {},
+        })
+      )
+    )
+    const user = userEvent.setup()
+    renderPage('/register')
+
+    for (const tipo of ['Notebook', 'Desktop']) {
+      await user.click(await screen.findByRole('combobox', { name: /Tipo/ }))
+      await user.click(await screen.findByRole('option', { name: tipo }))
+      const host = screen.getByLabelText('Host')
+      const serie = screen.getByLabelText('Nº de Série')
+      expect(host.compareDocumentPosition(serie) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    }
+  })
 })
 
 describe('RegisterItemPage — edição', () => {

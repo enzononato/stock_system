@@ -30,6 +30,7 @@ const TYPE_FIELDS: Record<string, FieldConfig[]> = {
   Notebook: [
     { key: 'dominio', label: 'Domínio', type: 'select', options: ['Sim', 'Não'] },
     { key: 'host', label: 'Host' },
+    { key: 'identificador', label: 'Nº de Série' },
     { key: 'endereco_fisico', label: 'Endereço Físico (MAC)', mask: maskMacInput, validate: isValidMac, invalidMessage: 'MAC inválido.' },
     { key: 'cpu', label: 'Processador (CPU)' },
     { key: 'ram', label: 'Memória RAM' },
@@ -41,6 +42,7 @@ const TYPE_FIELDS: Record<string, FieldConfig[]> = {
   Desktop: [
     { key: 'dominio', label: 'Domínio', type: 'select', options: ['Sim', 'Não'] },
     { key: 'host', label: 'Host' },
+    { key: 'identificador', label: 'Nº de Série' },
     { key: 'endereco_fisico', label: 'Endereço Físico (MAC)', mask: maskMacInput, validate: isValidMac, invalidMessage: 'MAC inválido.' },
     { key: 'cpu', label: 'Processador (CPU)' },
     { key: 'ram', label: 'Memória RAM' },
