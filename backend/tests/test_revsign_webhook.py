@@ -210,6 +210,43 @@ def test_id_de_documento_que_nao_bate_com_a_referencia_e_ignorado(
     assert _termo(termo["id"])["status"] == "enviado"
 
 
+def test_referencia_com_documento_diferente_registra_aviso(
+    client, client_gestor, item_disponivel, colaborador, unidade_juazeiro, revsign_fake, caplog
+):
+    """O externalId é de uma solicitação nossa, mas o documento não é o guardado (ex.: criação
+    que deu timeout e ficou manual): o evento é ignorado com aviso no log, sem segredos."""
+    import logging
+
+    termo = _emprestar(client_gestor, item_disponivel["id"], colaborador["id"])
+    with caplog.at_level(logging.WARNING, logger="app.services.termos_retorno"):
+        resp = postar_webhook(client, evento_webhook("termo.signed", "9999", termo["id"]))
+    assert resp.json()["resultado"] == "nao_encontrado"
+    avisos = [r.getMessage() for r in caplog.records if r.name == "app.services.termos_retorno"]
+    assert len(avisos) == 1
+    assert "9999" in avisos[0] and str(termo["id"]) in avisos[0] and "1001" in avisos[0]
+    assert SEGREDO_WEBHOOK not in avisos[0]
+
+
+def test_referencia_sem_documento_guardado_registra_aviso(
+    client, client_gestor, item_disponivel, colaborador, unidade_juazeiro, revsign_fake, caplog, monkeypatch
+):
+    import logging
+
+    from app.services.revsign_client import RevSignError
+
+    def criar(doc):
+        raise RevSignError("RevSign indisponível.")  # timeout nas duas tentativas
+
+    monkeypatch.setattr(revsign_fake, "criar_documento", criar)
+    termo = _emprestar(client_gestor, item_disponivel["id"], colaborador["id"])
+    assert _termo(termo["id"])["status"] == "manual"
+    with caplog.at_level(logging.WARNING, logger="app.services.termos_retorno"):
+        resp = postar_webhook(client, evento_webhook("termo.sent", "envelope_orfao", termo["id"]))
+    assert resp.json()["resultado"] == "nao_encontrado"
+    avisos = [r.getMessage() for r in caplog.records if r.name == "app.services.termos_retorno"]
+    assert len(avisos) == 1 and "envelope_orfao" in avisos[0] and "nenhum" in avisos[0]
+
+
 def test_recusado_marca_recusado(
     client, client_gestor, item_disponivel, colaborador, unidade_juazeiro, revsign_fake
 ):

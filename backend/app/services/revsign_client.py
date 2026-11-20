@@ -359,7 +359,20 @@ class HttpRevSignClient(_ValidadorWebhook):
     # -- operações -----------------------------------------------------------
 
     def criar_documento(self, doc: NovoDocumento) -> DocumentoCriado:
+        """Cria o termo. Criar é idempotente pelo `externalId` (contrato §2: repetir cria ou
+        devolve o termo existente), então uma falha de transporte (sem `error.code`: timeout,
+        conexão caída, resposta sem corpo do contrato) é repetida uma vez — o RevSign pode ter
+        criado o termo antes de a resposta se perder, e sem a repetição ele ficaria órfão."""
         self._exigir_configuracao()
+        try:
+            return self._criar(doc)
+        except RevSignError as e:
+            if e.codigo is not None:
+                raise
+            logger.warning("Criação do termo %s no RevSign falhou sem código; nova tentativa.", doc.referencia_externa)
+        return self._criar(doc)
+
+    def _criar(self, doc: NovoDocumento) -> DocumentoCriado:
         try:
             resp = self._requisitar(
                 "POST",
@@ -376,7 +389,7 @@ class HttpRevSignClient(_ValidadorWebhook):
                 files={"file": (doc.nome_arquivo, doc.arquivo, "application/pdf")},
             )
         except RevSignError as e:
-            # Criar é idempotente: depois de uma falha de rede o termo pode já existir.
+            # O termo já existe (criação anterior cuja resposta se perdeu): vale o mesmo termoId.
             if e.codigo == "DUPLICATE_EXTERNAL_ID" and e.termo_id:
                 return DocumentoCriado(e.termo_id)
             raise

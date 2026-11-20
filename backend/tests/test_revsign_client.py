@@ -108,6 +108,8 @@ def test_criar_duplicado_reaproveita_termo():
 
 
 def test_criar_depois_de_falha_de_rede_repete_e_reaproveita():
+    """Timeout depois de o RevSign criar o termo: a repetição automática recebe o 409 com o
+    termoId existente (contrato §2), e o termo não fica órfão."""
     chamadas = []
 
     def handler(request):
@@ -117,10 +119,48 @@ def test_criar_depois_de_falha_de_rede_repete_e_reaproveita():
         return httpx.Response(409, json={"error": {"code": "DUPLICATE_EXTERNAL_ID", "termoId": "envelope_z"}})
 
     cliente = _cliente(handler)
-    with pytest.raises(RevSignError):
-        cliente.criar_documento(_novo_doc())
     assert cliente.criar_documento(_novo_doc()) == DocumentoCriado("envelope_z")
     assert len(chamadas) == 2
+
+
+def test_criar_repete_uma_vez_apos_falha_de_transporte():
+    chamadas = []
+
+    def handler(request):
+        chamadas.append(request)
+        if len(chamadas) == 1:
+            raise httpx.ConnectError("x")
+        return httpx.Response(201, json={"termoId": "envelope_w", "status": "PENDING"})
+
+    assert _cliente(handler).criar_documento(_novo_doc()) == DocumentoCriado("envelope_w")
+    assert len(chamadas) == 2
+    assert _campos_multipart(chamadas[0]) == _campos_multipart(chamadas[1])  # o mesmo pedido
+
+
+def test_criar_falha_de_transporte_nas_duas_tentativas_levanta():
+    chamadas = []
+
+    def handler(request):
+        chamadas.append(request)
+        raise httpx.ReadTimeout("x")
+
+    with pytest.raises(RevSignError) as exc:
+        _cliente(handler).criar_documento(_novo_doc())
+    assert str(exc.value) == "RevSign indisponível."
+    assert exc.value.codigo is None
+    assert len(chamadas) == 2  # só uma repetição
+
+
+def test_criar_erro_com_codigo_nao_repete():
+    chamadas = []
+
+    def handler(request):
+        chamadas.append(request)
+        return httpx.Response(422, json={"error": {"code": "INVALID_CPF"}})
+
+    with pytest.raises(RevSignError):
+        _cliente(handler).criar_documento(_novo_doc())
+    assert len(chamadas) == 1
 
 
 def test_criar_duplicado_sem_termo_id_levanta():
