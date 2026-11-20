@@ -242,6 +242,8 @@ def enviar(termo_id: int, ctx: AuditContext, *, documento: Optional[DocumentoGer
                     signatario_nome=colaborador["nome"],
                     signatario_email=email,
                     referencia_externa=referencia_externa(termo_id),
+                    tipo="DEVOLUCAO" if tipo == "devolucao" else "ENTREGA",
+                    signatario_cpf="".join(ch for ch in str(colaborador.get("cpf") or "") if ch.isdigit()),
                 )
             )
             status, revsign_id = "enviado", criado.documento_id

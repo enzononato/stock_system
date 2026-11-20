@@ -4,56 +4,80 @@ O restante do sistema só conhece `RevSignClient`, `NovoDocumento`, `StatusDocum
 `EventoWebhook`; o contrato HTTP fica todo neste módulo. A integração só é usada com
 `REVSIGN_ENABLED=true` (padrão `false`).
 
-PREMISSAS DO CONTRATO (a confirmar/ajustar quando a sessão do RevSign entregar o contrato
-definitivo; tudo que depende delas está concentrado em `HttpRevSignClient`):
+Contrato: API dedicada do RevSign para o Patrimônio
+(`docs/integracoes/revsign-contrato-patrimonio.md`).
 
-1. API v2 do Documenso v2.21.1, rotas "document" (marcadas como deprecated em favor da
-   Envelope API).
-2. `POST /api/v2/document/create` multipart (`payload` JSON + `file` .docx, convertido pelo
-   Gotenberg do RevSign) cria o rascunho e `POST /api/v2/document/distribute` envia o e-mail.
-3. Autenticação `Authorization: Bearer <REVSIGN_API_TOKEN>`.
-4. Campo de assinatura obrigatório (o Documenso recusa enviar sem campo `SIGNATURE`): posição
-   fixa `CAMPO_ASSINATURA` na página 1 até o contrato dizer outra coisa.
-5. Signatário com e-mail pessoal depende da alteração do RevSign (spec, seção 2).
-6. `GET /api/v2/document/{id}` traz `status` (`DRAFT|PENDING|COMPLETED|REJECTED|CANCELLED`),
-   `completedAt` e `recipients[]` (`id`, `signingStatus`, `signedAt`, `rejectionReason`,
-   `expiresAt`).
-7. `GET /api/v2/document/{id}/download` devolve o PDF assinado.
-8. `POST /api/v2/document/delete` cancela/apaga; `POST /api/v2/document/redistribute` reenvia.
-9. Webhook com corpo `{event, payload: {id, externalId, ...}, createdAt, webhookEndpoint}` e
-   cabeçalho `X-Documenso-Secret`; eventos úteis `DOCUMENT_COMPLETED`, `DOCUMENT_REJECTED`,
-   `DOCUMENT_CANCELLED`, `RECIPIENT_EXPIRED`.
-10. O Documenso recusa URL de webhook privada: cadastrar a URL pública
-    `<APP_PUBLIC_URL>/api/integrations/revsign/webhook`.
+- `REVSIGN_BASE_URL` é a base completa (ex.: `.../api/revalle/patrimonio/v1`); o cliente só
+  acrescenta `/termos…`.
+- Autenticação `Authorization: Bearer <REVSIGN_API_TOKEN>`.
+- `POST /termos` (multipart, PDF) cria e envia; `GET /termos/{id}` consulta;
+  `POST /termos/{id}/cancelar` e `/reenviar`; `GET /termos/{id}/pdf` baixa o PDF selado.
+- Erros: `{"error": {"code", "message"}}`; a mensagem mostrada ao usuário vem de um mapa fixo
+  (a do servidor nunca é repassada).
+- Webhook: HMAC-SHA256 (`sha256=<hex>`) de `timestamp + "." + corpo bruto` com o segredo
+  compartilhado, nos cabeçalhos `X-RevSign-Timestamp` e `X-RevSign-Signature`, janela de 300 s.
 
-Nenhuma mensagem de erro deste módulo inclui o token da API.
+Nenhuma mensagem de erro deste módulo inclui o token da API nem o segredo do webhook.
 """
+import hashlib
 import hmac
 import json
 import logging
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Literal, Mapping, Optional, Protocol
+from urllib.parse import quote
 
 import httpx
 
 logger = logging.getLogger(__name__)
 
 PDF_FAKE = b"%PDF-1.4\n% termo assinado (falso)\n"
-CABECALHO_SEGREDO = "X-Documenso-Secret"
-API_PREFIXO = "/api/v2"
-MIME_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-CAMPO_ASSINATURA = {"type": "SIGNATURE", "pageNumber": 1, "pageX": 10, "pageY": 80, "width": 35, "height": 8}
+CABECALHO_TIMESTAMP = "X-RevSign-Timestamp"
+CABECALHO_ASSINATURA = "X-RevSign-Signature"
+JANELA_WEBHOOK_SEGUNDOS = 300
+MENSAGEM_CONVITE = "Revalle · Patrimônio: assine o termo do equipamento sob sua responsabilidade."
 
 Situacao = Literal["pendente", "assinado", "recusado", "expirado", "cancelado"]
 
+_SITUACAO_POR_STATUS: dict[str, Situacao] = {
+    "PENDING": "pendente",
+    "SIGNED": "assinado",
+    "REJECTED": "recusado",
+    "EXPIRED": "expirado",
+    "CANCELLED": "cancelado",
+}
+
+_MENSAGEM_POR_CODIGO = {
+    "UNAUTHORIZED": "Chave da integração com o RevSign recusada.",
+    "NOT_CONFIGURED": "Integração desligada no RevSign.",
+    "INVALID_CPF": "CPF do colaborador recusado pelo RevSign.",
+    "COLABORADOR_NOT_FOUND": "Colaborador não está na base do RH do RevSign.",
+    "HR_BASE_UNAVAILABLE": "Base do RH do RevSign fora do ar.",
+    "MARKER_NOT_FOUND": "O termo não tem o marcador de assinatura.",
+    "INVALID_FILE": "O RevSign recusou o PDF do termo.",
+    "FILE_TOO_LARGE": "PDF do termo maior que 10 MB.",
+    "RESEND_TOO_SOON": "Aguarde 10 minutos entre reenvios.",
+    "NOT_PENDING": "O termo já não está pendente no RevSign.",
+    "RATE_LIMITED": "RevSign ocupado; tente de novo em instantes.",
+}
+
 
 class RevSignError(Exception):
-    """Falha ao falar com o RevSign (mensagem segura para log e para o usuário)."""
+    """Falha ao falar com o RevSign (mensagem segura para log e para o usuário).
+
+    `codigo` é o `error.code` do contrato, quando houver; `str(e)` é a mensagem em português.
+    """
+
+    def __init__(self, mensagem: str, codigo: Optional[str] = None, *, termo_id: Optional[str] = None):
+        super().__init__(mensagem)
+        self.codigo = codigo
+        self.termo_id = termo_id  # `error.termoId` do 409 DUPLICATE_EXTERNAL_ID
 
 
 class WebhookInvalido(RevSignError):
-    """Webhook sem o segredo correto."""
+    """Webhook sem assinatura válida (ou fora da janela de tempo)."""
 
 
 class WebhookMalformado(RevSignError):
@@ -63,11 +87,13 @@ class WebhookMalformado(RevSignError):
 @dataclass(frozen=True)
 class NovoDocumento:
     titulo: str
-    arquivo: bytes
-    nome_arquivo: str
+    arquivo: bytes  # PDF
+    nome_arquivo: str  # termina em .pdf
     signatario_nome: str
     signatario_email: str
     referencia_externa: str
+    tipo: Literal["ENTREGA", "DEVOLUCAO"]
+    signatario_cpf: str  # só dígitos
 
 
 @dataclass(frozen=True)
@@ -85,8 +111,14 @@ class StatusDocumento:
 @dataclass(frozen=True)
 class EventoWebhook:
     tipo: str
-    documento_id: Optional[str]
-    referencia_externa: Optional[str]
+    documento_id: Optional[str]  # `termoId`
+    referencia_externa: Optional[str]  # `externalId`
+
+
+def assinar_webhook(segredo: str, corpo: bytes, timestamp: int) -> dict[str, str]:
+    """Cabeçalhos que o RevSign envia no webhook (usado pelos testes e pelo falso)."""
+    mac = hmac.new(segredo.encode("utf-8"), str(timestamp).encode() + b"." + corpo, hashlib.sha256)
+    return {CABECALHO_TIMESTAMP: str(timestamp), CABECALHO_ASSINATURA: "sha256=" + mac.hexdigest()}
 
 
 class RevSignClient(Protocol):
@@ -94,7 +126,7 @@ class RevSignClient(Protocol):
 
     def consultar(self, documento_id: str) -> StatusDocumento: ...
 
-    def cancelar(self, documento_id: str) -> None: ...
+    def cancelar(self, documento_id: str, motivo: Optional[str] = None) -> None: ...
 
     def reenviar(self, documento_id: str) -> None: ...
 
@@ -106,42 +138,49 @@ class RevSignClient(Protocol):
 class _ValidadorWebhook:
     """Validação do webhook, comum ao cliente HTTP e ao falso.
 
-    O corpo é dado não confiável: só `event`, `payload.id` e `payload.externalId` são lidos,
-    e o status que ele eventualmente traga nunca é usado (a fonte da verdade é `consultar`).
+    Confere o HMAC-SHA256 de `timestamp + "." + corpo bruto` e a janela de 300 s. O corpo
+    é dado não confiável: só `event`, `termoId` e `externalId` são lidos, e o status que ele
+    eventualmente traga nunca é usado (a fonte da verdade é `consultar`).
     """
 
     def __init__(self, webhook_secret: str):
         self._webhook_secret = webhook_secret or ""
 
+    @staticmethod
+    def _cabecalho(headers: Mapping[str, str], nome: str) -> Optional[str]:
+        for chave, valor in headers.items():
+            if chave.lower() == nome.lower():
+                return str(valor)
+        return None
+
     def validar_webhook(self, headers: Mapping[str, str], corpo: bytes) -> EventoWebhook:
         if not self._webhook_secret:
             raise WebhookInvalido("Segredo do webhook não configurado.")
-        recebido = None
-        for nome, valor in headers.items():
-            if nome.lower() == CABECALHO_SEGREDO.lower():
-                recebido = valor
-                break
-        if recebido is None or not hmac.compare_digest(
-            str(recebido).encode("utf-8"), self._webhook_secret.encode("utf-8")
-        ):
-            raise WebhookInvalido("Segredo do webhook inválido.")
+        timestamp = self._cabecalho(headers, CABECALHO_TIMESTAMP)
+        assinatura = self._cabecalho(headers, CABECALHO_ASSINATURA)
+        if timestamp is None or assinatura is None:
+            raise WebhookInvalido("Assinatura do webhook ausente.")
+        if not (timestamp.isascii() and timestamp.isdigit()):
+            raise WebhookInvalido("Assinatura do webhook inválida.")
+        esperado = assinar_webhook(self._webhook_secret, corpo, int(timestamp))[CABECALHO_ASSINATURA]
+        # O HMAC é sempre conferido (tempo constante), com ou sem janela válida.
+        assinatura_ok = hmac.compare_digest(esperado.encode("utf-8"), assinatura.encode("utf-8"))
+        dentro_da_janela = abs(time.time() - int(timestamp)) <= JANELA_WEBHOOK_SEGUNDOS
+        if not (assinatura_ok and dentro_da_janela):
+            raise WebhookInvalido("Assinatura do webhook inválida.")
         try:
             dados = json.loads(corpo)
         except (ValueError, UnicodeDecodeError):
             raise WebhookMalformado("Corpo do webhook inválido.") from None
         if not isinstance(dados, dict) or not isinstance(dados.get("event"), str):
             raise WebhookMalformado("Corpo do webhook inválido.")
-        payload = dados.get("payload")
-        documento_id: Optional[str] = None
-        referencia: Optional[str] = None
-        if isinstance(payload, dict):
-            bruto = payload.get("id")
-            if isinstance(bruto, (int, str)) and not isinstance(bruto, bool):
-                documento_id = str(bruto)
-            externo = payload.get("externalId")
-            if isinstance(externo, str):
-                referencia = externo
-        return EventoWebhook(dados["event"], documento_id, referencia)
+        termo_id = dados.get("termoId")
+        externo = dados.get("externalId")
+        return EventoWebhook(
+            dados["event"],
+            termo_id if isinstance(termo_id, str) and termo_id else None,
+            externo if isinstance(externo, str) else None,
+        )
 
 
 # ── Implementação falsa (testes) ──────────────────────────────────────────────
@@ -182,7 +221,7 @@ class FakeRevSignClient(_ValidadorWebhook):
         d = self._doc(documento_id)
         return StatusDocumento(d["situacao"], d["assinado_em"], d["motivo"])
 
-    def cancelar(self, documento_id: str) -> None:
+    def cancelar(self, documento_id: str, motivo: Optional[str] = None) -> None:
         self._checar("cancelar")
         self.cancelados.append(str(documento_id))
 
@@ -215,11 +254,6 @@ class FakeRevSignClient(_ValidadorWebhook):
 # ── Implementação HTTP ────────────────────────────────────────────────────────
 
 
-def _como_id(documento_id: str) -> "int | str":
-    texto = str(documento_id)
-    return int(texto) if texto.isdigit() else texto
-
-
 def _parse_data(texto: Any) -> Optional[datetime]:
     if not isinstance(texto, str) or not texto:
         return None
@@ -230,13 +264,28 @@ def _parse_data(texto: Any) -> Optional[datetime]:
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
 
+def _erro_da_resposta(resp: httpx.Response) -> RevSignError:
+    """Converte uma resposta de erro do contrato em `RevSignError` (mensagem do nosso mapa)."""
+    codigo: Optional[str] = None
+    termo_id: Optional[str] = None
+    try:
+        corpo = resp.json()
+    except ValueError:
+        corpo = None
+    erro = corpo.get("error") if isinstance(corpo, dict) else None
+    if isinstance(erro, dict):
+        if isinstance(erro.get("code"), str):
+            codigo = erro["code"]
+        if isinstance(erro.get("termoId"), str):
+            termo_id = erro["termoId"]
+    mensagem = _MENSAGEM_POR_CODIGO.get(codigo or "") or f"RevSign respondeu {resp.status_code}."
+    return RevSignError(mensagem, codigo, termo_id=termo_id)
+
+
 class HttpRevSignClient(_ValidadorWebhook):
-    API_PREFIXO = API_PREFIXO
     TIMEOUT = httpx.Timeout(15.0, connect=5.0)
     TIMEOUT_DOWNLOAD = httpx.Timeout(30.0, connect=5.0)
     MAX_PDF_BYTES = 20 * 1024 * 1024
-    MIME_DOCX = MIME_DOCX
-    CAMPO_ASSINATURA = CAMPO_ASSINATURA
 
     def __init__(
         self,
@@ -262,12 +311,11 @@ class HttpRevSignClient(_ValidadorWebhook):
         metodo: str,
         caminho: str,
         *,
-        aceitar_404: bool = False,
         timeout: Optional[httpx.Timeout] = None,
         **kwargs: Any,
     ) -> httpx.Response:
         self._exigir_configuracao()
-        url = f"{self._base_url}{self.API_PREFIXO}{caminho}"
+        url = f"{self._base_url}{caminho}"
         try:
             with httpx.Client(
                 transport=self._transport,
@@ -279,11 +327,12 @@ class HttpRevSignClient(_ValidadorWebhook):
             # Só o tipo vai para o log/mensagem: o texto do erro pode conter a URL.
             logger.warning("RevSign indisponível (%s) em %s %s.", type(e).__name__, metodo, caminho)
             raise RevSignError("RevSign indisponível.") from None
-        if resp.status_code == 404 and aceitar_404:
-            return resp
         if resp.status_code >= 400:
-            logger.warning("RevSign respondeu %s em %s %s.", resp.status_code, metodo, caminho)
-            raise RevSignError(f"RevSign respondeu {resp.status_code}")
+            erro = _erro_da_resposta(resp)
+            logger.warning(
+                "RevSign respondeu %s (%s) em %s %s.", resp.status_code, erro.codigo or "sem código", metodo, caminho
+            )
+            raise erro
         return resp
 
     @staticmethod
@@ -296,99 +345,66 @@ class HttpRevSignClient(_ValidadorWebhook):
             raise RevSignError("Resposta inválida do RevSign.")
         return dados
 
+    @staticmethod
+    def _termo(documento_id: str) -> str:
+        return f"/termos/{quote(str(documento_id), safe='')}"
+
     # -- operações -----------------------------------------------------------
 
     def criar_documento(self, doc: NovoDocumento) -> DocumentoCriado:
         self._exigir_configuracao()
-        payload = {
-            "title": doc.titulo,
-            "externalId": doc.referencia_externa,
-            "recipients": [
-                {
-                    "email": doc.signatario_email,
-                    "name": doc.signatario_nome,
-                    "role": "SIGNER",
-                    "signingOrder": 1,
-                    "fields": [self.CAMPO_ASSINATURA],
-                }
-            ],
-            "meta": {
-                "subject": f"Assinatura: {doc.titulo}",
-                "message": "Revalle · Patrimônio: assine o termo do equipamento sob sua responsabilidade.",
-                "timezone": "America/Sao_Paulo",
-                "language": "pt-BR",
-            },
-        }
-        resp = self._requisitar(
-            "POST",
-            "/document/create",
-            data={"payload": json.dumps(payload, ensure_ascii=False)},
-            files={"file": (doc.nome_arquivo, doc.arquivo, self.MIME_DOCX)},
-        )
-        bruto = self._json(resp).get("id")
-        if not isinstance(bruto, (int, str)) or isinstance(bruto, bool) or str(bruto) == "":
-            raise RevSignError("Resposta inválida do RevSign.")
-        documento_id = str(bruto)
         try:
-            self._requisitar("POST", "/document/distribute", json={"documentId": _como_id(documento_id)})
-        except RevSignError:
-            # Sem distribuir, o rascunho ficaria órfão no RevSign: apaga em melhor esforço.
-            try:
-                self._requisitar(
-                    "POST", "/document/delete", json={"documentId": _como_id(documento_id)}, aceitar_404=True
-                )
-            except RevSignError:
-                logger.warning("Não foi possível apagar o rascunho %s no RevSign.", documento_id)
+            resp = self._requisitar(
+                "POST",
+                "/termos",
+                data={
+                    "externalId": doc.referencia_externa,
+                    "kind": doc.tipo,
+                    "title": doc.titulo,
+                    "signerName": doc.signatario_nome,
+                    "signerEmail": doc.signatario_email,
+                    "signerCpf": doc.signatario_cpf,
+                    "message": MENSAGEM_CONVITE,
+                },
+                files={"file": (doc.nome_arquivo, doc.arquivo, "application/pdf")},
+            )
+        except RevSignError as e:
+            # Criar é idempotente: depois de uma falha de rede o termo pode já existir.
+            if e.codigo == "DUPLICATE_EXTERNAL_ID" and e.termo_id:
+                return DocumentoCriado(e.termo_id)
             raise
-        return DocumentoCriado(documento_id)
-
-    def _obter(self, documento_id: str) -> dict:
-        return self._json(self._requisitar("GET", f"/document/{documento_id}"))
+        termo_id = self._json(resp).get("termoId")
+        if not isinstance(termo_id, str) or not termo_id:
+            raise RevSignError("Resposta inválida do RevSign.")
+        return DocumentoCriado(termo_id)
 
     def consultar(self, documento_id: str) -> StatusDocumento:
-        dados = self._obter(documento_id)
-        status = str(dados.get("status") or "").upper()
-        destinatarios = [r for r in (dados.get("recipients") or []) if isinstance(r, dict)]
-        if status == "COMPLETED":
-            return StatusDocumento("assinado", assinado_em=_parse_data(dados.get("completedAt")))
-        if status == "REJECTED":
-            motivo = next(
-                (r.get("rejectionReason") for r in destinatarios if r.get("rejectionReason")), None
-            )
-            return StatusDocumento("recusado", motivo=motivo)
-        if status == "CANCELLED":
-            return StatusDocumento("cancelado")
-        agora = datetime.now(timezone.utc)
-        for r in destinatarios:
-            validade = _parse_data(r.get("expiresAt"))
-            if r.get("signingStatus") == "NOT_SIGNED" and validade is not None and validade < agora:
-                return StatusDocumento("expirado")
-        return StatusDocumento("pendente")
+        dados = self._json(self._requisitar("GET", self._termo(documento_id)))
+        situacao = _SITUACAO_POR_STATUS.get(str(dados.get("status") or "").upper())
+        if situacao is None:
+            raise RevSignError("Resposta inválida do RevSign.")
+        signatario = dados.get("signer") if isinstance(dados.get("signer"), dict) else {}
+        if situacao == "assinado":
+            assinado_em = _parse_data(signatario.get("signedAt")) or _parse_data(dados.get("completedAt"))
+            return StatusDocumento("assinado", assinado_em=assinado_em)
+        if situacao == "recusado":
+            motivo = signatario.get("rejectionReason")
+            return StatusDocumento("recusado", motivo=motivo if isinstance(motivo, str) and motivo else None)
+        return StatusDocumento(situacao)
 
-    def cancelar(self, documento_id: str) -> None:
-        self._requisitar(
-            "POST", "/document/delete", json={"documentId": _como_id(documento_id)}, aceitar_404=True
-        )
+    def cancelar(self, documento_id: str, motivo: Optional[str] = None) -> None:
+        kwargs: dict[str, Any] = {"json": {"reason": motivo[:500]}} if motivo else {}
+        try:
+            self._requisitar("POST", f"{self._termo(documento_id)}/cancelar", **kwargs)
+        except RevSignError as e:
+            if e.codigo != "NOT_FOUND":  # termo que já não existe = cancelado
+                raise
 
     def reenviar(self, documento_id: str) -> None:
-        dados = self._obter(documento_id)
-        pendentes = [
-            r["id"]
-            for r in (dados.get("recipients") or [])
-            if isinstance(r, dict) and r.get("signingStatus") == "NOT_SIGNED" and "id" in r
-        ]
-        if not pendentes:
-            raise RevSignError("Nenhum destinatário pendente de assinatura.")
-        self._requisitar(
-            "POST",
-            "/document/redistribute",
-            json={"documentId": _como_id(documento_id), "recipients": pendentes},
-        )
+        self._requisitar("POST", f"{self._termo(documento_id)}/reenviar")
 
     def baixar_assinado(self, documento_id: str) -> bytes:
-        resp = self._requisitar(
-            "GET", f"/document/{documento_id}/download", timeout=self.TIMEOUT_DOWNLOAD
-        )
+        resp = self._requisitar("GET", f"{self._termo(documento_id)}/pdf", timeout=self.TIMEOUT_DOWNLOAD)
         conteudo = resp.content
         if len(conteudo) > self.MAX_PDF_BYTES:
             raise RevSignError("PDF assinado maior que o limite permitido.")
