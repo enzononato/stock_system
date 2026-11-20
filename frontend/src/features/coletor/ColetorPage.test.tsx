@@ -206,6 +206,94 @@ describe('ColetorPage', () => {
     await waitFor(() => expect(posts).toBe(2))
   })
 
+  it('andamento com erro mostra aviso e permite gerar novo código', async () => {
+    let posts = 0
+    mockCriar(() => {
+      posts += 1
+    })
+    server.use(
+      http.get('/api/coletor/:id/andamento', () =>
+        HttpResponse.json({ detail: 'Coleta não encontrada.' }, { status: 404 })
+      )
+    )
+    const user = userEvent.setup()
+    renderPage()
+
+    expect(await screen.findByText('Não foi possível acompanhar a coleta.')).toBeInTheDocument()
+    expect(screen.queryByText('⏳ Aguardando os dados da máquina…')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Gerar novo código' }))
+
+    await waitFor(() => expect(posts).toBe(2))
+  })
+
+  it('continua consultando enquanto aguarda e para depois de receber', async () => {
+    mockCriar()
+    let chamadas = 0
+    server.use(
+      http.get('/api/coletor/:id/andamento', () => {
+        chamadas += 1
+        return HttpResponse.json(
+          chamadas === 1
+            ? { status: 'aguardando', expira_em: '2026-11-20T15:00:00Z' }
+            : {
+                status: 'recebido',
+                expira_em: '2026-11-20T15:00:00Z',
+                campos: CAMPOS,
+                tipo_sugerido: 'Notebook',
+                correspondencias: [],
+              }
+        )
+      })
+    )
+    renderPage()
+
+    expect(await screen.findByText('⏳ Aguardando os dados da máquina…')).toBeInTheDocument()
+    expect(await screen.findByText('Tela de cadastro', {}, { timeout: 6000 })).toBeInTheDocument()
+    expect(chamadas).toBe(2)
+
+    await new Promise((resolve) => setTimeout(resolve, 2500))
+    expect(chamadas).toBe(2)
+  }, 15000)
+
+  it('gerar novo código troca o comando e consulta o andamento da nova coleta', async () => {
+    const COMANDO_2 = COMANDO.replace('abc123', 'novo456')
+    const consultados: string[] = []
+    let n = 0
+    server.use(
+      http.post('/api/coletor', () => {
+        n += 1
+        return HttpResponse.json(
+          {
+            id: n * 10,
+            comando: n === 1 ? COMANDO : COMANDO_2,
+            url_arquivo: `/api/coletor/codigo${n}/coletor.cmd`,
+            expira_em: '2026-11-20T15:00:00Z',
+          },
+          { status: 201 }
+        )
+      }),
+      http.get('/api/coletor/:id/andamento', ({ params }) => {
+        consultados.push(String(params.id))
+        return HttpResponse.json({
+          status: params.id === '10' ? 'vencido' : 'aguardando',
+          expira_em: '2026-11-20T15:00:00Z',
+        })
+      })
+    )
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: 'Gerar novo código' }))
+
+    expect(await screen.findByDisplayValue(COMANDO_2)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Baixar o coletor' })).toHaveAttribute(
+      'href',
+      '/api/coletor/codigo2/coletor.cmd'
+    )
+    await waitFor(() => expect(consultados).toContain('20'))
+    expect(consultados[0]).toBe('10')
+  })
+
   it('Sair deste computador encerra a sessão e vai para o login', async () => {
     mockCriar()
     mockAndamento({ status: 'aguardando' })

@@ -59,6 +59,7 @@ export default function ColetorPage() {
     queryFn: () => andamentoColeta(coletaId as number),
     enabled: coletaId !== undefined,
     gcTime: 0,
+    retry: false,
     refetchInterval: (query) => (query.state.data?.status === 'aguardando' ? INTERVALO_CONSULTA_MS : false),
   })
 
@@ -113,6 +114,16 @@ export default function ColetorPage() {
     )
   } else if (!coleta.data) {
     corpo = <p className="text-sm text-muted-foreground">Gerando o código…</p>
+  } else if (andamento.isError && !dados) {
+    corpo = (
+      <div className="space-y-4">
+        <ErrorState
+          title="Não foi possível acompanhar a coleta."
+          message="Gere um novo código e tente de novo."
+        />
+        <Button onClick={gerarNovo}>Gerar novo código</Button>
+      </div>
+    )
   } else if (dados?.status === 'vencido') {
     corpo = (
       <div className="space-y-3">
