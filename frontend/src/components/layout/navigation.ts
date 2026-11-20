@@ -5,6 +5,7 @@ import { QrCode } from 'lucide-react'
 import { ClipboardCheck } from 'lucide-react'
 import { AppWindow, Boxes, KeyRound } from 'lucide-react'
 import { Wrench } from 'lucide-react'
+import { MonitorCheck } from 'lucide-react'
 import { UserCog } from 'lucide-react'
 import {
   DashboardIcon,
@@ -74,6 +75,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { to: '/stock', label: 'Estoque', icon: EstoqueIcon },
       { to: '/register', label: 'Cadastro', icon: PatrimoniosIcon, roles: ['Gestor', 'Técnico'] },
+      { to: '/register/coletor', label: 'Cadastrar esta máquina', icon: MonitorCheck, roles: ['Gestor', 'Técnico'] },
       { to: '/history', label: 'Histórico', icon: MovimentacoesIcon, roles: ['Gestor', 'Técnico'] },
       { to: '/locais', label: 'Locais', icon: MapPin, roles: ['Gestor', 'Técnico'] },
       { to: '/linhas', label: 'Linhas', icon: Smartphone },

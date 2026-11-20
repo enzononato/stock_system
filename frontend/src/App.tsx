@@ -32,6 +32,7 @@ import EtiquetaRedirectPage from '@/pages/EtiquetaRedirectPage'
 import InventariosPage from '@/pages/InventariosPage'
 import InventarioLeituraPage from '@/pages/InventarioLeituraPage'
 import InventarioRelatorioPage from '@/pages/InventarioRelatorioPage'
+import ColetorPage from '@/features/coletor/ColetorPage'
 import { PosLoginRedirect } from '@/features/etiquetas/PosLoginRedirect'
 import SistemasPage from '@/pages/acessos/SistemasPage'
 import PacotesPage from '@/pages/acessos/PacotesPage'
@@ -75,6 +76,14 @@ export default function App() {
           <Route path="perfil" element={<PerfilPage />} />
 
           {/* Gestor + Técnico */}
+          <Route
+            path="register/coletor"
+            element={
+              <RequireRole roles={['Gestor', 'Técnico']}>
+                <ColetorPage />
+              </RequireRole>
+            }
+          />
           <Route
             path="register"
             element={

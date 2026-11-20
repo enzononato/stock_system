@@ -68,6 +68,7 @@ function renderPage(inicial: string) {
       <Routes>
         <Route path="/register" element={<RegisterItemPage mode="create" />} />
         <Route path="/edit/:id" element={<RegisterItemPage mode="edit" />} />
+        <Route path="/register/coletor" element={<p>Tela do coletor</p>} />
         <Route path="/stock" element={<p>Estoque</p>} />
       </Routes>
       <ToastContainer />
@@ -96,6 +97,15 @@ function enviarNf(user: ReturnType<typeof userEvent.setup>, file: File) {
 }
 
 describe('RegisterItemPage — cadastro', () => {
+  it('oferece preencher com os dados da máquina só no cadastro novo', async () => {
+    mockBase()
+    const user = userEvent.setup()
+    renderPage('/register')
+
+    await user.click(await screen.findByRole('button', { name: 'Preencher com os dados desta máquina' }))
+    expect(await screen.findByText('Tela do coletor')).toBeInTheDocument()
+  })
+
   it('cadastra com dados de compra e local e depois anexa a NF', async () => {
     mockBase()
     let corpo: Record<string, unknown> = {}
@@ -277,6 +287,15 @@ describe('RegisterItemPage — cadastro', () => {
 })
 
 describe('RegisterItemPage — edição', () => {
+  it('não oferece preencher com os dados da máquina na edição', async () => {
+    mockBase()
+    server.use(http.get('/api/items/9', () => HttpResponse.json(itemExistente)))
+    renderPage('/edit/9')
+
+    await screen.findByRole('heading', { name: 'Editar Equipamento' })
+    expect(screen.queryByRole('button', { name: 'Preencher com os dados desta máquina' })).not.toBeInTheDocument()
+  })
+
   it('hidrata valor e datas sem deslocar o dia', async () => {
     mockBase()
     server.use(http.get('/api/items/9', () => HttpResponse.json(itemExistente)))

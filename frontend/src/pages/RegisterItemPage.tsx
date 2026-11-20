@@ -26,7 +26,7 @@ import { useConstants } from '@/hooks/useConstants'
 import { getErrorMessage } from '@/lib/api-error'
 import { upper } from '@/lib/format'
 import { isValidNotaFiscal, maskNotaFiscalInput } from '@/lib/utils'
-import { ArrowLeft, Save, Loader2, PackagePlus, ArrowLeftRight, Download } from 'lucide-react'
+import { ArrowLeft, Save, Loader2, PackagePlus, ArrowLeftRight, Download, MonitorCheck } from 'lucide-react'
 
 const SPECIFIC_KEYS = [
   'identificador',
@@ -300,15 +300,26 @@ export default function RegisterItemPage({ mode }: Props) {
           </p>
         </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void navigate('/stock')}
-          className="self-start"
-        >
-          <ArrowLeft className="mr-1.5 size-3.5" />
-          Voltar ao Estoque
-        </Button>
+        <div className="flex flex-wrap items-center gap-2 self-start">
+          {mode === 'create' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void navigate('/register/coletor')}
+            >
+              <MonitorCheck className="mr-1.5 size-3.5" />
+              Preencher com os dados desta máquina
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void navigate('/stock')}
+          >
+            <ArrowLeft className="mr-1.5 size-3.5" />
+            Voltar ao Estoque
+          </Button>
+        </div>
       </div>
 
       <form
