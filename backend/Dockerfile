@@ -2,6 +2,12 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# LibreOffice (conversão do termo .docx para PDF, exigida pela API do RevSign) e fontes
+# metricamente compatíveis com as do Word (Calibri/Cambria/Arial/Times).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libreoffice-writer-nogui fonts-dejavu fonts-liberation fonts-crosextra-carlito fonts-crosextra-caladea \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
