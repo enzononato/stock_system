@@ -37,6 +37,7 @@ PDF_FAKE = b"%PDF-1.4\n% termo assinado (falso)\n"
 CABECALHO_TIMESTAMP = "X-RevSign-Timestamp"
 CABECALHO_ASSINATURA = "X-RevSign-Signature"
 JANELA_WEBHOOK_SEGUNDOS = 300
+MAX_DIGITOS_TIMESTAMP = 12
 MENSAGEM_CONVITE = "Revalle · Patrimônio: assine o termo do equipamento sob sua responsabilidade."
 
 Situacao = Literal["pendente", "assinado", "recusado", "expirado", "cancelado"]
@@ -117,8 +118,13 @@ class EventoWebhook:
 
 def assinar_webhook(segredo: str, corpo: bytes, timestamp: int) -> dict[str, str]:
     """Cabeçalhos que o RevSign envia no webhook (usado pelos testes e pelo falso)."""
-    mac = hmac.new(segredo.encode("utf-8"), str(timestamp).encode() + b"." + corpo, hashlib.sha256)
-    return {CABECALHO_TIMESTAMP: str(timestamp), CABECALHO_ASSINATURA: "sha256=" + mac.hexdigest()}
+    return {CABECALHO_TIMESTAMP: str(timestamp), CABECALHO_ASSINATURA: _assinatura(segredo, str(timestamp), corpo)}
+
+
+def _assinatura(segredo: str, timestamp: str, corpo: bytes) -> str:
+    """`sha256=<hex>` do HMAC de `timestamp + "." + corpo`, com o timestamp como veio no cabeçalho."""
+    mac = hmac.new(segredo.encode("utf-8"), timestamp.encode() + b"." + corpo, hashlib.sha256)
+    return "sha256=" + mac.hexdigest()
 
 
 class RevSignClient(Protocol):
@@ -160,9 +166,10 @@ class _ValidadorWebhook:
         assinatura = self._cabecalho(headers, CABECALHO_ASSINATURA)
         if timestamp is None or assinatura is None:
             raise WebhookInvalido("Assinatura do webhook ausente.")
-        if not (timestamp.isascii() and timestamp.isdigit()):
+        # Limite de tamanho antes do int(): dígitos demais estouram float/int e virariam 500.
+        if not (timestamp.isascii() and timestamp.isdigit() and len(timestamp) <= MAX_DIGITOS_TIMESTAMP):
             raise WebhookInvalido("Assinatura do webhook inválida.")
-        esperado = assinar_webhook(self._webhook_secret, corpo, int(timestamp))[CABECALHO_ASSINATURA]
+        esperado = _assinatura(self._webhook_secret, timestamp, corpo)
         # O HMAC é sempre conferido (tempo constante), com ou sem janela válida.
         assinatura_ok = hmac.compare_digest(esperado.encode("utf-8"), assinatura.encode("utf-8"))
         dentro_da_janela = abs(time.time() - int(timestamp)) <= JANELA_WEBHOOK_SEGUNDOS

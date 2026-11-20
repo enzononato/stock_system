@@ -344,6 +344,12 @@ def _assinado(segredo="s3", corpo=CORPO_OK, ts=AGORA):
     return {**assinar_webhook(segredo, corpo, ts), "Content-Type": "application/json"}
 
 
+def _assinado_bruto(timestamp: str, segredo="s3", corpo=CORPO_OK):
+    """Assina com o timestamp exatamente como vai no cabeçalho (ex.: com zeros à esquerda)."""
+    mac = hmac.new(segredo.encode(), timestamp.encode() + b"." + corpo, hashlib.sha256).hexdigest()
+    return {"X-RevSign-Timestamp": timestamp, "X-RevSign-Signature": f"sha256={mac}"}
+
+
 def _sem(cabecalhos, nome):
     return {k: v for k, v in cabecalhos.items() if k != nome}
 
@@ -374,6 +380,10 @@ def test_assinar_webhook_formato_do_contrato():
         ("s3", _assinado(ts=AGORA - 301), CORPO_OK, WebhookInvalido),
         ("s3", _assinado(ts=AGORA + 301), CORPO_OK, WebhookInvalido),
         ("s3", {**_assinado(), "X-RevSign-Timestamp": "abc"}, CORPO_OK, WebhookInvalido),
+        ("s3", {**_assinado(), "X-RevSign-Timestamp": "9" * 13}, CORPO_OK, WebhookInvalido),
+        ("s3", {**_assinado(), "X-RevSign-Timestamp": "9" * 400}, CORPO_OK, WebhookInvalido),
+        ("s3", {**_assinado(), "X-RevSign-Timestamp": "9" * 5000}, CORPO_OK, WebhookInvalido),
+        ("s3", _assinado_bruto(f"0{AGORA}"), CORPO_OK, EVENTO_OK),  # HMAC sobre o texto do cabeçalho
         ("s3", _assinado(), CORPO_OK + b" ", WebhookInvalido),  # corpo adulterado
         ("", _assinado(segredo=""), CORPO_OK, WebhookInvalido),
         ("s3", _assinado(corpo=b"nao-json"), b"nao-json", WebhookMalformado),

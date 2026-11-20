@@ -118,12 +118,27 @@ def test_segredo_errado_401(client, revsign_fake):
 def test_timestamp_velho_ou_do_futuro_401(client, revsign_fake):
     import time
 
-    for desvio in (-301, 301):
+    for desvio in (-310, 310):
         resp = postar_webhook(
             client, evento_webhook("termo.signed", "1001", 1), timestamp=int(time.time()) + desvio
         )
         assert resp.status_code == 401, desvio
         assert resp.json()["detail"] == "Webhook não autorizado."
+
+
+@pytest.mark.parametrize("digitos", [13, 400, 5000])
+def test_timestamp_gigante_401(client, revsign_fake, digitos):
+    """Timestamp com dígitos demais é 401 (não estoura em int()/float e vira 500)."""
+    import json
+
+    from app.services.revsign_client import assinar_webhook
+    from tests.fixtures_termos import URL_WEBHOOK
+
+    corpo = json.dumps(evento_webhook("termo.signed", "1001", 1)).encode()
+    cab = assinar_webhook(SEGREDO_WEBHOOK, corpo, 1)
+    cab["X-RevSign-Timestamp"] = "9" * digitos
+    resp = client.post(URL_WEBHOOK, content=corpo, headers={**cab, "Content-Type": "application/json"})
+    assert resp.status_code == 401
 
 
 def test_assinatura_sem_prefixo_sha256_401(client, revsign_fake):
