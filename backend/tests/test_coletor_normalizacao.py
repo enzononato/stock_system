@@ -225,6 +225,33 @@ def test_schema_recusa_strings_enormes_e_tipos_errados():
         ColetaBruta(modelo="x")  # versao_coletor é obrigatório
 
 
+def test_schema_recusa_inteiros_gigantes():
+    with pytest.raises(ValidationError):
+        ColetaBruta(versao_coletor="1", ram_bytes=10**400)
+    with pytest.raises(ValidationError):
+        ColetaBruta(versao_coletor="1", ram_bytes=-1)
+    with pytest.raises(ValidationError):
+        ColetaBruta(versao_coletor="1", discos=[{"bytes": 10**400}])
+    with pytest.raises(ValidationError):
+        ColetaBruta(versao_coletor="1", chassi=[10**9])
+    with pytest.raises(ValidationError):
+        ColetaBruta(versao_coletor="1", chassi=[-1])
+    ok = ColetaBruta(versao_coletor="1", ram_bytes=2**60, discos=[{"bytes": 2**60}], chassi=[255])
+    assert normalizar(ok).campos["ram"]
+
+
+def test_macs_genericos_sao_ignorados():
+    ads = [
+        Adaptador(mac="00:00:00:00:00:00", tipo="ethernet", ativo=True, gateway=True),
+        Adaptador(mac="FF-FF-FF-FF-FF-FF", tipo="wifi", ativo=True),
+        Adaptador(mac="AA:BB:CC:DD:EE:05", tipo="outro", ativo=False),
+    ]
+    assert mac_gravado(ads[:2]) == ""
+    r = normalizar(bruta(adaptadores=ads))
+    assert r.macs == ["AABBCCDDEE05"]
+    assert "endereco_fisico" not in r.campos
+
+
 def test_schema_ignora_campos_extras():
     b = ColetaBruta(versao_coletor="1", qualquer_coisa="x")
     assert not hasattr(b, "qualquer_coisa")

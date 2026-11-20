@@ -59,6 +59,9 @@ _SUFIXO_MARCA = re.compile(
 _TAMANHOS_COMERCIAIS = (120, 128, 240, 250, 256, 480, 500, 512, 960, 1000, 2000)
 _TOLERANCIA_TAMANHO = 0.12
 
+# MACs de preenchimento (adaptador sem endereço real) não identificam máquina nenhuma.
+_MACS_GENERICOS = {"000000000000", "FFFFFFFFFFFF"}
+
 _CHASSI_NOTEBOOK = {8, 9, 10, 14, 30, 31, 32}
 _CHASSI_DESKTOP = {3, 4, 5, 6, 7, 13, 15, 16, 35, 36}
 
@@ -183,9 +186,11 @@ def serial(valor: Optional[str]) -> str:
 
 
 def _mac_hex(mac: Optional[str]) -> str:
-    """`AABBCCDDEEFF` ou vazio quando o tamanho não é de um MAC."""
+    """`AABBCCDDEEFF` ou vazio quando o tamanho não é de um MAC ou ele é genérico."""
     hexa = re.sub(r"[^0-9A-Fa-f]", "", mac or "").upper()
-    return hexa if len(hexa) == 12 else ""
+    if len(hexa) != 12 or hexa in _MACS_GENERICOS:
+        return ""
+    return hexa
 
 
 def _formatar_mac(hexa: str) -> str:
