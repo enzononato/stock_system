@@ -2,6 +2,7 @@
 import logging
 
 from app.core import config as _config
+from app.db.coleta_db import ColetaDBManager
 from app.db.colaborador_db import (
     ColaboradorDBManager,
     SincronizacaoEmAndamento,
@@ -27,9 +28,16 @@ def sincronizar_colaboradores() -> None:
     logger.info("Sincronização agendada de colaboradores concluída: %s", resumo)
 
 
+def limpar_coletas() -> None:
+    """Apaga as coletas de dados de máquina com mais de 7 dias."""
+    apagadas = ColetaDBManager().apagar_antigas(7)
+    logger.info("Limpeza de coletas de máquina: %s apagada(s).", apagadas)
+
+
 def registrar_jobs() -> None:
     """Registra os jobs da aplicação. Chamada uma vez no startup."""
     cfg = _config.settings
+    scheduler.registrar_job("limpar_coletas", limpar_coletas, diariamente_as="03:30")
     if cfg.COLABORADORES_DATABASE_URL:
         scheduler.registrar_job(
             "sincronizar_colaboradores",

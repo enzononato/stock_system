@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     # Rate limiting do endpoint de login (proteção contra força bruta)
     LOGIN_RATE_LIMIT: str = "5/minute"
 
+    # Coletor de dados da máquina: limite (por IP) das rotas públicas e validade do código
+    COLETOR_RATE_LIMIT: str = "30/minute"
+    COLETOR_VALIDADE_MINUTOS: int = 15
+
     # Paginação padrão das listagens da API
     DEFAULT_PAGE_SIZE: int = 50
     MAX_PAGE_SIZE: int = 500
