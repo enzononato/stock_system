@@ -39,6 +39,8 @@ export default function ColetorPage() {
   // Cada "tentativa" é uma coleta: "Gerar novo código" só incrementa o contador.
   const [tentativa, setTentativa] = useState(0)
   const [aviso, setAviso] = useState<string | null>(null)
+  const [saindo, setSaindo] = useState(false)
+  const [erroSaida, setErroSaida] = useState(false)
   const campoComando = useRef<HTMLTextAreaElement>(null)
 
   // Query (e não useEffect + mutation) para criar a coleta uma única vez por montagem, mesmo com o
@@ -87,10 +89,17 @@ export default function ColetorPage() {
   }
 
   async function sair() {
+    if (saindo) return
+    setSaindo(true)
+    setErroSaida(false)
     try {
       await logout()
-    } finally {
       void navigate('/login')
+    } catch {
+      // A sessão continua aberta neste computador: não leva ao login como se tivesse saído.
+      setErroSaida(true)
+    } finally {
+      setSaindo(false)
     }
   }
 
@@ -180,11 +189,10 @@ export default function ColetorPage() {
           <Button onClick={() => void copiar()}>
             <Copy /> Copiar comando
           </Button>
-          {aviso && (
-            <span role="status" className="text-sm text-muted-foreground">
-              {aviso}
-            </span>
-          )}
+          {/* Região viva sempre montada: leitores de tela só anunciam texto que muda dentro dela. */}
+          <span role="status" className="text-sm text-muted-foreground">
+            {aviso}
+          </span>
         </div>
         <p className="text-sm text-muted-foreground">⏳ Aguardando os dados da máquina…</p>
         <a
@@ -206,11 +214,16 @@ export default function ColetorPage() {
         title="Cadastrar esta máquina"
         description="Leia automaticamente os dados deste computador e leve para o cadastro."
         actions={
-          <Button variant="outline" size="sm" onClick={() => void sair()}>
-            <LogOut /> Sair deste computador
+          <Button variant="outline" size="sm" onClick={() => void sair()} loading={saindo}>
+            {!saindo && <LogOut />} Sair deste computador
           </Button>
         }
       />
+      {erroSaida && (
+        <p role="alert" className="text-sm text-destructive">
+          Não foi possível sair da conta. Tente de novo.
+        </p>
+      )}
       <section className="rounded border border-border bg-surface p-6">{corpo}</section>
     </div>
   )

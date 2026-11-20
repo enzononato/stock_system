@@ -106,9 +106,15 @@ describe('ColetorPage', () => {
       '/api/coletor/abc123/coletor.cmd'
     )
 
+    // A região viva já existe (vazia) antes do aviso: o texto entra nela e é anunciado.
+    const regiao = screen.getByRole('status')
+    expect(regiao).toBeEmptyDOMElement()
+
     await user.click(screen.getByRole('button', { name: 'Copiar comando' }))
 
     expect(escrever).toHaveBeenCalledWith(COMANDO)
+    await waitFor(() => expect(regiao).toHaveTextContent('Comando copiado.'))
+    expect(screen.getByRole('status')).toBe(regiao)
   })
 
   it('sem clipboard seleciona o texto e orienta a copiar com Ctrl+C', async () => {
@@ -304,6 +310,20 @@ describe('ColetorPage', () => {
 
     expect(await screen.findByText('Tela de login')).toBeInTheDocument()
     expect(logout).toHaveBeenCalled()
+  })
+
+  it('se o logout falhar, avisa e continua na página (a sessão segue aberta)', async () => {
+    mockCriar()
+    mockAndamento({ status: 'aguardando' })
+    logout.mockRejectedValueOnce(new Error('500'))
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: 'Sair deste computador' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível sair da conta. Tente de novo.')
+    expect(screen.queryByText('Tela de login')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sair deste computador' })).toBeEnabled()
   })
 
   it('avisa quando não consegue criar o código', async () => {
