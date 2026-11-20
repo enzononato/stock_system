@@ -104,7 +104,8 @@ export default function Sidebar({ className, onNavigate }: SidebarProps) {
                     <NavLink
                       key={item.to}
                       to={item.to}
-                      end={item.to === '/'}
+                      // `end` nos itens cujo caminho é prefixo de outro item (/ e /register), para não ficarem ativos juntos.
+                      end={item.to === '/' || item.to === '/register'}
                       onClick={onNavigate}
                       className={({ isActive }) =>
                         cn(

@@ -485,6 +485,9 @@ describe('RegisterItemPage — dados do coletor', () => {
     // Marca, modelo, host e série ganham a marca; nada de "antes:" no cadastro novo.
     expect(screen.getAllByText('do coletor')).toHaveLength(4)
     expect(screen.queryByText(/antes:/)).not.toBeInTheDocument()
+    // A marca fica ligada ao input (leitor de tela lê "do coletor" junto do campo).
+    expect(screen.getByLabelText(/Marca/)).toHaveAccessibleDescription('do coletor')
+    expect(screen.getByLabelText('Host')).toHaveAccessibleDescription('do coletor')
   })
 
   it('ignora o tipo sugerido que não existe na lista de tipos', async () => {
@@ -505,6 +508,7 @@ describe('RegisterItemPage — dados do coletor', () => {
     await screen.findByLabelText(/Marca/)
     expect(screen.queryByText(/Dados preenchidos pelo coletor/)).not.toBeInTheDocument()
     expect(screen.queryByText('do coletor')).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/Marca/)).not.toHaveAttribute('aria-describedby')
   })
 
   it('edição destaca o que mudou', async () => {
@@ -517,6 +521,7 @@ describe('RegisterItemPage — dados do coletor', () => {
 
     expect(await screen.findByLabelText('Host')).toHaveValue('NB-NEW')
     expect(screen.getByText('antes: NB-OLD')).toBeInTheDocument()
+    expect(screen.getByLabelText('Host')).toHaveAccessibleDescription('do coletor antes: NB-OLD')
     // Campo que o item não tinha: "antes: vazio". Marca igual à gravada: só a marca, sem "antes".
     expect(screen.getByLabelText('Processador (CPU)')).toHaveValue('i5-1345U')
     expect(screen.getByText('antes: vazio')).toBeInTheDocument()

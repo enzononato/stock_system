@@ -1,7 +1,7 @@
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { MarcaColetor, type CamposMarcados } from '@/components/equipment/MarcaColetor'
+import { MarcaColetor, descricaoMarcaColetor, type CamposMarcados } from '@/components/equipment/MarcaColetor'
 import { isValidMac, isValidIp, maskMacInput } from '@/lib/utils'
 
 interface FieldConfig {
@@ -131,7 +131,7 @@ export function TypeSpecificFields({ tipo, values, onChange, disabled, marcados 
               onValueChange={(v) => onChange(field.key, v)}
               disabled={disabled}
             >
-              <SelectTrigger id={field.key}>
+              <SelectTrigger id={field.key} aria-describedby={descricaoMarcaColetor(marcados, field.key)}>
                 <SelectValue placeholder={`Selecione ${field.label}`} />
               </SelectTrigger>
               <SelectContent>
@@ -147,6 +147,7 @@ export function TypeSpecificFields({ tipo, values, onChange, disabled, marcados 
               onChange={(e) => onChange(field.key, field.mask ? field.mask(e.target.value) : e.target.value)}
               placeholder={field.placeholder ?? field.label}
               disabled={disabled}
+              aria-describedby={descricaoMarcaColetor(marcados, field.key)}
             />
           )}
         </div>

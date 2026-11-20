@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createItem, updateItem, getItem, uploadNotaFiscal, baixarNotaFiscal } from '@/api/items'
 import { listUnidades } from '@/api/unidades'
 import { LocalSelect } from '@/components/locais/LocalSelect'
-import { MarcaColetor, type CamposMarcados } from '@/components/equipment/MarcaColetor'
+import { MarcaColetor, descricaoMarcaColetor, type CamposMarcados } from '@/components/equipment/MarcaColetor'
 import { TypeSpecificFields, chavesDoTipo, validateTypeSpecificFields } from '@/components/equipment/TypeSpecificFields'
 import { Button } from '@/components/ui/button'
 import { FileUpload } from '@/components/ui/FileUpload'
@@ -447,6 +447,7 @@ export default function RegisterItemPage({ mode }: Props) {
               <MarcaColetor marcados={estadoColetor ? marcados : undefined} campo="brand" />
               <Input
                 id="brand"
+                aria-describedby={descricaoMarcaColetor(estadoColetor ? marcados : undefined, 'brand')}
                 value={brand}
                 onChange={(e) => setBrand(e.target.value)}
                 placeholder="Ex: Dell, Lenovo, HP"
@@ -459,6 +460,7 @@ export default function RegisterItemPage({ mode }: Props) {
               <MarcaColetor marcados={estadoColetor ? marcados : undefined} campo="model" />
               <Input
                 id="model"
+                aria-describedby={descricaoMarcaColetor(estadoColetor ? marcados : undefined, 'model')}
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
                 placeholder="Ex: Latitude 3420"
