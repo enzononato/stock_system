@@ -21,13 +21,15 @@ vi.mock('@/contexts/AuthContext', () => ({
   }),
 }))
 
-function renderLayout() {
+function renderLayout(caminho = '/stock') {
   return render(
     <ThemeProvider>
-      <MemoryRouter initialEntries={['/stock']}>
+      <MemoryRouter initialEntries={[caminho]}>
         <Routes>
           <Route element={<AppLayout />}>
             <Route path="/stock" element={<p>conteúdo</p>} />
+            <Route path="/register" element={<p>cadastro</p>} />
+            <Route path="/register/coletor" element={<p>coletor</p>} />
           </Route>
           <Route path="/login" element={<p>login</p>} />
         </Routes>
@@ -44,6 +46,18 @@ describe('AppLayout', () => {
   it('item ativo da navegação usa o destaque verde-limão', () => {
     renderLayout()
     expect(screen.getAllByRole('link', { name: 'Estoque' })[0]).toHaveClass('bg-lime', 'text-lime-foreground')
+  })
+
+  it('em /register/coletor só "Cadastrar esta máquina" fica ativo, não "Cadastro"', () => {
+    renderLayout('/register/coletor')
+    expect(screen.getAllByRole('link', { name: 'Cadastrar esta máquina' })[0]).toHaveClass('bg-lime')
+    expect(screen.getAllByRole('link', { name: 'Cadastro' })[0]).not.toHaveClass('bg-lime')
+  })
+
+  it('em /register "Cadastro" fica ativo', () => {
+    renderLayout('/register')
+    expect(screen.getAllByRole('link', { name: 'Cadastro' })[0]).toHaveClass('bg-lime')
+    expect(screen.getAllByRole('link', { name: 'Cadastrar esta máquina' })[0]).not.toHaveClass('bg-lime')
   })
 
   it('gaveta abre como diálogo e fecha pelo botão', () => {

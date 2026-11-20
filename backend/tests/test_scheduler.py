@@ -325,7 +325,7 @@ def test_registrar_jobs_so_com_base_de_rh_configurada(monkeypatch):
     try:
         monkeypatch.setattr(config.settings, "COLABORADORES_DATABASE_URL", "")
         jobs.registrar_jobs()
-        assert scheduler.jobs_registrados() == {}
+        assert set(scheduler.jobs_registrados()) == {"limpar_coletas"}
 
         monkeypatch.setattr(config.settings, "COLABORADORES_DATABASE_URL", "postgresql://x/y")
         monkeypatch.setattr(config.settings, "COLABORADORES_SYNC_HORA", "06:30")
@@ -335,7 +335,7 @@ def test_registrar_jobs_so_com_base_de_rh_configurada(monkeypatch):
         assert job.a_cada_segundos is None
 
         jobs.registrar_jobs()  # idempotente
-        assert len(scheduler.jobs_registrados()) == 1
+        assert set(scheduler.jobs_registrados()) == {"limpar_coletas", "sincronizar_colaboradores"}
     finally:
         scheduler.limpar_jobs()
 

@@ -124,6 +124,7 @@ def pytest_configure(config):
     os.environ["DB_NAME"] = name
     os.environ["DB_CHARSET"] = "utf8mb4"
     os.environ["LOGIN_RATE_LIMIT"] = "10000/minute"
+    os.environ["COLETOR_RATE_LIMIT"] = "10000/minute"
 
 
 def _assegurar_app_apontando_para_teste(cfg: "_TestDBConfig") -> None:
@@ -203,6 +204,7 @@ def _ambiente_de_teste(tmp_path_factory):
     # O limite em si é testado explicitamente em test_auth.py, que sobrescreve
     # este valor no escopo dele.
     os.environ["LOGIN_RATE_LIMIT"] = "10000/minute"
+    os.environ["COLETOR_RATE_LIMIT"] = "10000/minute"
     os.environ["STORAGE_BACKEND"] = "local"
     os.environ["LOCAL_STORAGE_PATH"] = str(tmp_path_factory.mktemp("storage"))
 
