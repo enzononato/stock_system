@@ -22,7 +22,9 @@ from app.db.termo_db import PENDENTES
 from app.dependencies import get_colaborador_db, get_inventory_db, get_termo_db
 from app.services import audit
 from app.services.audit import AuditContext
+from app.services.colaboradores_source import cpf_valido
 from app.services.revsign_client import NovoDocumento, RevSignError, get_revsign_client
+from app.services.termo_pdf import ConversaoPdfFalhou, docx_para_pdf
 from app.services.termos_trava import MSG_PROCESSANDO, trava
 
 logger = logging.getLogger(__name__)
@@ -38,6 +40,7 @@ OPERADOR_REVSIGN = "RevSign"
 MOTIVO_DESLIGADO = "Integração com o RevSign desligada: baixe o termo e anexe o PDF assinado."
 MOTIVO_SEM_COLABORADOR = "Colaborador não encontrado no cadastro: assinatura manual."
 MOTIVO_SEM_EMAIL = "Colaborador sem e-mail cadastrado: assinatura manual."
+MOTIVO_SEM_CPF = "Colaborador sem CPF válido: assinatura manual."
 MOTIVO_SITUACAO_MUDOU = "O equipamento mudou de situação antes do envio."
 MOTIVO_ESTORNO = "Operação estornada no histórico."
 MOTIVO_SEM_CANCELAR_REMOTO = " (não foi possível cancelar no RevSign)"
@@ -95,6 +98,17 @@ def _resolver_colaborador(item: dict, termo: Optional[dict] = None) -> Optional[
     if item.get("cpf"):
         return colaboradores.obter_por_cpf(item["cpf"])
     return None
+
+
+def _frase(mensagem: object) -> str:
+    """Mensagem como frase terminada em ponto (as do RevSign e da conversão já vêm assim)."""
+    texto = str(mensagem).strip()
+    return texto if texto.endswith(".") else f"{texto}."
+
+
+def _nome_pdf(nome_arquivo: str) -> str:
+    base, ext = os.path.splitext(nome_arquivo)
+    return f"{base}.pdf" if ext.lower() == ".docx" else f"{nome_arquivo}.pdf"
 
 
 def _descricao_do_item(item: dict) -> str:
@@ -229,26 +243,32 @@ def enviar(termo_id: int, ctx: AuditContext, *, documento: Optional[DocumentoGer
         motivo = MOTIVO_SEM_COLABORADOR
     elif not email:
         motivo = MOTIVO_SEM_EMAIL
+    elif not cpf_valido(colaborador.get("cpf") or ""):
+        motivo = MOTIVO_SEM_CPF
     else:
         try:
+            # O RevSign só aceita PDF; o .docx fica guardado em `documento_key` para o download manual.
+            pdf = docx_para_pdf(documento.conteudo)
             criado = get_revsign_client().criar_documento(
                 NovoDocumento(
                     titulo=(
                         f"Termo de {ROTULO_TIPO[tipo]} — {_descricao_do_item(item)} "
                         f"(patrimônio #{item['id']})"
                     ),
-                    arquivo=documento.conteudo,
-                    nome_arquivo=documento.nome_arquivo,
+                    arquivo=pdf,
+                    nome_arquivo=_nome_pdf(documento.nome_arquivo),
                     signatario_nome=colaborador["nome"],
                     signatario_email=email,
                     referencia_externa=referencia_externa(termo_id),
                     tipo="DEVOLUCAO" if tipo == "devolucao" else "ENTREGA",
-                    signatario_cpf="".join(ch for ch in str(colaborador.get("cpf") or "") if ch.isdigit()),
+                    signatario_cpf="".join(ch for ch in str(colaborador["cpf"]) if ch.isdigit()),
                 )
             )
             status, revsign_id = "enviado", criado.documento_id
+        except ConversaoPdfFalhou as e:
+            motivo = f"{_frase(e)} Assinatura manual."
         except RevSignError as e:
-            motivo = f"Falha ao enviar ao RevSign ({e}): assinatura manual."
+            motivo = f"Falha ao enviar ao RevSign: {_frase(e)} Assinatura manual."
 
     if status == "enviado":
         campos.update(status="enviado", enviado_em=agora_local(), revsign_documento_id=revsign_id, motivo=None)

@@ -68,8 +68,8 @@ def test_solicitar_ligado_envia_ao_revsign(emprestimo, revsign_fake):
     assert termo["motivo"] is None
     enviado = revsign_fake.criados[0]
     assert enviado.signatario_email == "maria.souza@gmail.com"
-    assert enviado.nome_arquivo.endswith(".docx")
-    assert enviado.arquivo[:2] == b"PK"
+    assert enviado.nome_arquivo.endswith(".pdf")
+    assert enviado.arquivo.startswith(b"%PDF")
     assert enviado.referencia_externa == f"patrimonio-termo-{termo['id']}"
     assert "Termo de entrega" in enviado.titulo
 
@@ -111,7 +111,7 @@ def test_falha_do_revsign_fica_manual_e_nao_propaga(emprestimo, revsign_fake):
     revsign_fake.falhar_em = {"criar_documento"}
     termo = termos.solicitar(emprestimo, "entrega", CTX)
     assert termo["status"] == "manual"
-    assert termo["motivo"].startswith("Falha ao enviar ao RevSign (")
+    assert termo["motivo"] == "Falha ao enviar ao RevSign: Falha simulada em criar_documento. Assinatura manual."
     assert termo["revsign_documento_id"] is None
 
 
@@ -323,3 +323,123 @@ def test_reabrir_por_estorno_so_reabre_a_solicitacao_com_o_mesmo_pdf(emprestimo)
     igual = {**outra, "termo_assinado_anexo": chave}
     assert termos.reabrir_por_estorno(igual, CTX) == termo["id"]
     assert termos.get_termo_db().obter(termo["id"])["status"] == "manual"
+
+
+PDF_TESTE = b"%PDF-1.4 teste"
+
+
+def _documento_pronto(nome="termo.docx"):
+    from app.services.termos import DocumentoGerado
+
+    return DocumentoGerado(b"PKdocx", nome, f"terms/{nome}")
+
+
+@pytest.mark.integration
+def test_envio_usa_pdf_tipo_e_cpf(emprestimo, revsign_fake, monkeypatch):
+    from app.services import termos
+
+    recebidos = []
+
+    def converter(conteudo, **kw):
+        recebidos.append(conteudo)
+        return PDF_TESTE
+
+    monkeypatch.setattr(termos, "docx_para_pdf", converter)
+    termo = termos.solicitar(emprestimo, "entrega", CTX)
+    assert termo["status"] == "enviado"
+    enviado = revsign_fake.criados[0]
+    assert enviado.tipo == "ENTREGA"
+    assert enviado.signatario_cpf == CPF_COLABORADOR
+    assert enviado.nome_arquivo.endswith(".pdf") and ".docx" not in enviado.nome_arquivo
+    assert enviado.arquivo == PDF_TESTE
+    assert recebidos[0][:2] == b"PK"  # o que foi convertido é o .docx gerado
+    assert termo["documento_key"].endswith(".docx")  # o .docx continua guardado para o download manual
+
+
+@pytest.mark.integration
+def test_termo_de_uso_vai_como_entrega(inv_manager, item_disponivel, colaborador, unidade_juazeiro, revsign_fake, executar_sql):
+    from app.services import termos
+
+    _emprestar(inv_manager, item_disponivel["id"], colaborador["id"])
+    executar_sql("UPDATE items SET status='Indisponível' WHERE id=%s", (item_disponivel["id"],))
+    termo = termos.solicitar(item_disponivel["id"], "uso", CTX, documento=_documento_pronto())
+    assert termo["status"] == "enviado"
+    assert revsign_fake.criados[0].tipo == "ENTREGA"
+
+
+@pytest.mark.integration
+def test_devolucao_vai_como_devolucao(inv_manager, item_disponivel, colaborador, unidade_juazeiro, revsign_fake, executar_sql):
+    from app.services import termos
+
+    _emprestar(inv_manager, item_disponivel["id"], colaborador["id"])
+    executar_sql("UPDATE items SET status='Pendente Devolução' WHERE id=%s", (item_disponivel["id"],))
+    termo = termos.solicitar(item_disponivel["id"], "devolucao", CTX, documento=_documento_pronto("devolucao.docx"))
+    assert termo["status"] == "enviado"
+    enviado = revsign_fake.criados[0]
+    assert enviado.tipo == "DEVOLUCAO"
+    assert enviado.nome_arquivo == "devolucao.pdf"
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("cpf", ["", "123", "11111111111", "52998224726"])
+def test_sem_cpf_fica_manual(
+    inv_manager, item_disponivel, criar_colaborador, unidade_juazeiro, revsign_fake, executar_sql, cpf
+):
+    from app.services import termos
+
+    colab = criar_colaborador()
+    _emprestar(inv_manager, item_disponivel["id"], colab["id"])
+    executar_sql("UPDATE colaboradores SET cpf=%s WHERE id=%s", (cpf, colab["id"]))
+    termo = termos.solicitar(item_disponivel["id"], "entrega", CTX)
+    assert termo["status"] == "manual"
+    assert termo["motivo"] == "Colaborador sem CPF válido: assinatura manual."
+    assert revsign_fake.criados == []
+
+
+@pytest.mark.integration
+def test_conversao_falhou_fica_manual(emprestimo, revsign_fake, monkeypatch):
+    from app.services import termos
+    from app.services.termo_pdf import ConversaoPdfFalhou
+
+    def falhar(conteudo, **kw):
+        raise ConversaoPdfFalhou("A conversão do termo para PDF demorou demais.")
+
+    monkeypatch.setattr(termos, "docx_para_pdf", falhar)
+    termo = termos.solicitar(emprestimo, "entrega", CTX)
+    assert termo["status"] == "manual"
+    assert termo["motivo"] == "A conversão do termo para PDF demorou demais. Assinatura manual."
+    assert termo["documento_key"]  # o .docx segue disponível
+    assert revsign_fake.criados == []
+
+
+@pytest.mark.integration
+def test_colaborador_fora_da_base_fica_manual(emprestimo, revsign_fake, monkeypatch):
+    from app.services import termos
+    from app.services.revsign_client import RevSignError
+
+    def criar(doc):
+        raise RevSignError("Colaborador não está na base do RH do RevSign.", "COLABORADOR_NOT_FOUND")
+
+    monkeypatch.setattr(revsign_fake, "criar_documento", criar)
+    termo = termos.solicitar(emprestimo, "entrega", CTX)
+    assert termo["status"] == "manual"
+    assert termo["motivo"] == (
+        "Falha ao enviar ao RevSign: Colaborador não está na base do RH do RevSign. Assinatura manual."
+    )
+    assert termo["revsign_documento_id"] is None
+
+
+@pytest.mark.integration
+def test_reenviar_cedo_demais_mensagem(emprestimo, revsign_fake, monkeypatch):
+    from app.services import termos
+    from app.services.revsign_client import RevSignError
+
+    termo = termos.solicitar(emprestimo, "entrega", CTX)
+
+    def reenviar(documento_id):
+        raise RevSignError("Aguarde 10 minutos entre reenvios.", "RESEND_TOO_SOON")
+
+    monkeypatch.setattr(revsign_fake, "reenviar", reenviar)
+    with pytest.raises(termos.TermoErro) as exc:
+        termos.reenviar(termo["id"], CTX)
+    assert str(exc.value) == "Não foi possível reenviar: Aguarde 10 minutos entre reenvios."

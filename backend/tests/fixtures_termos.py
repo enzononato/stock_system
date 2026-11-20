@@ -20,6 +20,8 @@ def revsign_fake(monkeypatch):
 
     monkeypatch.setattr(config.settings, "REVSIGN_ENABLED", True)
     monkeypatch.setattr(config.settings, "REVSIGN_WEBHOOK_SECRET", SEGREDO_WEBHOOK)
+    # A conversão real exige o LibreOffice (lenta): nos testes do envio vai um PDF de mentira.
+    monkeypatch.setattr("app.services.termos.docx_para_pdf", lambda conteudo, **kw: b"%PDF-1.4 teste")
     fake = FakeRevSignClient(webhook_secret=SEGREDO_WEBHOOK)
     usar_cliente(fake)
     yield fake
