@@ -33,6 +33,7 @@ import InventariosPage from '@/pages/InventariosPage'
 import InventarioLeituraPage from '@/pages/InventarioLeituraPage'
 import InventarioRelatorioPage from '@/pages/InventarioRelatorioPage'
 import ColetorPage from '@/features/coletor/ColetorPage'
+import ColetorConcluidoPage from '@/features/coletor/ColetorConcluidoPage'
 import { PosLoginRedirect } from '@/features/etiquetas/PosLoginRedirect'
 import SistemasPage from '@/pages/acessos/SistemasPage'
 import PacotesPage from '@/pages/acessos/PacotesPage'
@@ -64,6 +65,8 @@ export default function App() {
         <Route path="/e/:id" element={<EtiquetaRedirectPage />} />
         <Route path="/esqueci-senha" element={<EsqueciSenhaPage />} />
         <Route path="/redefinir-senha" element={<RedefinirSenhaPage />} />
+        {/* Tela final do coletor: pública, porque o técnico já saiu da conta quando chega aqui. */}
+        <Route path="/coletor/concluido" element={<ColetorConcluidoPage />} />
 
         {/* Todas as rotas protegidas dentro do AppLayout */}
         <Route element={<AppLayout />}>

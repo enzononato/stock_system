@@ -1,6 +1,7 @@
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { MarcaColetor, type CamposMarcados } from '@/components/equipment/MarcaColetor'
 import { isValidMac, isValidIp, maskMacInput } from '@/lib/utils'
 
 interface FieldConfig {
@@ -105,9 +106,11 @@ interface TypeSpecificFieldsProps {
   values: Record<string, string>
   onChange: (key: string, value: string) => void
   disabled?: boolean
+  /** Campos preenchidos pelo coletor de dados da máquina (ver `MarcaColetor`). */
+  marcados?: CamposMarcados
 }
 
-export function TypeSpecificFields({ tipo, values, onChange, disabled }: TypeSpecificFieldsProps) {
+export function TypeSpecificFields({ tipo, values, onChange, disabled, marcados }: TypeSpecificFieldsProps) {
   const fields = TYPE_FIELDS[tipo] ?? []
   if (fields.length === 0) return null
 
@@ -116,6 +119,7 @@ export function TypeSpecificFields({ tipo, values, onChange, disabled }: TypeSpe
       {fields.map((field) => (
         <div key={field.key} className="flex flex-col gap-1.5">
           <Label htmlFor={field.key}>{field.label}</Label>
+          <MarcaColetor marcados={marcados} campo={field.key} />
           {field.type === 'select' ? (
             <Select
               value={values[field.key] ?? ''}

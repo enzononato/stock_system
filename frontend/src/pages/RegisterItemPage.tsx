@@ -1,9 +1,10 @@
-import { useState, useEffect, type FormEvent } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useState, useEffect, useMemo, useRef, type FormEvent } from 'react'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createItem, updateItem, getItem, uploadNotaFiscal, baixarNotaFiscal } from '@/api/items'
 import { listUnidades } from '@/api/unidades'
 import { LocalSelect } from '@/components/locais/LocalSelect'
+import { MarcaColetor, type CamposMarcados } from '@/components/equipment/MarcaColetor'
 import { TypeSpecificFields, validateTypeSpecificFields } from '@/components/equipment/TypeSpecificFields'
 import { Button } from '@/components/ui/button'
 import { FileUpload } from '@/components/ui/FileUpload'
@@ -13,6 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { StatusPill } from '@/components/ui/StatusPill'
 import { toast } from '@/components/ui/toast'
 import { TransferirItemDialog } from '@/features/ciclo-vida/TransferirItemDialog'
+import { lerEstadoColetor } from '@/features/coletor/estadoColetor'
+import { useAuth } from '@/contexts/AuthContext'
 import {
   anexoGrandeDemais,
   formatMoedaInput,
@@ -59,6 +62,9 @@ function todayBr(): string {
   return `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`
 }
 
+/** Campos específicos que o coletor pode preencher (chaves de `ItemCreate`). */
+const SPECIFIC_KEYS_SET: ReadonlySet<string> = new Set(SPECIFIC_KEYS)
+
 interface Props {
   mode: 'create' | 'edit'
 }
@@ -73,6 +79,10 @@ export default function RegisterItemPage({ mode }: Props) {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { logout } = useAuth()
+  // Dados que a página do coletor entregou ao abrir o formulário (null fora desse fluxo).
+  const { state: estadoNavegacao } = useLocation()
+  const estadoColetor = useMemo(() => lerEstadoColetor(estadoNavegacao), [estadoNavegacao])
   const { equipmentTypes, revendas, isLoading: constantsLoading } = useConstants()
 
   const { data: existingItem, isLoading: loadingItem } = useQuery({
@@ -88,8 +98,9 @@ export default function RegisterItemPage({ mode }: Props) {
   })
 
   const [tipo, setTipo] = useState('')
-  const [brand, setBrand] = useState('')
-  const [model, setModel] = useState('')
+  // Cadastro novo: os dados do coletor entram já no primeiro render (uma única vez).
+  const [brand, setBrand] = useState(() => (mode === 'create' ? estadoColetor?.campos.brand ?? '' : ''))
+  const [model, setModel] = useState(() => (mode === 'create' ? estadoColetor?.campos.model ?? '' : ''))
   const [revenda, setRevenda] = useState('')
   const [localId, setLocalId] = useState<number | null>(null)
   const [notaFiscal, setNotaFiscal] = useState('')
@@ -102,7 +113,26 @@ export default function RegisterItemPage({ mode }: Props) {
   // Troca a chave do FileUpload para limpar o arquivo escolhido (ele guarda o próprio estado).
   const [nfKey, setNfKey] = useState(0)
   const [transferirAberto, setTransferirAberto] = useState(false)
-  const [specificFields, setSpecificFields] = useState<Record<string, string>>({})
+  const [specificFields, setSpecificFields] = useState<Record<string, string>>(() => {
+    if (mode !== 'create' || !estadoColetor) return {}
+    const inicial: Record<string, string> = {}
+    for (const [k, v] of Object.entries(estadoColetor.campos)) {
+      if (SPECIFIC_KEYS_SET.has(k) && v) inicial[k] = v
+    }
+    return inicial
+  })
+  // Campos preenchidos pelo coletor, para destacar na tela. Na edição guarda também o valor anterior.
+  const [marcados, setMarcados] = useState<CamposMarcados>(() => {
+    if (mode !== 'create' || !estadoColetor) return {}
+    const m: CamposMarcados = {}
+    for (const [k, v] of Object.entries(estadoColetor.campos)) {
+      if ((k === 'brand' || k === 'model' || SPECIFIC_KEYS_SET.has(k)) && v) m[k] = undefined
+    }
+    return m
+  })
+  // Garante que os dados do coletor são aplicados uma única vez (tipo e edição).
+  const tipoColetorAplicado = useRef(false)
+  const edicaoColetorAplicada = useRef(false)
   // Hidratação uma única vez: a flag impede que o formulário seja recarregado
   // do servidor (apagando edições em andamento) depois da primeira carga.
   const [hydrated, setHydrated] = useState(mode === 'create')
@@ -114,6 +144,15 @@ export default function RegisterItemPage({ mode }: Props) {
     setNfFile(null)
     setNfKey((k) => k + 1)
   }, [mode])
+
+  // Tipo sugerido pelo coletor (cadastro novo): só vale se existir na lista de tipos, que carrega depois.
+  useEffect(() => {
+    if (mode !== 'create' || !estadoColetor?.tipoSugerido || tipoColetorAplicado.current) return
+    if (!equipmentTypes.includes(estadoColetor.tipoSugerido)) return
+    tipoColetorAplicado.current = true
+    const sugerido = estadoColetor.tipoSugerido
+    setTipo((atual) => atual || sugerido)
+  }, [mode, estadoColetor, equipmentTypes])
 
   useEffect(() => {
     if (mode === 'edit' && existingItem && !hydrated) {
@@ -142,10 +181,31 @@ export default function RegisterItemPage({ mode }: Props) {
         const val = record[k]
         if (val) fields[k] = String(val)
       }
+      // Edição pelo coletor: aplica os dados lidos por cima do item já hidratado e guarda o valor
+      // anterior de cada campo que mudou, para destacar na tela.
+      if (estadoColetor && !edicaoColetorAplicada.current) {
+        edicaoColetorAplicada.current = true
+        const m: CamposMarcados = {}
+        const anteriorSeMudou = (antes: string, novo: string) => (antes !== novo ? antes : undefined)
+        for (const [k, v] of Object.entries(estadoColetor.campos)) {
+          if (!v) continue
+          if (k === 'brand') {
+            m[k] = anteriorSeMudou(existingItem.brand ?? '', v)
+            setBrand(v)
+          } else if (k === 'model') {
+            m[k] = anteriorSeMudou(existingItem.model ?? '', v)
+            setModel(v)
+          } else if (SPECIFIC_KEYS_SET.has(k)) {
+            m[k] = anteriorSeMudou(fields[k] ?? '', v)
+            fields[k] = v
+          }
+        }
+        setMarcados(m)
+      }
       setSpecificFields(fields)
       setHydrated(true)
     }
-  }, [mode, existingItem, hydrated])
+  }, [mode, existingItem, hydrated, estadoColetor])
 
   // Comparação sem diferenciar maiúsculas: item legado com a unidade grafada de outro jeito
   // não pode perder o local por causa da caixa.
@@ -177,13 +237,29 @@ export default function RegisterItemPage({ mode }: Props) {
       }
       return { id: itemId }
     },
-    onSuccess: (resultado) => {
-      void queryClient.invalidateQueries({ queryKey: ['items'] })
-      void queryClient.invalidateQueries({ queryKey: ['item'] })
+    onSuccess: async (resultado) => {
+      // Saindo da conta logo depois, nada deve ser rebuscado: só marca como desatualizado (uma
+      // busca sem sessão cairia em 401 e mostraria "Sessão expirada").
+      const saindo = estadoColetor !== null && !resultado.erroNf
+      const refetchType = saindo ? 'none' : 'active'
+      void queryClient.invalidateQueries({ queryKey: ['items'], refetchType })
+      void queryClient.invalidateQueries({ queryKey: ['item'], refetchType })
       if (resultado.erroNf) {
         toast(`Equipamento salvo, mas a nota fiscal não foi anexada: ${resultado.erroNf}`, 'error')
         // Na criação, vai para a edição do item já gravado (anexar a NF de novo lá); na edição, fica na tela.
         if (mode === 'create') void navigate(`/edit/${resultado.id}`)
+        return
+      }
+      if (saindo) {
+        // Fluxo do coletor: o técnico sai da conta neste computador e vê a tela final (pública).
+        // Se o logout falhar, a tela final aparece mesmo assim, com o aviso para sair pelo menu.
+        let saiu = true
+        try {
+          await logout()
+        } catch {
+          saiu = false
+        }
+        void navigate(`/coletor/concluido?id=${resultado.id}&saiu=${saiu ? 1 : 0}`, { replace: true })
         return
       }
       toast(mode === 'create' ? 'Item cadastrado com sucesso!' : 'Item atualizado com sucesso!')
@@ -322,6 +398,12 @@ export default function RegisterItemPage({ mode }: Props) {
         </div>
       </div>
 
+      {estadoColetor && (
+        <p role="status" className="rounded border border-border bg-brand-soft px-3 py-2 text-body-sm text-brand-soft-foreground">
+          Dados preenchidos pelo coletor. Confira antes de salvar.
+        </p>
+      )}
+
       <form
         onSubmit={handleSubmit}
         className="rounded border border-border bg-surface p-6 space-y-6"
@@ -351,6 +433,7 @@ export default function RegisterItemPage({ mode }: Props) {
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="brand" className="text-caption font-medium">Marca *</Label>
+              <MarcaColetor marcados={estadoColetor ? marcados : undefined} campo="brand" />
               <Input
                 id="brand"
                 value={brand}
@@ -362,6 +445,7 @@ export default function RegisterItemPage({ mode }: Props) {
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="model" className="text-caption font-medium">Modelo *</Label>
+              <MarcaColetor marcados={estadoColetor ? marcados : undefined} campo="model" />
               <Input
                 id="model"
                 value={model}
@@ -560,6 +644,7 @@ export default function RegisterItemPage({ mode }: Props) {
               <TypeSpecificFields
                 tipo={tipo}
                 values={specificFields}
+                marcados={estadoColetor ? marcados : undefined}
                 onChange={(k, v) => setSpecificFields((prev) => ({ ...prev, [k]: v }))}
               />
             </div>
