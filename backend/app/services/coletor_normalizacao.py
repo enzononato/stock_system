@@ -34,10 +34,20 @@ _GENERICOS_TEXTO = {
 }
 _GENERICOS_SERIAL = {
     "to be filled by o.e.m.",
+    "to be filled by oem",
+    "to be filled by o.e.m",
     "default string",
+    "default",
     "system serial number",
-    "0",
+    "chassis serial number",
+    "base board serial number",
+    "not specified",
+    "not applicable",
+    "123456789",
+    "1234567890",
     "none",
+    "n/a",
+    "oem",
 }
 
 _MAPA_MARCAS = {
@@ -56,7 +66,7 @@ _SUFIXO_MARCA = re.compile(
     re.IGNORECASE,
 )
 
-_TAMANHOS_COMERCIAIS = (120, 128, 240, 250, 256, 480, 500, 512, 960, 1000, 2000)
+_TAMANHOS_COMERCIAIS = (120, 128, 240, 250, 256, 480, 500, 512, 960, 1000, 1920, 2000, 3840, 4000)
 _TOLERANCIA_TAMANHO = 0.12
 
 # MACs de preenchimento (adaptador sem endereço real) não identificam máquina nenhuma.
@@ -72,7 +82,7 @@ TipoSugerido = Literal["Notebook", "Desktop"]
 class ColetaNormalizada:
     campos: CamposColeta = field(default_factory=dict)
     tipo_sugerido: Optional[TipoSugerido] = None
-    # Todos os MACs (normalizados AABBCCDDEEFF) dos adaptadores, para a busca de cadastro.
+    # MACs (normalizados AABBCCDDEEFF) dos adaptadores não USB, para a busca de cadastro.
     macs: list[str] = field(default_factory=list)
 
 
@@ -107,12 +117,19 @@ def marca(fabricante: Optional[str]) -> str:
 
 
 def _modelo(bruta: ColetaBruta) -> str:
+    fabricante = marca(bruta.fabricante)
     modelo = " ".join((bruta.modelo or "").split())
-    if marca(bruta.fabricante) == "Lenovo":
+    if fabricante == "Lenovo":
         comercial = " ".join((bruta.versao_produto or "").split())
         if comercial and not _generico(comercial):
-            return comercial
-    return "" if _generico(modelo) else modelo
+            modelo = comercial
+    if _generico(modelo):
+        return ""
+    # "HP ProBook 440 G8" -> "ProBook 440 G8": a marca já vai no campo próprio.
+    prefixo = f"{fabricante} ".lower()
+    if fabricante and modelo.lower().startswith(prefixo) and modelo[len(prefixo):].strip():
+        modelo = modelo[len(prefixo):].strip()
+    return modelo
 
 
 def cpu_curta(nome: Optional[str]) -> str:
@@ -178,7 +195,8 @@ def sistema(caption: Optional[str]) -> str:
 
 def serial(valor: Optional[str]) -> str:
     texto = (valor or "").strip()
-    if not texto or re.fullmatch(r"0*", texto):
+    # Vazio, só zeros/espaços/traços/pontos, ou só "x" (ex.: "xxxxxxxx").
+    if not texto or re.fullmatch(r"[0\s.\-]*", texto) or re.fullmatch(r"[xX]+", texto):
         return ""
     if " ".join(texto.lower().split()) in _GENERICOS_SERIAL:
         return ""
@@ -205,10 +223,13 @@ def mac_gravado(adaptadores: list[Adaptador]) -> str:
         lambda a: a.ativo and a.tipo == "ethernet",
         lambda a: a.ativo and a.tipo == "wifi",
     )
-    for regra in regras:
-        for adaptador, hexa in validos:
-            if regra(adaptador):
-                return _formatar_mac(hexa)
+    # Adaptadores internos primeiro: o MAC de uma dock/adaptador USB acompanha o acessório.
+    # Só se nenhum interno servir é que um USB é gravado.
+    for grupo in ([v for v in validos if not v[0].usb], [v for v in validos if v[0].usb]):
+        for regra in regras:
+            for adaptador, hexa in grupo:
+                if regra(adaptador):
+                    return _formatar_mac(hexa)
     return ""
 
 
@@ -224,6 +245,8 @@ def tipo_pelo_chassi(chassi: list[int]) -> Optional[TipoSugerido]:
 def _macs(adaptadores: list[Adaptador]) -> list[str]:
     vistos: list[str] = []
     for adaptador in adaptadores:
+        if adaptador.usb:
+            continue
         hexa = _mac_hex(adaptador.mac)
         if hexa and hexa not in vistos:
             vistos.append(hexa)

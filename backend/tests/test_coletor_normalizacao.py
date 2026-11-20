@@ -325,6 +325,46 @@ def test_armazenamento_ignora_usb_e_classifica_tipo():
     assert armazenamento([Disco(tipo="ssd", bytes=250059350016)]) == "250 SSD"
 
 
+def test_armazenamento_tamanhos_de_2_4_tb():
+    assert armazenamento([Disco(tipo="HDD", bytes=4000787030016)]) == "4000 HDD"
+    assert armazenamento([Disco(tipo="SSD", bytes=3840755982336)]) == "3840 SSD"
+    assert armazenamento([Disco(tipo="SSD", bytes=1920383410176)]) == "1920 SSD"
+    assert armazenamento([Disco(tipo="HDD", bytes=2000398934016)]) == "2000 HDD"
+
+
+def test_modelo_nao_repete_a_marca():
+    r = normalizar(bruta(fabricante="HP", modelo="HP ProBook 440 G8 Notebook PC"))
+    assert r.campos["brand"] == "HP"
+    assert r.campos["model"] == "ProBook 440 G8 Notebook PC"
+    r = normalizar(bruta(fabricante="Hewlett-Packard", modelo="hp EliteBook 840"))
+    assert r.campos["model"] == "EliteBook 840"
+    # só tira prefixo inteiro, e nunca deixa o modelo vazio
+    r = normalizar(bruta(fabricante="Dell Inc.", modelo="Dellamar 100"))
+    assert r.campos["model"] == "Dellamar 100"
+    r = normalizar(bruta(fabricante="HP", modelo="HP "))
+    assert r.campos["model"] == "HP"
+
+
+def test_dock_usb_nao_identifica_a_maquina():
+    # Notebook na dock: ethernet USB (com gateway) + wifi interno (sem gateway).
+    dock = Adaptador(mac="AA:BB:CC:DD:EE:10", tipo="ethernet", ativo=True, gateway=True, usb=True)
+    wifi = Adaptador(mac="AA:BB:CC:DD:EE:20", tipo="wifi", ativo=True, gateway=False)
+    r = normalizar(bruta(adaptadores=[dock, wifi]))
+    assert r.campos["endereco_fisico"] == "AA:BB:CC:DD:EE:20"
+    assert r.macs == ["AABBCCDDEE20"]
+    assert "AABBCCDDEE10" not in r.macs
+
+
+def test_so_adaptador_usb_grava_mas_nao_entra_nos_macs():
+    dock = Adaptador(mac="AA:BB:CC:DD:EE:10", tipo="ethernet", ativo=True, gateway=True, usb=True)
+    r = normalizar(bruta(adaptadores=[dock]))
+    assert r.campos["endereco_fisico"] == "AA:BB:CC:DD:EE:10"
+    assert r.macs == []
+    # entre USBs, vale a mesma preferência
+    outro = Adaptador(mac="AA:BB:CC:DD:EE:11", tipo="wifi", ativo=True, usb=True)
+    assert mac_gravado([outro, dock]) == "AA:BB:CC:DD:EE:10"
+
+
 @pytest.mark.parametrize(
     "entrada, esperado",
     [
@@ -350,6 +390,24 @@ def test_sistema(entrada, esperado):
         ("   ", ""),
         (None, ""),
         ("  ABC123 ", "ABC123"),
+        ("Not Specified", ""),
+        ("NOT APPLICABLE", ""),
+        ("Chassis Serial Number", ""),
+        ("Base Board Serial Number", ""),
+        ("123456789", ""),
+        ("1234567890", ""),
+        ("N/A", ""),
+        ("xxxxxxxx", ""),
+        ("XXXX", ""),
+        ("OEM", ""),
+        ("Default", ""),
+        ("To Be Filled By OEM", ""),
+        ("to be filled by o.e.m", ""),
+        ("0000-0000", ""),
+        ("0.0.0", ""),
+        ("- - -", ""),
+        ("PF3X1234", "PF3X1234"),
+        ("X1234", "X1234"),
     ],
 )
 def test_serial(entrada, esperado):

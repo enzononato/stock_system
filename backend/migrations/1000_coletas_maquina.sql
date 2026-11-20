@@ -1,6 +1,6 @@
 -- Coletor de dados da máquina: cada coleta é um código de uso único e curto (15 min).
 -- Só o SHA-256 do código fica no banco (codigo_hash); datas em UTC, passadas pelo Python.
--- `dados` guarda o JSON normalizado enviado pelo script; nada é gravado em `items`.
+-- `dados` guarda a coleta bruta (`ColetaBruta.model_dump()`) enviada pelo script, sem normalizar; nada é gravado em `items`.
 CREATE TABLE IF NOT EXISTS coletas_maquina (
     id INT AUTO_INCREMENT PRIMARY KEY,
     codigo_hash CHAR(64) NOT NULL UNIQUE,

@@ -31,6 +31,8 @@ class Adaptador(BaseModel):
     tipo: Literal["ethernet", "wifi", "outro"] = "outro"
     ativo: bool = False
     gateway: bool = False
+    # Dock/adaptador USB: o MAC acompanha o acessório, não a máquina.
+    usb: bool = False
 
 
 class ColetaBruta(BaseModel):
