@@ -25,6 +25,7 @@ from app.routers import auth_senha
 from app.routers import perfil
 from app.routers import painel
 from app.routers import exportacoes
+from app.routers import coletor
 
 logger = logging.getLogger(__name__)
 
@@ -217,6 +218,7 @@ app.include_router(termos.router)
 app.include_router(integracoes_revsign.router)
 app.include_router(painel.router)
 app.include_router(exportacoes.router)
+app.include_router(coletor.router)
 
 
 @app.on_event("startup")

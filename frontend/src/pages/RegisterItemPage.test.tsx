@@ -1,11 +1,14 @@
-import { beforeAll, describe, expect, it, vi } from 'vitest'
-import { http, HttpResponse } from 'msw'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { delay, http, HttpResponse } from 'msw'
 import { screen, waitFor, within } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { server } from '@/test/server'
 import { renderWithClient } from '@/test/render'
 import { ToastContainer } from '@/components/ui/toast'
+import { setAccessToken } from '@/api/client'
+import { AuthProvider, useAuth } from '@/contexts/AuthContext'
+import ColetorConcluidoPage from '@/features/coletor/ColetorConcluidoPage'
 import RegisterItemPage from '@/pages/RegisterItemPage'
 
 // Os testes de cadastro digitam vários campos e abrem selects do Radix: sob carga (suíte inteira em paralelo) passam de 5 s.
@@ -37,10 +40,13 @@ const itemExistente = {
   garantia_ate: '2027-01-10',
   nf_anexo_key: null,
   local_id: 5,
+  host: 'NB-OLD',
 }
 
 function mockBase() {
   server.use(
+    http.post('/api/auth/refresh', () => HttpResponse.json({ access_token: 'tok-1', token_type: 'bearer' })),
+    http.get('/api/auth/me', () => HttpResponse.json({ id: 1, username: 'tecnico.teste', role: 'Técnico' })),
     http.get('/api/constants', () =>
       HttpResponse.json({
         center_costs: [],
@@ -62,15 +68,39 @@ function mockBase() {
   )
 }
 
-function renderPage(inicial: string) {
+/** Mesmo comportamento do AppLayout: sem usuário, manda para o login. */
+function AreaLogada() {
+  const { user, isLoading } = useAuth()
+  if (isLoading) return <p>Carregando sistema...</p>
+  if (!user) return <Navigate to="/login" replace />
+  return <Outlet />
+}
+
+const rotasVisitadas: string[] = []
+
+function RotaAtual() {
+  const { pathname, search } = useLocation()
+  rotasVisitadas.push(pathname)
+  return <p data-testid="rota">{pathname + search}</p>
+}
+
+function renderPage(inicial: string | { pathname: string; state: unknown }) {
   return renderWithClient(
     <MemoryRouter initialEntries={[inicial]}>
-      <Routes>
-        <Route path="/register" element={<RegisterItemPage mode="create" />} />
-        <Route path="/edit/:id" element={<RegisterItemPage mode="edit" />} />
-        <Route path="/stock" element={<p>Estoque</p>} />
-      </Routes>
-      <ToastContainer />
+      <AuthProvider>
+        <Routes>
+          <Route element={<AreaLogada />}>
+            <Route path="/register" element={<RegisterItemPage mode="create" />} />
+            <Route path="/edit/:id" element={<RegisterItemPage mode="edit" />} />
+            <Route path="/register/coletor" element={<p>Tela do coletor</p>} />
+            <Route path="/stock" element={<p>Estoque</p>} />
+          </Route>
+          <Route path="/coletor/concluido" element={<ColetorConcluidoPage />} />
+          <Route path="/login" element={<p>Tela de login</p>} />
+        </Routes>
+        <RotaAtual />
+        <ToastContainer />
+      </AuthProvider>
     </MemoryRouter>
   )
 }
@@ -95,7 +125,21 @@ function enviarNf(user: ReturnType<typeof userEvent.setup>, file: File) {
   return user.upload(input, file)
 }
 
+afterEach(() => {
+  setAccessToken(null)
+  rotasVisitadas.length = 0
+})
+
 describe('RegisterItemPage — cadastro', () => {
+  it('oferece preencher com os dados da máquina só no cadastro novo', async () => {
+    mockBase()
+    const user = userEvent.setup()
+    renderPage('/register')
+
+    await user.click(await screen.findByRole('button', { name: 'Preencher com os dados desta máquina' }))
+    expect(await screen.findByText('Tela do coletor')).toBeInTheDocument()
+  })
+
   it('cadastra com dados de compra e local e depois anexa a NF', async () => {
     mockBase()
     let corpo: Record<string, unknown> = {}
@@ -247,9 +291,45 @@ describe('RegisterItemPage — cadastro', () => {
     expect(await screen.findByRole('heading', { name: 'Editar Equipamento' })).toBeInTheDocument()
     expect(postsItem).toBe(1)
   })
+
+  it('Notebook e Desktop exibem o campo Nº de Série logo após o Host', async () => {
+    mockBase()
+    server.use(
+      http.get('/api/constants', () =>
+        HttpResponse.json({
+          center_costs: [],
+          revendas: ['Revalle Juazeiro', 'Revalle Petrolina'],
+          setores: [],
+          equipment_types: ['Notebook', 'Desktop'],
+          peripheral_types: [],
+          removal_reasons: [],
+          removal_reasons_attachment: {},
+        })
+      )
+    )
+    const user = userEvent.setup()
+    renderPage('/register')
+
+    for (const tipo of ['Notebook', 'Desktop']) {
+      await user.click(await screen.findByRole('combobox', { name: /Tipo/ }))
+      await user.click(await screen.findByRole('option', { name: tipo }))
+      const host = screen.getByLabelText('Host')
+      const serie = screen.getByLabelText('Nº de Série')
+      expect(host.compareDocumentPosition(serie) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    }
+  })
 })
 
 describe('RegisterItemPage — edição', () => {
+  it('não oferece preencher com os dados da máquina na edição', async () => {
+    mockBase()
+    server.use(http.get('/api/items/9', () => HttpResponse.json(itemExistente)))
+    renderPage('/edit/9')
+
+    await screen.findByRole('heading', { name: 'Editar Equipamento' })
+    expect(screen.queryByRole('button', { name: 'Preencher com os dados desta máquina' })).not.toBeInTheDocument()
+  })
+
   it('hidrata valor e datas sem deslocar o dia', async () => {
     mockBase()
     server.use(http.get('/api/items/9', () => HttpResponse.json(itemExistente)))
@@ -373,5 +453,293 @@ describe('RegisterItemPage — edição', () => {
     expect(await screen.findByText('Disponível')).toBeInTheDocument()
     expect(screen.getByText('Nota fiscal anexada')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Baixar nota fiscal' })).toBeInTheDocument()
+  })
+})
+
+const estadoColetor = (campos: Record<string, string>, tipoSugerido: string | null = 'Notebook') => ({
+  origem: 'coletor',
+  coletaId: 1,
+  campos,
+  tipoSugerido,
+})
+
+async function escolherRevenda(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('combobox', { name: /Revenda/ }))
+  await user.click(await screen.findByRole('option', { name: 'REVALLE JUAZEIRO' }))
+}
+
+describe('RegisterItemPage — dados do coletor', () => {
+  it('preenche o cadastro com os dados do coletor', async () => {
+    mockBase()
+    renderPage({
+      pathname: '/register',
+      state: estadoColetor({ brand: 'Dell', model: 'Latitude 3420', host: 'NB-001', identificador: 'ABC123' }),
+    })
+
+    expect(await screen.findByLabelText(/Marca/)).toHaveValue('Dell')
+    expect(screen.getByLabelText(/Modelo/)).toHaveValue('Latitude 3420')
+    await waitFor(() => expect(screen.getByRole('combobox', { name: /Tipo/ })).toHaveTextContent('Notebook'))
+    expect(await screen.findByLabelText('Host')).toHaveValue('NB-001')
+    expect(screen.getByLabelText('Nº de Série')).toHaveValue('ABC123')
+    expect(screen.getByText('Dados preenchidos pelo coletor. Confira antes de salvar.')).toBeInTheDocument()
+    // Marca, modelo, host e série ganham a marca; nada de "antes:" no cadastro novo.
+    expect(screen.getAllByText('do coletor')).toHaveLength(4)
+    expect(screen.queryByText(/antes:/)).not.toBeInTheDocument()
+    // A marca fica ligada ao input (leitor de tela lê "do coletor" junto do campo).
+    expect(screen.getByLabelText(/Marca/)).toHaveAccessibleDescription('do coletor')
+    expect(screen.getByLabelText('Host')).toHaveAccessibleDescription('do coletor')
+  })
+
+  it('ignora o tipo sugerido que não existe na lista de tipos', async () => {
+    mockBase()
+    renderPage({ pathname: '/register', state: estadoColetor({ brand: 'Dell' }, 'Servidor') })
+
+    expect(await screen.findByLabelText(/Marca/)).toHaveValue('Dell')
+    // Espera a lista de tipos chegar (o select sai de "carregando"): só então a sugestão poderia valer.
+    await waitFor(() => expect(screen.getByRole('combobox', { name: /Tipo/ })).toBeEnabled())
+    expect(screen.getByRole('combobox', { name: /Tipo/ })).not.toHaveTextContent('Servidor')
+    expect(screen.queryByText(/Informações Específicas/)).not.toBeInTheDocument()
+  })
+
+  it('não mostra aviso nem marcas sem o estado do coletor', async () => {
+    mockBase()
+    renderPage('/register')
+
+    await screen.findByLabelText(/Marca/)
+    expect(screen.queryByText(/Dados preenchidos pelo coletor/)).not.toBeInTheDocument()
+    expect(screen.queryByText('do coletor')).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/Marca/)).not.toHaveAttribute('aria-describedby')
+  })
+
+  it('edição destaca o que mudou', async () => {
+    mockBase()
+    server.use(http.get('/api/items/9', () => HttpResponse.json(itemExistente)))
+    renderPage({
+      pathname: '/edit/9',
+      state: estadoColetor({ brand: 'Dell', host: 'NB-NEW', cpu: 'i5-1345U' }),
+    })
+
+    expect(await screen.findByLabelText('Host')).toHaveValue('NB-NEW')
+    expect(screen.getByText('antes: NB-OLD')).toBeInTheDocument()
+    expect(screen.getByLabelText('Host')).toHaveAccessibleDescription('do coletor antes: NB-OLD')
+    // Campo que o item não tinha: "antes: vazio". Marca igual à gravada: só a marca, sem "antes".
+    expect(screen.getByLabelText('Processador (CPU)')).toHaveValue('i5-1345U')
+    expect(screen.getByText('antes: vazio')).toBeInTheDocument()
+    expect(screen.getAllByText(/antes:/)).toHaveLength(2)
+    expect(screen.getAllByText('do coletor')).toHaveLength(3)
+    expect(screen.getByText('Dados preenchidos pelo coletor. Confira antes de salvar.')).toBeInTheDocument()
+    // O que o coletor não trouxe continua como o servidor mandou.
+    expect(screen.getByLabelText(/Modelo/)).toHaveValue('Latitude')
+  })
+
+  it('salvar pelo coletor sai da conta e mostra a tela final', async () => {
+    mockBase()
+    let corpo: Record<string, unknown> = {}
+    let logouts = 0
+    server.use(
+      http.post('/api/items', async ({ request }) => {
+        corpo = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json({ detail: 'ok', id: 42 })
+      }),
+      http.post('/api/auth/logout', () => {
+        logouts += 1
+        return HttpResponse.json({ detail: 'ok' })
+      })
+    )
+    const user = userEvent.setup()
+    renderPage({
+      pathname: '/register',
+      state: estadoColetor({ brand: 'Dell', model: 'Latitude 3420', host: 'NB-001' }),
+    })
+
+    await screen.findByLabelText('Host')
+    await escolherRevenda(user)
+    await user.click(screen.getByRole('button', { name: /Cadastrar Equipamento/ }))
+
+    expect(await screen.findByText('Máquina cadastrada (#42).')).toBeInTheDocument()
+    expect(screen.getByText('Você saiu da sua conta neste computador.')).toBeInTheDocument()
+    expect(logouts).toBe(1)
+    expect(corpo).toMatchObject({ tipo: 'Notebook', brand: 'Dell', model: 'Latitude 3420', host: 'NB-001' })
+    // Sair da conta não pode deixar o guard mandar para o login: a rota final é a tela pública.
+    expect(screen.getByTestId('rota')).toHaveTextContent('/coletor/concluido?id=42&saiu=1')
+    expect(screen.queryByText('Tela de login')).not.toBeInTheDocument()
+    // Nem de passagem: sair da conta não pode ter passado pelo /login antes da tela final.
+    expect(rotasVisitadas).not.toContain('/login')
+  })
+
+  it('logout falhou ainda mostra a tela final', async () => {
+    mockBase()
+    server.use(
+      http.post('/api/items', () => HttpResponse.json({ detail: 'ok', id: 42 })),
+      http.post('/api/auth/logout', () => HttpResponse.json({ detail: 'erro' }, { status: 500 }))
+    )
+    const user = userEvent.setup()
+    renderPage({ pathname: '/register', state: estadoColetor({ brand: 'Dell', model: 'Latitude 3420' }) })
+
+    await screen.findByLabelText('Host')
+    await escolherRevenda(user)
+    await user.click(screen.getByRole('button', { name: /Cadastrar Equipamento/ }))
+
+    expect(await screen.findByText('Máquina cadastrada (#42).')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Não foi possível sair da conta automaticamente. Saia pelo menu antes de entregar a máquina.'
+      )
+    ).toBeInTheDocument()
+    expect(screen.getByTestId('rota')).toHaveTextContent('/coletor/concluido?id=42&saiu=0')
+  })
+
+  it('fora do coletor não sai da conta', async () => {
+    mockBase()
+    let logouts = 0
+    server.use(
+      http.post('/api/items', () => HttpResponse.json({ detail: 'ok', id: 43 })),
+      http.post('/api/auth/logout', () => {
+        logouts += 1
+        return HttpResponse.json({ detail: 'ok' })
+      })
+    )
+    const user = userEvent.setup()
+    renderPage('/register')
+
+    await preencherCadastro(user)
+    await user.click(screen.getByRole('button', { name: /Cadastrar Equipamento/ }))
+
+    expect(await screen.findByText('Estoque')).toBeInTheDocument()
+    expect(logouts).toBe(0)
+  })
+
+  it('NF que falhou no fluxo do coletor vai para a edição com os dados e o próximo salvamento sai da conta', async () => {
+    mockBase()
+    let logouts = 0
+    server.use(
+      http.post('/api/items', () => HttpResponse.json({ detail: 'ok', id: 44 })),
+      http.post('/api/items/44/nota-fiscal', () => HttpResponse.json({ detail: 'falhou' }, { status: 500 })),
+      http.get('/api/items/44', () =>
+        HttpResponse.json({ ...itemExistente, id: 44, brand: 'Dell', model: 'Latitude 3420', host: 'NB-001' })
+      ),
+      http.put('/api/items/44', () => HttpResponse.json({ detail: 'ok' })),
+      http.post('/api/auth/logout', () => {
+        logouts += 1
+        return HttpResponse.json({ detail: 'ok' })
+      })
+    )
+    const user = userEvent.setup()
+    renderPage({
+      pathname: '/register',
+      state: estadoColetor({ brand: 'Dell', model: 'Latitude 3420', host: 'NB-001' }),
+    })
+
+    await screen.findByLabelText('Host')
+    await escolherRevenda(user)
+    await enviarNf(user, arquivoPdf())
+    await user.click(screen.getByRole('button', { name: /Cadastrar Equipamento/ }))
+
+    // Sem sair da conta: vai para a edição do item gravado, que continua no fluxo do coletor.
+    await waitFor(() => expect(screen.getByTestId('rota')).toHaveTextContent('/edit/44'))
+    expect(logouts).toBe(0)
+    expect(await screen.findByText('Dados preenchidos pelo coletor. Confira antes de salvar.')).toBeInTheDocument()
+    // Valores iguais aos já gravados: marcados, mas sem "antes".
+    expect(await screen.findByLabelText('Host')).toHaveValue('NB-001')
+    expect(screen.queryByText(/antes:/)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Salvar Alterações/ }))
+
+    expect(await screen.findByText('Você saiu da sua conta neste computador.')).toBeInTheDocument()
+    expect(logouts).toBe(1)
+    expect(screen.getByTestId('rota')).toHaveTextContent('/coletor/concluido?id=44&saiu=1')
+  })
+
+  it('salvar a edição pelo coletor também sai da conta e mostra a tela final', async () => {
+    mockBase()
+    let corpo: Record<string, unknown> = {}
+    let logouts = 0
+    server.use(
+      http.get('/api/items/9', () => HttpResponse.json(itemExistente)),
+      http.put('/api/items/9', async ({ request }) => {
+        corpo = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json({ detail: 'ok' })
+      }),
+      http.post('/api/auth/logout', () => {
+        logouts += 1
+        return HttpResponse.json({ detail: 'ok' })
+      })
+    )
+    const user = userEvent.setup()
+    renderPage({ pathname: '/edit/9', state: estadoColetor({ host: 'NB-NEW' }) })
+
+    expect(await screen.findByLabelText('Host')).toHaveValue('NB-NEW')
+    await user.click(screen.getByRole('button', { name: /Salvar Alterações/ }))
+
+    expect(await screen.findByText('Máquina cadastrada (#9).')).toBeInTheDocument()
+    expect(await screen.findByText('Você saiu da sua conta neste computador.')).toBeInTheDocument()
+    expect(logouts).toBe(1)
+    expect(corpo).toMatchObject({ host: 'NB-NEW' })
+    expect(screen.getByTestId('rota')).toHaveTextContent('/coletor/concluido?id=9&saiu=1')
+    expect(rotasVisitadas).not.toContain('/login')
+  })
+
+  it('vai para a tela final antes de terminar o logout, sem passar pelo login', async () => {
+    mockBase()
+    server.use(
+      http.post('/api/items', () => HttpResponse.json({ detail: 'ok', id: 42 })),
+      http.post('/api/auth/logout', async () => {
+        await delay(150)
+        return HttpResponse.json({ detail: 'ok' })
+      })
+    )
+    const user = userEvent.setup()
+    renderPage({ pathname: '/register', state: estadoColetor({ brand: 'Dell', model: 'Latitude 3420' }) })
+
+    await screen.findByLabelText('Host')
+    await escolherRevenda(user)
+    await user.click(screen.getByRole('button', { name: /Cadastrar Equipamento/ }))
+
+    // Enquanto o logout está em andamento, a tela final já aparece, com aviso neutro.
+    expect(await screen.findByText('Saindo da sua conta…')).toBeInTheDocument()
+    expect(screen.getByText('Máquina cadastrada (#42).')).toBeInTheDocument()
+    expect(screen.getByTestId('rota')).toHaveTextContent('/coletor/concluido?id=42')
+    expect(await screen.findByText('Você saiu da sua conta neste computador.')).toBeInTheDocument()
+    expect(rotasVisitadas).not.toContain('/login')
+  })
+
+  it('não grava campo do coletor que o tipo escolhido não mostra', async () => {
+    mockBase()
+    server.use(
+      http.get('/api/constants', () =>
+        HttpResponse.json({
+          center_costs: [],
+          revendas: ['Revalle Juazeiro', 'Revalle Petrolina'],
+          setores: [],
+          equipment_types: ['Notebook', 'Tablet'],
+          peripheral_types: [],
+          removal_reasons: [],
+          removal_reasons_attachment: {},
+        })
+      )
+    )
+    let corpo: Record<string, unknown> = {}
+    server.use(
+      http.post('/api/items', async ({ request }) => {
+        corpo = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json({ detail: 'ok', id: 45 })
+      }),
+      http.post('/api/auth/logout', () => HttpResponse.json({ detail: 'ok' }))
+    )
+    const user = userEvent.setup()
+    // Tablet não tem "Host": o valor existe no estado, mas ninguém o vê.
+    renderPage({
+      pathname: '/register',
+      state: estadoColetor({ brand: 'Samsung', model: 'Tab A', host: 'NB-1', identificador: 'S1' }, 'Tablet'),
+    })
+
+    await waitFor(() => expect(screen.getByLabelText('Nº de Série')).toHaveValue('S1'))
+    expect(screen.queryByLabelText('Host')).not.toBeInTheDocument()
+    await escolherRevenda(user)
+    await user.click(screen.getByRole('button', { name: /Cadastrar Equipamento/ }))
+
+    expect(await screen.findByText('Máquina cadastrada (#45).')).toBeInTheDocument()
+    expect(corpo).toMatchObject({ tipo: 'Tablet', identificador: 'S1' })
+    expect(corpo).not.toHaveProperty('host')
   })
 })

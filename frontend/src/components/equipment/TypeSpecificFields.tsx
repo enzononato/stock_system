@@ -1,6 +1,7 @@
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { MarcaColetor, descricaoMarcaColetor, type CamposMarcados } from '@/components/equipment/MarcaColetor'
 import { isValidMac, isValidIp, maskMacInput } from '@/lib/utils'
 
 interface FieldConfig {
@@ -30,6 +31,7 @@ const TYPE_FIELDS: Record<string, FieldConfig[]> = {
   Notebook: [
     { key: 'dominio', label: 'Domínio', type: 'select', options: ['Sim', 'Não'] },
     { key: 'host', label: 'Host' },
+    { key: 'identificador', label: 'Nº de Série' },
     { key: 'endereco_fisico', label: 'Endereço Físico (MAC)', mask: maskMacInput, validate: isValidMac, invalidMessage: 'MAC inválido.' },
     { key: 'cpu', label: 'Processador (CPU)' },
     { key: 'ram', label: 'Memória RAM' },
@@ -41,6 +43,7 @@ const TYPE_FIELDS: Record<string, FieldConfig[]> = {
   Desktop: [
     { key: 'dominio', label: 'Domínio', type: 'select', options: ['Sim', 'Não'] },
     { key: 'host', label: 'Host' },
+    { key: 'identificador', label: 'Nº de Série' },
     { key: 'endereco_fisico', label: 'Endereço Físico (MAC)', mask: maskMacInput, validate: isValidMac, invalidMessage: 'MAC inválido.' },
     { key: 'cpu', label: 'Processador (CPU)' },
     { key: 'ram', label: 'Memória RAM' },
@@ -98,14 +101,21 @@ export function validateTypeSpecificFields(tipo: string, values: Record<string, 
   return null
 }
 
+/** Chaves dos campos específicos que o tipo mostra no formulário. */
+export function chavesDoTipo(tipo: string): string[] {
+  return (TYPE_FIELDS[tipo] ?? []).map((f) => f.key)
+}
+
 interface TypeSpecificFieldsProps {
   tipo: string
   values: Record<string, string>
   onChange: (key: string, value: string) => void
   disabled?: boolean
+  /** Campos preenchidos pelo coletor de dados da máquina (ver `MarcaColetor`). */
+  marcados?: CamposMarcados
 }
 
-export function TypeSpecificFields({ tipo, values, onChange, disabled }: TypeSpecificFieldsProps) {
+export function TypeSpecificFields({ tipo, values, onChange, disabled, marcados }: TypeSpecificFieldsProps) {
   const fields = TYPE_FIELDS[tipo] ?? []
   if (fields.length === 0) return null
 
@@ -114,13 +124,14 @@ export function TypeSpecificFields({ tipo, values, onChange, disabled }: TypeSpe
       {fields.map((field) => (
         <div key={field.key} className="flex flex-col gap-1.5">
           <Label htmlFor={field.key}>{field.label}</Label>
+          <MarcaColetor marcados={marcados} campo={field.key} />
           {field.type === 'select' ? (
             <Select
               value={values[field.key] ?? ''}
               onValueChange={(v) => onChange(field.key, v)}
               disabled={disabled}
             >
-              <SelectTrigger id={field.key}>
+              <SelectTrigger id={field.key} aria-describedby={descricaoMarcaColetor(marcados, field.key)}>
                 <SelectValue placeholder={`Selecione ${field.label}`} />
               </SelectTrigger>
               <SelectContent>
@@ -136,6 +147,7 @@ export function TypeSpecificFields({ tipo, values, onChange, disabled }: TypeSpe
               onChange={(e) => onChange(field.key, field.mask ? field.mask(e.target.value) : e.target.value)}
               placeholder={field.placeholder ?? field.label}
               disabled={disabled}
+              aria-describedby={descricaoMarcaColetor(marcados, field.key)}
             />
           )}
         </div>
