@@ -117,6 +117,13 @@ def _termo_do_evento(evento: EventoWebhook) -> Optional[dict]:
             termo = termos.obter(int(sufixo))
             if termo is not None:
                 bate = evento.documento_id is None or termo["revsign_documento_id"] == evento.documento_id
+                if not bate:
+                    # Ex.: a criação deu timeout depois de o RevSign criar o termo e o envio ficou
+                    # manual; o documento do RevSign não é o guardado (ou não há nenhum).
+                    logger.warning(
+                        "Webhook %s do documento %s para a solicitação %s, que guarda o documento %s: ignorado.",
+                        evento.tipo, evento.documento_id, termo["id"], termo["revsign_documento_id"] or "nenhum",
+                    )
                 return termo if bate else None
     if evento.documento_id:
         return termos.obter_por_documento(evento.documento_id)

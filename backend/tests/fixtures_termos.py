@@ -20,6 +20,8 @@ def revsign_fake(monkeypatch):
 
     monkeypatch.setattr(config.settings, "REVSIGN_ENABLED", True)
     monkeypatch.setattr(config.settings, "REVSIGN_WEBHOOK_SECRET", SEGREDO_WEBHOOK)
+    # A conversão real exige o LibreOffice (lenta): nos testes do envio vai um PDF de mentira.
+    monkeypatch.setattr("app.services.termos.docx_para_pdf", lambda conteudo, **kw: b"%PDF-1.4 teste")
     fake = FakeRevSignClient(webhook_secret=SEGREDO_WEBHOOK)
     usar_cliente(fake)
     yield fake
@@ -72,26 +74,37 @@ def corpo_emprestimo_colaborador(item_id: int, colaborador_id: int, **extra) -> 
 
 
 def evento_webhook(tipo: str, documento_id: str, termo_id: int) -> dict:
+    """Corpo de webhook no formato do contrato (`termo.signed`, `termo.rejected`, ...)."""
     return {
+        "eventId": "evt_teste",
         "event": tipo,
-        "payload": {
-            "id": int(documento_id),
-            "externalId": f"patrimonio-termo-{termo_id}",
-            "status": "COMPLETED",
-        },
-        "createdAt": "2026-11-12T10:00:00Z",
-        "webhookEndpoint": "https://patrimonio.teste/api/integrations/revsign/webhook",
+        "termoId": str(documento_id),
+        "externalId": f"patrimonio-termo-{termo_id}",
+        "status": "SIGNED",
+        "occurredAt": "2026-11-12T10:00:00.000Z",
+        "signer": {"name": "Maria Souza", "email": "maria.souza@gmail.com"},
     }
 
 
-def postar_webhook(client, corpo: Union[dict, bytes], segredo: Optional[str] = SEGREDO_WEBHOOK):
-    """Posta no webhook, sem login. O cabeçalho do segredo só vai quando `segredo is not None`."""
-    from app.services.revsign_client import CABECALHO_SEGREDO
+def postar_webhook(
+    client,
+    corpo: Union[dict, bytes],
+    segredo: Optional[str] = SEGREDO_WEBHOOK,
+    timestamp: Optional[int] = None,
+):
+    """Posta no webhook, sem login, assinado como o RevSign assina.
 
+    Com `segredo=None` os cabeçalhos de assinatura não vão; `timestamp` (segundos Unix) é
+    o de agora por padrão.
+    """
+    import time
+
+    from app.services.revsign_client import assinar_webhook
+
+    conteudo = corpo if isinstance(corpo, bytes) else json.dumps(corpo).encode()
     headers = {"Content-Type": "application/json"}
     if segredo is not None:
-        headers[CABECALHO_SEGREDO] = segredo
-    conteudo = corpo if isinstance(corpo, bytes) else json.dumps(corpo).encode()
+        headers.update(assinar_webhook(segredo, conteudo, int(time.time()) if timestamp is None else timestamp))
     return client.post(URL_WEBHOOK, content=conteudo, headers=headers)
 
 

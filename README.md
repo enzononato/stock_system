@@ -164,13 +164,20 @@ segredo vai para o repositório: senhas, tokens e chaves só existem no `.env` d
 | `SCHEDULER_ENABLED` | `False` desliga o agendador de tarefas (sincronização, envio agendado de termos, consulta ao RevSign). |
 | `TOTP_ENCRYPTION_KEY` | Chave Fernet que cifra o segredo do 2FA no banco. Gere com `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. **Vazia = 2FA desligado.** Trocar a chave invalida os autenticadores já cadastrados. Com a chave definida, todo Gestor é levado a cadastrar o 2FA no primeiro login. |
 | `LOGIN_EMAIL_DOMINIO` | Domínio dos e-mails aceitos no login (padrão `revalle.com.br`). Só entra quem tem e-mail `@` desse domínio; contas antigas confirmam o e-mail no próximo login. |
-| `REVSIGN_ENABLED` | Padrão `False`: a integração com o RevSign fica desligada até o contrato chegar, e os termos seguem o fluxo manual (baixar, assinar, anexar o PDF). |
-| `REVSIGN_BASE_URL`, `REVSIGN_API_TOKEN` | Endereço e token da API do RevSign (token é segredo). |
-| `REVSIGN_WEBHOOK_SECRET` | Segredo que valida os webhooks recebidos. URL do webhook a cadastrar no RevSign: `<APP_PUBLIC_URL>/api/integrations/revsign/webhook`. |
+| `REVSIGN_ENABLED` | Padrão `False`: a integração com o RevSign fica desligada, e os termos seguem o fluxo manual (baixar, assinar, anexar o PDF). Com `True`, o termo é convertido em PDF e enviado ao RevSign; se faltar CPF válido ou e-mail do colaborador, ou se a conversão ou o envio falharem, o termo cai em assinatura manual com o motivo na tela. |
+| `REVSIGN_BASE_URL` | Base completa da API de contrato do RevSign, sem `/` no fim. Internamente: `http://agente_revalle_revsign:3000/api/revalle/patrimonio/v1`. |
+| `REVSIGN_API_TOKEN` | Chave da API (segredo). É o valor de `NEXT_PRIVATE_REVALLE_PATRIMONIO_API_KEY` no RevSign. |
+| `REVSIGN_WEBHOOK_SECRET` | Segredo que valida os webhooks recebidos (segredo). É o valor de `NEXT_PRIVATE_REVALLE_PATRIMONIO_WEBHOOK_SECRET` no RevSign. |
 | `ALERTA_GARANTIA_DIAS` | Garantia que vence em até N dias entra nos alertas do painel (padrão `30`). |
 | `ALERTA_TERMO_PENDENTE_DIAS` | Termo sem assinatura há mais de N dias (padrão `3`). |
 | `ALERTA_DEVOLUCAO_PENDENTE_DIAS` | Devolução pendente há mais de N dias (padrão `7`). |
 | `ALERTA_MANUTENCAO_DIAS` | Manutenção parada há mais de N dias (padrão `15`). |
+
+**RevSign (assinatura eletrônica):**
+
+- **Webhook:** cadastre no RevSign a URL `http://agente_revalle_stock-sys-backend:8000/api/integrations/revsign/webhook` (rede interna do EasyPanel; fora dela, `<APP_PUBLIC_URL>/api/integrations/revsign/webhook`), com o mesmo segredo de `REVSIGN_WEBHOOK_SECRET`.
+- **Modelos de termo:** cada `.docx` em `backend/modelos` traz o marcador `{{assinatura}}` (fonte branca, não aparece na impressão). O RevSign o procura no PDF para posicionar o campo de assinatura. Se um modelo for substituído, rode `python scripts/marcar_assinatura.py` a partir de `backend/` para marcá-lo de novo.
+- **PDF:** a API só aceita PDF, então a imagem do backend inclui o LibreOffice (conversão do termo `.docx`). Depois de atualizar o `Dockerfile`, refaça o build da imagem.
 
 Os alertas do painel são calculados na hora, a cada consulta; mudar um `ALERTA_*` no `.env`
 vale depois de reiniciar o backend e não grava nada no banco.

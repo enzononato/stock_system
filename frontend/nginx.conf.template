@@ -44,6 +44,11 @@ server {
 
         # Suporte a cookies HttpOnly (refresh_token)
         proxy_pass_header Set-Cookie;
+
+        # Enviar o termo ao RevSign converte o .docx com o LibreOffice (até ~60 s) e espera a
+        # API do RevSign: o padrão de 60 s do nginx cortaria a resposta antes do backend.
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
     }
 
     # SPA fallback — todas as rotas servem o index.html
