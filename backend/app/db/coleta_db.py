@@ -66,6 +66,18 @@ class ColetaDBManager:
             cur.execute("DELETE FROM coletas_maquina WHERE criado_em < %s", (limite,))
             return cur.rowcount
 
+    def fornecedor_por_modelo(self, marca: str, modelo: str) -> str | None:
+        with get_cursor(commit=False) as cur:
+            cur.execute(
+                "SELECT DISTINCT TRIM(fornecedor) AS fornecedor FROM items "
+                "WHERE UPPER(TRIM(brand)) = UPPER(%s) AND UPPER(TRIM(model)) = UPPER(%s) "
+                "AND fornecedor IS NOT NULL AND TRIM(fornecedor) <> '' "
+                "AND UPPER(TRIM(fornecedor)) NOT IN ('NAO INFORMADO', 'NÃO INFORMADO') LIMIT 2",
+                (marca, modelo),
+            )
+            resultados = cur.fetchall()
+        return resultados[0]["fornecedor"] if len(resultados) == 1 else None
+
     def correspondencias(self, serial: str | None, macs: list[str], anydesk: str | None) -> list[dict]:
         """Itens que já têm o mesmo serial, algum dos MACs ou o mesmo AnyDesk.
 

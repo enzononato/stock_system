@@ -112,6 +112,7 @@ try {
         versao_produto = Texto $csp.Version
         serial         = $serial
         host           = Texto $(if ($cs.Name) { $cs.Name } else { $env:COMPUTERNAME })
+        usuario_windows = Texto $cs.UserName
         dominio        = Texto $cs.Domain
         no_dominio     = $(if ($null -ne $cs.PartOfDomain) { [bool]$cs.PartOfDomain } else { $null })
         cpu            = Texto $primeiraCpu.Name

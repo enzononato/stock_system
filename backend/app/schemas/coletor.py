@@ -46,6 +46,7 @@ class ColetaBruta(BaseModel):
     versao_produto: Optional[Texto200] = None
     serial: Optional[Texto200] = None
     host: Optional[Texto200] = None
+    usuario_windows: Optional[Texto200] = None
     dominio: Optional[Texto200] = None
     cpu: Optional[Texto200] = None
     sistema: Optional[Texto200] = None

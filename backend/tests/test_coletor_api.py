@@ -111,13 +111,14 @@ def test_cmd_attachment(client, client_tecnico):
 
 def test_envio_ok_e_andamento(client, client_tecnico):
     corpo, codigo = _criar(client_tecnico)
+    assert corpo["url_coletor_local"] == f"stocksystem://coletar/{codigo}"
 
     antes = client_tecnico.get(f"/api/coletor/{corpo['id']}/andamento").json()
     assert antes["status"] == "aguardando"
     assert antes["expira_em"].endswith("Z")
     assert "campos" not in antes
 
-    resp = _enviar(client, codigo)
+    resp = _enviar(client, codigo, {**PAYLOAD_DELL, "usuario_windows": "REVALLE\\tecnico"})
     assert resp.status_code == 200
     assert resp.json() == {"ok": True}
 
@@ -125,6 +126,7 @@ def test_envio_ok_e_andamento(client, client_tecnico):
     assert dados["status"] == "recebido"
     assert dados["campos"]["brand"] == "Dell"
     assert dados["campos"]["identificador"] == "ABC1234"
+    assert dados["campos"]["usuario_windows"] == "REVALLE\\tecnico"
     assert dados["tipo_sugerido"] == "Notebook"
     assert dados["correspondencias"] == []
 

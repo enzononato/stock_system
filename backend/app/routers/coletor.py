@@ -52,6 +52,7 @@ def criar_coleta(user: CurrentUser = Depends(gestor_or_tecnico)):
     coleta_id = ColetaDBManager().criar(sha256_hex(codigo), user.id, expira_em)
     return {
         "id": coleta_id,
+        "url_coletor_local": f"stocksystem://coletar/{codigo}",
         "comando": coletor_script.montar_comando(_base_url(), codigo),
         "url_arquivo": f"/api/coletor/{codigo}/coletor.cmd",
         "expira_em": _iso_utc(expira_em),
@@ -130,6 +131,12 @@ def andamento(coleta_id: int, user: CurrentUser = Depends(gestor_or_tecnico)):
 
     normalizada = normalizar(ColetaBruta.model_validate(coleta["dados"]))
     campos = normalizada.campos
+    if bruta.usuario_windows and bruta.usuario_windows.strip():
+        campos["usuario_windows"] = bruta.usuario_windows.strip()
+    if campos.get("brand") and campos.get("model"):
+        fornecedor = db.fornecedor_por_modelo(campos["brand"], campos["model"])
+        if fornecedor:
+            campos["fornecedor"] = fornecedor
     resposta.update(
         status="recebido",
         campos=campos,

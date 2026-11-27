@@ -3,6 +3,7 @@ import api from './client'
 /** Espelho de `POST /api/coletor`: `url_arquivo` é um caminho relativo, público, que o navegador baixa direto. */
 export interface ColetaCriada {
   id: number
+  url_coletor_local?: string
   comando: string
   url_arquivo: string
   expira_em: string

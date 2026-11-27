@@ -123,12 +123,13 @@ export default function ColetorPage() {
     )
   } else if (!coleta.data) {
     corpo = <p className="text-sm text-muted-foreground">Gerando o código…</p>
-  } else if (andamento.isError && !dados) {
+  } else if (andamento.isError && !recebido) {
     corpo = (
       <div className="space-y-4">
         <ErrorState
           title="Não foi possível acompanhar a coleta."
-          message="Gere um novo código e tente de novo."
+          error={andamento.error}
+          onRetry={() => void andamento.refetch()}
         />
         <Button onClick={gerarNovo}>Gerar novo código</Button>
       </div>
@@ -173,6 +174,14 @@ export default function ColetorPage() {
   } else {
     corpo = (
       <div className="space-y-4">
+        {coleta.data.url_coletor_local && (
+          <Button asChild>
+            <a href={coleta.data.url_coletor_local}>Preencher dados desta máquina</a>
+          </Button>
+        )}
+        <p className="text-sm text-muted-foreground">
+          Se o navegador pedir, confirme a abertura do coletor instalado pela TI.
+        </p>
         <p className="text-sm text-foreground">
           Aperte <strong>Windows + R</strong>, cole com <strong>Ctrl+V</strong> e dê <strong>Enter</strong>.
         </p>

@@ -104,7 +104,7 @@ export default function RegisterItemPage({ mode }: Props) {
   const [revenda, setRevenda] = useState('')
   const [localId, setLocalId] = useState<number | null>(null)
   const [notaFiscal, setNotaFiscal] = useState('')
-  const [fornecedor, setFornecedor] = useState('')
+  const [fornecedor, setFornecedor] = useState(() => (mode === 'create' ? estadoColetor?.campos.fornecedor ?? '' : ''))
   const [dateRegistered, setDateRegistered] = useState(todayBr())
   const [valorCompra, setValorCompra] = useState('')
   const [dataCompra, setDataCompra] = useState('')
@@ -412,6 +412,9 @@ export default function RegisterItemPage({ mode }: Props) {
       {estadoColetor && (
         <p role="status" className="rounded border border-border bg-brand-soft px-3 py-2 text-body-sm text-brand-soft-foreground">
           Dados preenchidos pelo coletor. Confira antes de salvar.
+          {estadoColetor.campos.usuario_windows && (
+            <div>Usuário conectado ao Windows: {estadoColetor.campos.usuario_windows}</div>
+          )}
         </p>
       )}
 
